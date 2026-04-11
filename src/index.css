@@ -54,7 +54,7 @@ a:hover { text-decoration: underline; }
 
 /* Hamburger button — mobile only */
 .nav-hamburger {
-  display: flex;
+  display: none;
   flex-direction: column;
   justify-content: center;
   gap: 5px;
@@ -65,7 +65,9 @@ a:hover { text-decoration: underline; }
   cursor: pointer;
   padding: 8px;
   z-index: 200;
-  position: relative;
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
 }
 .hamburger-line {
   display: block;
