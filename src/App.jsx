@@ -257,6 +257,7 @@ function Login({ navigate }) {
   const { fetchUser } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -281,12 +282,117 @@ function Login({ navigate }) {
       <div className="container"><div className="form-card">
         <h1 className="form-title">login.</h1>
         <p className="form-sub">Sign in to your dashboard.</p>
+
+        {/* Google SSO button */}
+        <button
+          type="button"
+          className="btn-google"
+          onClick={() => window.location.href = '/api/auth/google'}
+          style={{ width: '100%', marginBottom: '2rem' }}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" style={{ marginRight: '0.625rem', flexShrink: 0 }}>
+            <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
+            <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.123 15.983 5.114 18 9 18z"/>
+            <path fill="#FBBC05" d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.347 2.827.957 4.042l3.007-2.332z"/>
+            <path fill="#EA4335" d="M9 3.54c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.114 0 2.123 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.54 9 3.54z"/>
+          </svg>
+          Continue with Google
+        </button>
+
         <form onSubmit={handleSubmit}>
           {error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}
           <div className="form-group"><label className="form-label">Email</label><input type="email" className="form-input" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required /></div>
-          <div className="form-group"><label className="form-label">Password</label><input type="password" className="form-input" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required /></div>
+          <div className="form-group">
+            <label className="form-label">Password</label>
+            <div style={{ position: 'relative' }}>
+              <input type={showPw ? 'text' : 'password'} className="form-input" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required style={{ paddingRight: '2.5rem' }} />
+              <button type="button" onClick={() => setShowPw(v => !v)} style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1rem', lineHeight: 1, padding: '0.25rem' }}>{showPw ? '👁' : '👁‍🗨'}</button>
+            </div>
+          </div>
           <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading}>{loading ? 'Signing in...' : 'login'}</button>
+          <p className="form-link" style={{ textAlign: 'center', marginTop: '0.75rem' }}><a href="#" onClick={e => { e.preventDefault(); navigate('/reset') }}>Forgot password?</a></p>
           <p className="form-link">Don't have access? <a href="#" onClick={e => { e.preventDefault(); navigate('/request') }}>Request access</a></p>
+        </form>
+      </div></div></div>
+  )
+}
+
+// ─── Register (via invite only) ────────────────────────────────────────
+function Register({ navigate }) {
+  const { fetchUser } = useAuth()
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPw, setShowPw] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  // Read invite code from URL params on mount
+  const [inviteCode] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('code') || ''
+  })
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const data = await api('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ name, email, password, invite_code: inviteCode }),
+      })
+      await fetchUser()
+      navigate('/dashboard')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="page">
+      <nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /></div></div></nav>
+      <div className="container"><div className="form-card">
+        <h1 className="form-title">Create account.</h1>
+        <p className="form-sub">Accepted invite only. Your account will be linked to your Google account.</p>
+
+        {/* Google SSO button */}
+        <button
+          type="button"
+          className="btn-google"
+          onClick={() => window.location.href = inviteCode ? `/api/auth/google?invite_code=${inviteCode}` : '/api/auth/google'}
+          style={{ width: '100%', marginBottom: '1.5rem' }}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" style={{ marginRight: '0.625rem', flexShrink: 0 }}>
+            <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
+            <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.123 15.983 5.114 18 9 18z"/>
+            <path fill="#FBBC05" d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.347 2.827.957 4.042l3.007-2.332z"/>
+            <path fill="#EA4335" d="M9 3.54c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.114 0 2.123 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.54 9 3.54z"/>
+          </svg>
+          Continue with Google
+        </button>
+
+        {inviteCode && (
+          <p style={{ fontSize: '0.8125rem', color: 'var(--gold)', textAlign: 'center', marginBottom: '1rem' }}>
+            Invite code applied: <code style={{ fontFamily: 'monospace', background: 'var(--hunter-mid)', padding: '0.1em 0.4em', borderRadius: '2px' }}>{inviteCode}</code>
+          </p>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          {error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}
+          <div className="form-group"><label className="form-label">Name</label><input type="text" className="form-input" placeholder="Your name" value={name} onChange={e => setName(e.target.value)} required /></div>
+          <div className="form-group"><label className="form-label">Email</label><input type="email" className="form-input" placeholder="you@company.com" value={email} onChange={e => setEmail(e.target.value)} required /></div>
+          <div className="form-group">
+            <label className="form-label">Password</label>
+            <div style={{ position: 'relative' }}>
+              <input type={showPw ? 'text' : 'password'} className="form-input" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required style={{ paddingRight: '2.5rem' }} />
+              <button type="button" onClick={() => setShowPw(v => !v)} style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1rem', lineHeight: 1, padding: '0.25rem' }}>{showPw ? '👁' : '👁‍🗨'}</button>
+            </div>
+          </div>
+          <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading || !inviteCode}>{loading ? 'Creating account...' : 'Create account'}</button>
+          <p className="form-link">Already have an account? <a href="#" onClick={e => { e.preventDefault(); navigate('/login') }}>login</a></p>
         </form>
       </div></div></div>
   )
@@ -610,6 +716,7 @@ export default function App() {
       <div className="page">
         {page === '/login' && <Login navigate={navigate} />}
         {page === '/request' && <RequestAccess navigate={navigate} />}
+        {page === '/register' && <Register navigate={navigate} />}
         {page === '/author' && (user ? <Author navigate={navigate} /> : <Login navigate={navigate} />)}
         {page === '/dashboard' && (user ? <Dashboard navigate={navigate} /> : <Login navigate={navigate} />)}
         {page === '/account' && (user ? <Account navigate={navigate} /> : <Login navigate={navigate} />)}
