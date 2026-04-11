@@ -1,4 +1,5 @@
 import { json, setSessionCookie, generateId, hashPassword, Env } from '../_utils';
+import { registrationEmail, sendEmail } from '../_email-templates';
 
 export async function onRequest(context: { request: Request; env: Env }) {
   if (context.request.method === 'OPTIONS') {
@@ -86,6 +87,13 @@ export async function onRequest(context: { request: Request; env: Env }) {
     headers.set('Content-Type', 'application/json');
     headers.set('Set-Cookie', setSessionCookie(sessionId, expiresAt));
     headers.set('Access-Control-Allow-Origin', '*');
+
+    try {
+      const { subject, html } = registrationEmail({ name, email: email.toLowerCase(), loginUrl: `${new URL(context.request.url).origin}/login` })
+      await sendEmail(context.env, { to: email.toLowerCase(), subject, html })
+    } catch (emailErr) {
+      console.error('Failed to send registration email:', emailErr.message)
+    }
 
     return new Response(JSON.stringify({ ok: true, user: { id: userId, email: email.toLowerCase(), name } }), {
       status: 201,
