@@ -28,31 +28,70 @@ async function api(path, options = {}) {
 // ─── Nav ────────────────────────────────────────────────────────────────
 function Nav({ navigate }) {
   const { user, loading } = useAuth()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const toggleMenu = () => setMenuOpen(o => !o)
+  const closeMenu = () => setMenuOpen(false)
+
   return (
-    <nav className="nav">
-      <div className="container">
-        <div className="nav-inner">
-          <img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} />
-          <div className="nav-links">
-            <a href="#how-it-works" className="nav-link" onClick={e => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>How It Works</a>
-            <a href="#features" className="nav-link" onClick={e => { e.preventDefault(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>Features</a>
+    <>
+      {/* Mobile hamburger */}
+      <button className="nav-hamburger" onClick={toggleMenu} aria-label="Toggle menu">
+        <span className={`hamburger-line${menuOpen ? ' open' : ''}`} />
+        <span className={`hamburger-line${menuOpen ? ' open' : ''}`} />
+        <span className={`hamburger-line${menuOpen ? ' open' : ''}`} />
+      </button>
+
+      {/* Mobile menu overlay */}
+      <div className={`nav-mobile-overlay${menuOpen ? ' nav-mobile-overlay--open' : ''}`} onClick={closeMenu}>
+        <div className="nav-mobile-menu" onClick={e => e.stopPropagation()}>
+          <button className="nav-mobile-close" onClick={closeMenu}>×</button>
+          <img src="/logo.jpg" alt="SubMoa Content" className="nav-mobile-logo" onClick={() => { closeMenu(); navigate('/') }} />
+          <div className="nav-mobile-links">
+            <a href="#how-it-works" onClick={e => { e.preventDefault(); closeMenu(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>How It Works</a>
+            <a href="#features" onClick={e => { e.preventDefault(); closeMenu(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>Features</a>
             {!loading && !user && (
               <>
-                <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/login') }}>login</a>
-                <a href="#" className="nav-cta" onClick={e => { e.preventDefault(); navigate('/request') }}>Request Access</a>
+                <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/login') }}>Login</a>
+                <a href="#" className="nav-mobile-cta" onClick={e => { e.preventDefault(); closeMenu(); navigate('/request') }}>Request Access</a>
               </>
             )}
             {!loading && user && (
               <>
-                <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/author') }}>Submit Brief</a>
-                <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/dashboard') }}>Dashboard</a>
-                <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/account') }}>Account</a>
+                <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/author') }}>Submit Brief</a>
+                <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/dashboard') }}>Dashboard</a>
+                <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/account') }}>Account</a>
               </>
             )}
           </div>
         </div>
       </div>
-    </nav>
+
+      {/* Desktop nav */}
+      <nav className="nav">
+        <div className="container">
+          <div className="nav-inner">
+            <img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} />
+            <div className="nav-links">
+              <a href="#how-it-works" className="nav-link" onClick={e => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>How It Works</a>
+              <a href="#features" className="nav-link" onClick={e => { e.preventDefault(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>Features</a>
+              {!loading && !user && (
+                <>
+                  <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/login') }}>login</a>
+                  <a href="#" className="nav-cta" onClick={e => { e.preventDefault(); navigate('/request') }}>Request Access</a>
+                </>
+              )}
+              {!loading && user && (
+                <>
+                  <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/author') }}>Submit Brief</a>
+                  <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/dashboard') }}>Dashboard</a>
+                  <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/account') }}>Account</a>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </nav>
+    </>
   )
 }
 
