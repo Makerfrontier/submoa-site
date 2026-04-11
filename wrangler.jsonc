@@ -1,0 +1,15 @@
+{
+  "name": "submoacontent",
+  "compatibility_date": "2024-01-01",
+  "pages_build_output_dir": "dist",
+  "d1_databases": [
+    {
+      "binding": "submoacontent_db",
+      "database_name": "submoacontent-db",
+      "database_id": "f7d72bbc-3ec6-4b50-b22f-9700811939e1"
+    }
+  ],
+  "vars": {
+    "DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/1490758087898959902/GSAcsa_aCYnunu_BcAgaTQfauiw9C_JZ8Gz3gvSEJyWf8"
+  }
+}
