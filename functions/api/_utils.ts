@@ -6,6 +6,8 @@
 export interface Env {
   submoacontent_db: D1Database;
   DISCORD_WEBHOOK_URL: string;
+  RESEND_API_KEY: string;
+  hashPassword(password: string): string;
 }
 
 export interface User {
