@@ -669,8 +669,18 @@ function Reset({ navigate }) {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
-
   const [error, setError] = useState('')
+  const [token, setToken] = useState(null)
+  const [password, setPassword] = useState('')
+  const [done, setDone] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const t = params.get('token')
+    if (t) setToken(t)
+  }, [])
+
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -685,9 +695,33 @@ function Reset({ navigate }) {
     }
   }
 
+  const handlePasswordReset = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      await api('/api/auth/reset-confirm', { method: 'POST', body: JSON.stringify({ token, password }) })
+      setDone(true)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (done) return (
+    <div className="page"><nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /></div></div></nav><div className="container"><div className="form-card"><div className="confirm-icon">✓</div><h1 className="confirm-title">Password updated.</h1><p className="confirm-sub">You can log in now.</p><button className="btn-primary" style={{ width: '100%' }} onClick={() => navigate('/login')}>Back to login</button></div></div></div>
+  )
+
+
+  if (token) return (
+    <div className="page"><nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /></div></div></nav><div className="container"><div className="form-card"><h1 className="form-title">New password.</h1><p className="form-sub">Enter your new password.</p><form onSubmit={handlePasswordReset}><div className="form-group"><label className="form-label">Password</label><input type="password" className="form-input" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} /></div>{error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}<button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading}>{loading ? 'Saving...' : 'Save password'}</button></form></div></div></div>
+  )
+
   if (sent) return (
     <div className="page"><nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /></div></div></nav><div className="container"><div className="form-card"><div className="confirm-icon">✓</div><h1 className="confirm-title">Check your inbox.</h1><p className="confirm-sub">If an account exists with that email, we've sent a password reset link. It expires in 30 minutes.</p><button className="btn-secondary" style={{ width: '100%' }} onClick={() => navigate('/login')}>Back to login</button></div></div></div>
   )
+
   return (
     <div className="page"><nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /></div></div></nav><div className="container"><div className="form-card"><h1 className="form-title">Reset your password.</h1><p className="form-sub">We'll send you a link to create a new password.</p><form onSubmit={handleSubmit}><div className="form-group"><label className="form-label">Email</label><input type="email" className="form-input" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required /></div>{error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}<button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading}>{loading ? 'Sending...' : 'Send Reset Link'}</button><p className="form-link"><a href="#" onClick={e => { e.preventDefault(); navigate('/login') }}>Back to login</a></p></form></div></div></div>
   )
