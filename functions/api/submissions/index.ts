@@ -1,4 +1,5 @@
 import { json, getSessionUser, generateId, Env } from '../_utils';
+import { articleRequestEmail, sendEmail } from '../_email-templates';
 
 export async function onRequest(context: { request: Request; env: Env }) {
   if (context.request.method === 'OPTIONS') {
@@ -96,6 +97,20 @@ export async function onRequest(context: { request: Request; env: Env }) {
         .prepare('SELECT * FROM submissions WHERE id = ?')
         .bind(id)
         .first();
+
+      // Send confirmation email
+      try {
+        const { subject, html } = articleRequestEmail({
+          name: user.name,
+          topic,
+          articleFormat: article_format,
+          submissionId: id,
+          dashboardUrl: `${new URL(context.request.url).origin}/dashboard`,
+        })
+        await sendEmail(context.env, { to: email, subject, html })
+      } catch (emailErr) {
+        console.error('Failed to send confirmation email:', emailErr.message)
+      }
 
       return json({ submission }, 201);
     } catch (err: any) {
