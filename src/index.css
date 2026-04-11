@@ -45,7 +45,7 @@ a:hover { text-decoration: underline; }
 /* Nav */
 .nav { padding: 1.25rem 0; border-bottom: 1px solid var(--hunter-border); position: sticky; top: 0; background: rgba(10, 21, 10, 0.97); backdrop-filter: blur(10px); z-index: 100; }
 .nav-inner { display: flex; align-items: center; justify-content: space-between; width: 100%; }
-.nav-logo { height: 36px; width: auto; cursor: pointer; flex-shrink: 0; display: block; }
+.nav-logo { height: 48px; width: auto; cursor: pointer; flex-shrink: 0; display: block; }
 .nav-links { display: flex; flex-direction: row; flex-shrink: 1; flex-grow: 0; align-items: center; gap: 1.75rem; margin: 0; padding: 0; list-style: none; }
 .nav-link { color: var(--cream-dim); font-size: 0.8125rem; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; transition: color 0.2s; white-space: nowrap; flex-shrink: 0; }
 .nav-link:hover { color: var(--cream); text-decoration: none; }
