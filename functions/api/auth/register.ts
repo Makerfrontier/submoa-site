@@ -60,7 +60,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
     }
 
     const userId = generateId();
-    const passwordHash = hashPassword(password);
+    const passwordHash = await hashPassword(password);
     const now = Date.now();
 
     await context.env.submoacontent_db

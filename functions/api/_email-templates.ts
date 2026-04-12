@@ -117,9 +117,9 @@ export function registrationEmail({ name, email, loginUrl }) {
 export function articleRequestEmail({ name, topic, articleFormat, submissionId, dashboardUrl }) {
   const formatLabels = {
     'seo-blog': 'SEO Blog Post',
-    'gear-review': 'Gear Review',
-    'field-guide': 'Field Guide',
-    'product-comparison': 'Product Comparison',
+    'scientific': 'Scientific Research Paper',
+    'llm-blog': 'LLM-Optimized Blog',
+    'discover-news': 'Google Discover News',
   }
   const formatLabel = formatLabels[articleFormat] || articleFormat
 
@@ -138,12 +138,12 @@ export function articleRequestEmail({ name, topic, articleFormat, submissionId, 
 }
 
 // ─── Article delivery ──────────────────────────────────────────────────
-export function articleDeliveryEmail({ name, topic, articleLink, dashboardUrl }) {
+export function articleDeliveryEmail({ name, topic, downloadUrl, dashboardUrl }) {
   const body = `
     ${h1(`Your article is ready.`)}
     ${p(`${name || 'Hunter'}, the wait is over. Your article on <strong>${topic}</strong> is complete and waiting in your dashboard.`)}
     ${p(`Each piece is reviewed for accuracy, formatted for your audience, and ready to publish.`)}
-    ${cta('Pick Up Your Article', articleLink || `${BRAND.url}/dashboard`)}
+    ${cta('Pick Up Your Article', downloadUrl || dashboardUrl || `${BRAND.url}/dashboard`)}
     ${p(`Need revisions? Submit a revision request from your dashboard and we'll address it directly.`)}
   `
   return {

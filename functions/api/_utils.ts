@@ -50,21 +50,44 @@ export function generateId(): string {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export function hashPassword(password: string): string {
+export async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const passwordData = encoder.encode(password);
+  const baseKey = await crypto.subtle.importKey('raw', passwordData, 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: salt, iterations: 310000, hash: 'SHA-256' },
+    baseKey, 256
+  );
+  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('');
+  const hashHex = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return saltHex + ':' + hashHex + ':pbkdf2_v1';
+}
+
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  if (stored.endsWith(':pbkdf2_v1')) {
+    const [saltHex, hashHex] = stored.split(':');
+    const salt = new Uint8Array(saltHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+    const encoder = new TextEncoder();
+    const passwordData = encoder.encode(password);
+    const baseKey = await crypto.subtle.importKey('raw', passwordData, 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt, iterations: 310000, hash: 'SHA-256' },
+      baseKey, 256
+    );
+    const computedHash = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return computedHash === hashHex;
+  }
+  // Legacy — fall back to old hash for existing passwords
   const encoder = new TextEncoder();
   const data = encoder.encode(password + 'submoa_salt_2026');
   let hash = 0;
-  const str = password;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+  for (let i = 0; i < password.length; i++) {
+    hash = ((hash << 5) - hash) + password.charCodeAt(i);
     hash = hash & hash;
   }
-  return Math.abs(hash).toString(16).padStart(16, '0') + 'submoa_v1';
-}
-
-export function verifyPassword(password: string, hash: string): boolean {
-  return hashPassword(password) === hash;
+  const legacy = Math.abs(hash).toString(16).padStart(16, '0') + 'submoa_v1';
+  return legacy === stored;
 }
 
 export function getAuthToken(request: Request): string | null {

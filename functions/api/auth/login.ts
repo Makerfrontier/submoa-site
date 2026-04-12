@@ -27,7 +27,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
       .bind(email.toLowerCase())
       .first() as any;
 
-    if (!user || !verifyPassword(password, user.password_hash)) {
+    if (!user || !(await verifyPassword(password, user.password_hash))) {
       return json({ error: 'Invalid email or password' }, 401);
     }
 
