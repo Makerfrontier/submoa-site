@@ -605,7 +605,16 @@ function Dashboard({ navigate }) {
     URL.revokeObjectURL(url)
   }
 
-  const handleViewArticle = (sub) => navigate('/content/' + sub.id)
+  const handleViewArticle = (sub) => {
+    // Navigate directly to the published content page
+    if (sub.content_path) {
+      const slug = sub.content_path.replace('/content/', '').replace('.md', '')
+      window.open('/content/' + slug, '_blank')
+    } else {
+      // Fallback to CMS view if no content_path
+      navigate('/content/' + sub.id)
+    }
+  }
 
   const handleRequestEdits = () => {
     if (!viewArticle) return
