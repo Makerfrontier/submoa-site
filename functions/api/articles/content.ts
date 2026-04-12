@@ -30,7 +30,7 @@ export async function onRequest(context) {
       SELECT id, author, email, brief, article_content, content_path, status, created_at
       FROM submissions WHERE id = ?
     `);
-    const article = await stmt.get(id);
+    const article = await stmt.bind(id).first();
 
     if (!article) return json({ error: 'Article not found' }, 404);
 
