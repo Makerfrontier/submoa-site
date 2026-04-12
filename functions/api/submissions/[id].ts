@@ -1,7 +1,16 @@
-import { json, getSessionUser } from '../_utils';
+import { json, getSessionUser, generateId } from '../_utils';
+
+async function createNotification(env, userId, type, message, link) {
+  const id = generateId();
+  const now = Date.now();
+  await env.submoacontent_db
+    .prepare('INSERT INTO notifications (id, user_id, type, message, link, is_read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)')
+    .bind(id, userId, type, message, link, now)
+    .run();
+}
 
 // GET /api/submissions/:id — get single submission
-// PUT /api/submissions/:id — update submission (hide, delete, status)
+// PUT /api/submissions/:id — hide, delete, or update status
 // PUT /api/submissions/:id/revision — submit revision request
 export async function onRequest(context) {
   if (context.request.method === 'OPTIONS') {
@@ -32,16 +41,11 @@ export async function onRequest(context) {
       }
 
       const stmt = context.env.submoacontent_db.prepare(`
-        UPDATE submissions
-        SET status = 'revision_requested', revision_notes = ?, updated_at = ?
-        WHERE id = ? AND user_id = ?
+        UPDATE submissions SET status = 'revision_requested', revision_notes = ?, updated_at = ? WHERE id = ? AND user_id = ?
       `);
       await stmt.run(revision_notes.trim(), Date.now(), id, user.id);
 
-      // Fetch updated record to confirm
-      const sub = await context.env.submoacontent_db
-        .prepare('SELECT * FROM submissions WHERE id = ?').bind(id).first();
-
+      const sub = await context.env.submoacontent_db.prepare('SELECT * FROM submissions WHERE id = ?').bind(id).first();
       return json({ success: true, submission: sub });
     } catch (e) {
       return json({ error: e.message }, 500);
@@ -50,7 +54,7 @@ export async function onRequest(context) {
 
   // GET /api/submissions/:id
   if (context.request.method === 'GET') {
-    const id = (pathname.split('/').filter(Boolean))[2]; // submissions -> api -> id
+    const id = (pathname.split('/').filter(Boolean))[2];
     if (!id) return json({ error: 'Missing submission id' }, 400);
 
     try {
@@ -79,10 +83,8 @@ export async function onRequest(context) {
       const body = await context.request.json();
       const { is_hidden, is_deleted, status, article_content } = body;
 
-      // Non-admin can only update their own
       if (user.role !== 'admin') {
-        const check = await context.env.submoacontent_db
-          .prepare('SELECT id FROM submissions WHERE id = ? AND user_id = ?').bind(id, user.id).first();
+        const check = await context.env.submoacontent_db.prepare('SELECT id FROM submissions WHERE id = ? AND user_id = ?').bind(id, user.id).first();
         if (!check) return json({ error: 'Not found' }, 404);
       }
 
@@ -105,6 +107,31 @@ export async function onRequest(context) {
       await stmt.run(...values);
 
       const sub = await context.env.submoacontent_db.prepare('SELECT * FROM submissions WHERE id = ?').bind(id).first();
+
+      // Auto-notify when content is marked done
+      if (status === 'done' && sub) {
+        const dashboardUrl = `${new URL(context.request.url).origin}/dashboard`;
+        await createNotification(
+          context.env,
+          sub.user_id,
+          'article_ready',
+          `Your article "${sub.topic}" is ready — view and download it now.`,
+          dashboardUrl
+        );
+        try {
+          const { articleDeliveryEmail, sendEmail } = await import('../_email-templates');
+          const { subject, html } = articleDeliveryEmail({
+            name: sub.email,
+            topic: sub.topic,
+            downloadUrl: dashboardUrl,
+            dashboardUrl,
+          });
+          await sendEmail(context.env, { to: sub.email, subject, html });
+        } catch (emailErr) {
+          console.error('Delivery email failed:', emailErr.message);
+        }
+      }
+
       return json({ success: true, submission: sub });
 
     } catch (e) {

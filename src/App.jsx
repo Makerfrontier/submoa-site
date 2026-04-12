@@ -86,6 +86,7 @@ function Nav({ navigate }) {
                   <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/author') }}>Submit Brief</a>
                   {user?.role === 'admin' && <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/writer') }}>Writer</a>}
                   <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/dashboard') }}>Dashboard</a>
+                  <NotificationBell />
                   <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/account') }}>Account</a>
                 </>
               )}
@@ -923,6 +924,100 @@ function Writer({ navigate }) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Notification Bell ──────────────────────────────────────────────────
+function NotificationBell() {
+  const { user } = useAuth()
+  const [count, setCount] = useState(0)
+  const [open, setOpen] = useState(false)
+  const [notifs, setNotifs] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/notifications?unread=true&limit=5', { credentials: 'include' })
+        if (res.ok) {
+          const data = await res.json()
+          setCount(data.unreadCount || 0)
+        }
+      } catch {}
+    }, 30000) // poll every 30s
+    return () => clearInterval(interval)
+  }, [user])
+
+  const loadNotifs = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/notifications?limit=10', { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        setNotifs(data.notifications || [])
+      }
+    } catch {}
+    setLoading(false)
+  }
+
+  const handleOpen = () => {
+    setOpen(o => !o)
+    if (!open) loadNotifs()
+  }
+
+  const markAllRead = async () => {
+    await fetch('/api/notifications', { method: 'PUT', credentials: 'include' })
+    setCount(0)
+    setNotifs(prev => prev.map(n => ({ ...n, is_read: 1 })))
+  }
+
+  if (!user) return null
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={handleOpen}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 0.75rem', position: 'relative' }}
+        aria-label="Notifications"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        {count > 0 && (
+          <span style={{ position: 'absolute', top: '-4px', right: '2px', background: '#b05050', color: '#fff', borderRadius: '50%', fontSize: '0.625rem', minWidth: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', fontWeight: 700 }}>
+            {count > 9 ? '9+' : count}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', background: '#faf9f7', border: '1px solid #e5e5e5', borderRadius: '8px', width: '320px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', zIndex: 200, overflow: 'hidden' }}>
+          <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #e5e5e5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>Notifications</span>
+            {count > 0 && <button onClick={markAllRead} style={{ background: 'none', border: 'none', fontSize: '0.75rem', color: '#6b7280', cursor: 'pointer', textDecoration: 'underline' }}>Mark all read</button>}
+          </div>
+          <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+            {loading ? (
+              <p style={{ padding: '1rem', color: '#6b7280', fontSize: '0.875rem', textAlign: 'center' }}>Loading...</p>
+            ) : notifs.length === 0 ? (
+              <p style={{ padding: '1rem', color: '#6b7280', fontSize: '0.875rem', textAlign: 'center' }}>No notifications yet.</p>
+            ) : notifs.map(n => (
+              <div key={n.id} style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #f0f0f0', display: 'flex', gap: '0.75rem', alignItems: 'flex-start', background: n.is_read ? 'transparent' : '#f9fafb' }}>
+                <span style={{ fontSize: '1rem', marginTop: '2px' }}>🔔</span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '0.875rem', margin: 0, lineHeight: 1.5 }}>{n.message}</p>
+                  <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>{new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: '0.5rem 1rem', borderTop: '1px solid #e5e5e5' }}>
+            <button onClick={() => { setOpen(false); navigate('/dashboard') }} style={{ background: 'none', border: 'none', fontSize: '0.75rem', color: '#6b7280', cursor: 'pointer', textDecoration: 'underline' }}>View all in dashboard</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
