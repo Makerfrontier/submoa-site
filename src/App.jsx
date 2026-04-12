@@ -48,10 +48,10 @@ function Nav({ navigate }) {
           <button className="nav-mobile-close" onClick={closeMenu}>×</button>
           <img src="/logo.jpg" alt="SubMoa Content" className="nav-mobile-logo" onClick={() => { closeMenu(); navigate('/') }} />
           <div className="nav-mobile-links">
-            <a href="#how-it-works" onClick={e => { e.preventDefault(); closeMenu(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>How It Works</a>
-            <a href="#features" onClick={e => { e.preventDefault(); closeMenu(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>Features</a>
             {!loading && !user && (
               <>
+                <a href="#how-it-works" onClick={e => { e.preventDefault(); closeMenu(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>How It Works</a>
+                <a href="#features" onClick={e => { e.preventDefault(); closeMenu(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>Features</a>
                 <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/login') }}>Login</a>
                 <a href="#" className="nav-mobile-cta" onClick={e => { e.preventDefault(); closeMenu(); navigate('/request') }}>Request Access</a>
               </>
@@ -74,10 +74,10 @@ function Nav({ navigate }) {
           <div className="nav-inner">
             <img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} />
             <div className="nav-links">
-              <a href="#how-it-works" className="nav-link" onClick={e => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>How It Works</a>
-              <a href="#features" className="nav-link" onClick={e => { e.preventDefault(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>Features</a>
               {!loading && !user && (
                 <>
+                  <a href="#how-it-works" className="nav-link" onClick={e => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>How It Works</a>
+                  <a href="#features" className="nav-link" onClick={e => { e.preventDefault(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>Features</a>
                   <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/login') }}>login</a>
                   <a href="#" className="nav-cta" onClick={e => { e.preventDefault(); navigate('/request') }}>Request Access</a>
                 </>
@@ -561,6 +561,7 @@ function Dashboard({ navigate }) {
   const [revisionLoading, setRevisionLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(null)
   const [userRole, setUserRole] = useState('user')
+  const [viewMode, setViewMode] = useState('user')
 
   const loadSubmissions = () => {
     api('/api/submissions')
@@ -671,8 +672,8 @@ function Dashboard({ navigate }) {
           {userRole === 'admin' && (
             <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
               <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>View:</span>
-              <button className="btn-secondary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem' }}>My Dashboard</button>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Global (admin)</span>
+              <button className={viewMode === 'user' ? 'btn-primary' : 'btn-secondary'} style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem' }} onClick={() => setViewMode('user')}>My Dashboard</button>
+              <button className={viewMode === 'global' ? 'btn-primary' : 'btn-secondary'} style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem', cursor: 'pointer' }} onClick={() => setViewMode('global')}>Global (admin)</button>
             </div>
           )}
         </div>
@@ -687,9 +688,9 @@ function Dashboard({ navigate }) {
         ) : (
           <div className="section">
             <div className="grid">
-              {submissions.map(sub => (
+              {(viewMode === 'global' ? submissions : submissions.filter(s => s.user_id === user?.id)).map(sub => (
                 <div key={sub.id} className="card">
-                  <div className="card-meta">{new Date(sub.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} · {sub.article_format}</div>
+                  <div className="card-meta">{new Date(sub.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} · {FORMATS.find(f => f.id === sub.article_format)?.name ?? sub.article_format}</div>
                   <div className="card-title">{sub.topic}</div>
                   <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     <span className={`card-status status-${sub.status}`}>{sub.status}</span>
@@ -804,6 +805,7 @@ function Account({ navigate }) {
           </div>
         </div>
 
+        {user?.role === 'admin' && (
         <div style={{ marginTop: '3rem', padding: '2rem', border: '1px solid var(--hunter-border)', background: 'var(--hunter-mid)' }}>
           <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '1.125rem', fontWeight: 600, color: 'var(--cream)', marginBottom: '0.5rem' }}>Generate Invite Link</div>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>Create a single-use invite link valid for 30 days. Share this with your team.</p>
@@ -817,6 +819,7 @@ function Account({ navigate }) {
             </div>
           )}
         </div>
+      )}
       </div></div></div>
   )
 }
@@ -976,7 +979,7 @@ function Writer({ navigate }) {
                 <div key={sub.id} className="card">
                   <div className="card-meta">
                     {new Date(sub.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                    {' · '}{sub.article_format}
+                    {' · '}{FORMATS.find(f => f.id === sub.article_format)?.name ?? sub.article_format}
                   </div>
                   <div className="card-title">{sub.topic}</div>
                   <div style={{ marginTop: '0.5rem' }}>

@@ -56,7 +56,7 @@ export async function onRequest(context) {
       }
 
       updates.push('updated_at = ?');
-      values.push(new Date().toISOString());
+      values.push(Date.now());
       values.push(id);
 
       const stmt = env.submoacontent_db.prepare(`

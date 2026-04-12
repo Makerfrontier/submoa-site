@@ -26,6 +26,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
   // Require authentication
   const user = await getSessionUser(context.request, context.env);
   if (!user) return json({ error: 'Not authenticated' }, 401);
+  if (user.role !== 'admin') return json({ error: 'Forbidden' }, 403);
 
   try {
     const { max_uses = 1, expires_in_days = 30 } = await context.request.json();
