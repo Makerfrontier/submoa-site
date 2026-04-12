@@ -25,7 +25,7 @@ export async function onRequest(context) {
           SELECT id, user_id, topic, author, article_format, vocal_tone, min_word_count,
             product_link, target_keywords, seo_research, human_observation, anecdotal_stories,
             email, status, created_at, updated_at, content_path, article_content,
-            revision_notes, is_hidden, is_deleted, deleted_at
+            revision_notes, is_hidden, is_deleted, deleted_at, seo_report_content
           FROM submissions
           ORDER BY updated_at DESC
         `);
@@ -34,7 +34,7 @@ export async function onRequest(context) {
           SELECT id, user_id, topic, author, article_format, vocal_tone, min_word_count,
             product_link, target_keywords, seo_research, human_observation, anecdotal_stories,
             email, status, created_at, updated_at, content_path, article_content,
-            revision_notes, is_hidden, is_deleted
+            revision_notes, is_hidden, is_deleted, seo_report_content
           FROM submissions
           WHERE user_id = ? AND is_deleted = 0
           ORDER BY updated_at DESC

@@ -81,7 +81,7 @@ export async function onRequest(context) {
 
     try {
       const body = await context.request.json();
-      const { is_hidden, is_deleted, status, article_content } = body;
+      const { is_hidden, is_deleted, status, article_content, seo_report_content } = body;
 
       if (user.role !== 'admin') {
         const check = await context.env.submoacontent_db.prepare('SELECT id FROM submissions WHERE id = ? AND user_id = ?').bind(id, user.id).first();
@@ -98,6 +98,7 @@ export async function onRequest(context) {
       }
       if (status !== undefined) { updates.push('status = ?'); values.push(status); }
       if (article_content !== undefined) { updates.push('article_content = ?'); values.push(article_content); }
+      if (seo_report_content !== undefined) { updates.push('seo_report_content = ?'); values.push(seo_report_content); }
 
       updates.push('updated_at = ?');
       values.push(Date.now());

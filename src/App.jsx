@@ -593,6 +593,17 @@ function Dashboard({ navigate }) {
     URL.revokeObjectURL(url)
   }
 
+  const handleDownloadSeoReport = (sub) => {
+    if (!sub.seo_report_content) return
+    const blob = new Blob([sub.seo_report_content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(sub.topic || 'article').replace(/[^a-z0-9]/gi, '-').toLowerCase()}-seo-report.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const handleViewArticle = (sub) => setViewArticle(sub)
 
   const handleRequestEdits = () => {
@@ -679,6 +690,9 @@ function Dashboard({ navigate }) {
                     {sub.status === 'done' && (
                       <>
                         <button onClick={() => handleDownload(sub)} className="btn-primary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem' }}>Download</button>
+                        {sub.seo_research && sub.seo_report_content && (
+                          <button onClick={() => handleDownloadSeoReport(sub)} style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem', background: '#1a1a1a', color: '#faf9f7', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>SEO Report</button>
+                        )}
                         <button onClick={() => handleViewArticle(sub)} className="btn-secondary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem' }}>View</button>
                       </>
                     )}
@@ -868,7 +882,11 @@ function Writer({ navigate }) {
         content = content.trim() + '\n' + editing.deepReport
       }
 
-      const body = { article_content: content }
+      const body = { article_content: editing.article_content }
+      // Store deep SEO report separately
+      if (editing.seo_research && editing.deepReport) {
+        body.seo_report_content = editing.deepReport
+      }
       // If it doesn't have content yet, mark as done on first save
       if (sub && (!sub.article_content || sub.status === 'draft' || sub.status === 'notified')) {
         body.status = 'done'
