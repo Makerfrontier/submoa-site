@@ -1,14 +1,5 @@
-import { json, Env } from '../_utils'
+import { json, Env, generateResetToken } from '../_utils'
 import { passwordResetEmail, sendEmail } from '../_email-templates'
-
-function generateId() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
-  for (let i = 0; i < 32; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  return result
-}
 
 export async function onRequest(context: { request: Request; env: Env }) {
   const { email } = await context.request.json()
@@ -28,13 +19,13 @@ export async function onRequest(context: { request: Request; env: Env }) {
 
   await db.prepare('DELETE FROM password_resets WHERE user_id = ?').bind(user.id).run()
 
-  const token = generateId()
+  const token = generateResetToken()
   const now = Math.floor(Date.now() / 1000)
-  const expiresAt = now + 1800
+  const expiresAt = now + 1800 // 30 minutes
 
   await db.prepare(
     'INSERT INTO password_resets (id, user_id, token, expires_at, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).bind(generateId(), user.id, token, expiresAt, now).run()
+  ).bind(generateResetToken(), user.id, token, expiresAt, now).run()
 
   const resetUrl = `${new URL(context.request.url).origin}/reset?token=${token}`
 
