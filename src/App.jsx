@@ -58,6 +58,7 @@ function Nav({ navigate }) {
             {!loading && user && (
               <>
                 <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/author') }}>Submit Brief</a>
+                {user?.role === 'admin' && <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/writer') }}>Writer</a>}
                 <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/dashboard') }}>Dashboard</a>
                 <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/account') }}>Account</a>
               </>
@@ -83,6 +84,7 @@ function Nav({ navigate }) {
               {!loading && user && (
                 <>
                   <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/author') }}>Submit Brief</a>
+                  {user?.role === 'admin' && <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/writer') }}>Writer</a>}
                   <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/dashboard') }}>Dashboard</a>
                   <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/account') }}>Account</a>
                 </>
@@ -135,8 +137,7 @@ function Footer() {
 }
 
 // ─── Landing ───────────────────────────────────────────────────────────
-function Landing() {
-  const { navigate } = usePage()
+function Landing({ navigate }) {
   return (
     <div className="page">
       <Nav navigate={navigate} />
@@ -278,7 +279,6 @@ function Login({ navigate }) {
 
   return (
     <div className="page">
-      <nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /></div></div></nav>
       <div className="container"><div className="form-card">
         <h1 className="form-title">login.</h1>
         <p className="form-sub">Sign in to your dashboard.</p>
@@ -348,7 +348,6 @@ function Register({ navigate }) {
 
   return (
     <div className="page">
-      <nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /></div></div></nav>
       <div className="container"><div className="form-card">
         <h1 className="form-title">Create account.</h1>
         <p className="form-sub">Accepted invite only. Your account will be linked to your Google account.</p>
@@ -417,7 +416,6 @@ function RequestAccess({ navigate }) {
 
   if (done) return (
     <div className="page">
-      <nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /></div></div></nav>
       <div className="container"><div className="form-card">
         <div className="confirm-icon">✓</div>
         <h1 className="confirm-title">Request received.</h1>
@@ -428,7 +426,6 @@ function RequestAccess({ navigate }) {
 
   return (
     <div className="page">
-      <nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /></div></div></nav>
       <div className="container"><div className="form-card">
         <h1 className="form-title">Request access.</h1>
         <p className="form-sub">Tell us who you are and we'll be in touch with next steps.</p>
@@ -524,16 +521,11 @@ function Author({ navigate }) {
   }
 
   if (submitted) return (
-    <div className="page">
-      <nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /><div className="nav-links"><a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/dashboard') }}>Dashboard</a><a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/account') }}>Account</a></div></div></div></nav>
-      <div className="container"><div className="form-card"><div className="confirm-icon">✓</div><h1 className="confirm-title">Brief received.</h1><p className="confirm-sub">We'll have your content ready within 48 hours. You'll receive a notification when it's available in your dashboard.</p><div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}><button className="btn-primary" onClick={() => { setSubmitted(false); setForm({ author: 'ben-ryder', topic: '', productLink: '', humanObservation: '', anecdotalStories: '', minWordCount: '1200', targetKeywords: '', seoResearch: false, articleFormat: 'seo-blog', vocalTone: '', email: user?.email || '' }) }}>Submit Another</button><button className="btn-secondary" onClick={() => navigate('/dashboard')}>View Dashboard</button></div></div></div>
-    </div>
+    <div className="page"><div className="container"><div className="form-card"><div className="confirm-icon">✓</div><h1 className="confirm-title">Brief received.</h1><p className="confirm-sub">We'll have your content ready same-day. You'll receive a notification when it's available in your dashboard.</p><div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}><button className="btn-primary" onClick={() => { setSubmitted(false); setForm({ author: 'ben-ryder', topic: '', productLink: '', humanObservation: '', anecdotalStories: '', minWordCount: '1200', targetKeywords: '', seoResearch: false, articleFormat: 'seo-blog', vocalTone: '', email: user?.email || '' }) }}>Submit Another</button><button className="btn-secondary" onClick={() => navigate('/dashboard')}>View Dashboard</button></div></div></div></div>
   )
 
   return (
-    <div className="page">
-      <nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /><div className="nav-links"><a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/dashboard') }}>Dashboard</a><a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/account') }}>Account</a></div></div></div></nav>
-      <div className="container"><div style={{ maxWidth: '640px', margin: '0 auto', padding: '3rem 0' }}>
+    <div className="page"><div className="container"><div style={{ maxWidth: '640px', margin: '0 auto', padding: '3rem 0' }}>
         <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '1.625rem', fontWeight: 700, color: 'var(--cream)', marginBottom: '2rem' }}>Submit a Brief.</h1>
         {error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}
         <form onSubmit={handleSubmit}>
@@ -561,21 +553,106 @@ function Dashboard({ navigate }) {
   const [submissions, setSubmissions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [viewArticle, setViewArticle] = useState(null)
+  const [showRevisionModal, setShowRevisionModal] = useState(false)
+  const [revisionNotes, setRevisionNotes] = useState('')
+  const [revisionLoading, setRevisionLoading] = useState(false)
+  const [actionLoading, setActionLoading] = useState(null)
+  const [userRole, setUserRole] = useState('user')
 
-  useEffect(() => {
+  const loadSubmissions = () => {
     api('/api/submissions')
-      .then(data => setSubmissions(data.submissions || []))
+      .then(data => {
+        setSubmissions(data.submissions || [])
+        setUserRole(data.role || 'user')
+      })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadSubmissions() }, [])
+
+  const handleDownload = (sub) => {
+    const content = sub.article_content || sub.brief || ''
+    const text = content
+      .replace(/#{1,6}\s+/g, '')
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/\[(.+?)\]\(.+?\)/g, '$1')
+      .replace(/^\s*[-*]\s+/gm, '')
+      .replace(/^\s*\d+\.\s+/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+    const blob = new Blob([text], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(sub.topic || 'article').replace(/[^a-z0-9]/gi, '-').toLowerCase()}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleViewArticle = (sub) => setViewArticle(sub)
+
+  const handleRequestEdits = () => {
+    if (!viewArticle) return
+    setRevisionNotes(sub.revision_notes || '')
+    setShowRevisionModal(true)
+  }
+
+  const submitRevision = async () => {
+    if (!revisionNotes.trim()) return
+    setRevisionLoading(true)
+    try {
+      await api(`/api/submissions/${viewArticle.id}/revision`, {
+        method: 'PUT',
+        body: JSON.stringify({ revision_notes: revisionNotes })
+      })
+      setShowRevisionModal(false)
+      setViewArticle(null)
+      loadSubmissions()
+    } catch (e) { console.error(e) }
+    setRevisionLoading(false)
+  }
+
+  const handleHide = async (sub) => {
+    setActionLoading(sub.id)
+    try {
+      await api(`/api/submissions/${sub.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ is_hidden: sub.is_hidden ? 0 : 1 })
+      })
+      loadSubmissions()
+    } catch (e) { console.error(e) }
+    setActionLoading(null)
+  }
+
+  const handleDelete = async (sub) => {
+    if (!confirm('Delete this article request? This cannot be undone.')) return
+    setActionLoading(sub.id)
+    try {
+      await api(`/api/submissions/${sub.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ is_deleted: 1 })
+      })
+      loadSubmissions()
+    } catch (e) { console.error(e) }
+    setActionLoading(null)
+  }
 
   return (
     <div className="page">
-      <nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /><div className="nav-links"><a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/author') }}>Submit Brief</a><a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/account') }}>Account</a><a href="#" className="nav-link" onClick={async (e) => { e.preventDefault(); await api('/api/auth/logout', { method: 'POST' }); window.location.href = '/' }}>Logout</a></div></div></div></nav>
       <div className="container">
         <div className="dashboard-header">
           <h1 className="dashboard-title">Your Content.</h1>
           <p className="dashboard-sub">{user ? `Signed in as ${user.name}` : 'Track and manage all your content requests.'}</p>
+          {userRole === 'admin' && (
+            <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>View:</span>
+              <button className="btn-secondary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem' }}>My Dashboard</button>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Global (admin)</span>
+            </div>
+          )}
         </div>
         {error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}
         {loading ? (
@@ -592,12 +669,68 @@ function Dashboard({ navigate }) {
                 <div key={sub.id} className="card">
                   <div className="card-meta">{new Date(sub.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} · {sub.article_format}</div>
                   <div className="card-title">{sub.topic}</div>
-                  <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     <span className={`card-status status-${sub.status}`}>{sub.status}</span>
                     <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{sub.author}</span>
+                    <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>·</span>
+                    <button onClick={() => handleHide(sub)} disabled={actionLoading === sub.id} style={{ background: 'none', border: 'none', color: sub.is_hidden ? '#6b7280' : '#9ca3af', cursor: 'pointer', fontSize: '0.75rem', padding: '0', textDecoration: 'underline' }}>{sub.is_hidden ? 'Unhide' : 'Hide'}</button>
+                    <button onClick={() => handleDelete(sub)} disabled={actionLoading === sub.id} style={{ background: 'none', border: 'none', color: '#b05050', cursor: 'pointer', fontSize: '0.75rem', padding: '0', textDecoration: 'underline' }}>Delete</button>
+                    {sub.status === 'done' && (
+                      <>
+                        <button onClick={() => handleDownload(sub)} className="btn-primary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem' }}>Download</button>
+                        <button onClick={() => handleViewArticle(sub)} className="btn-secondary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem' }}>View</button>
+                      </>
+                    )}
+                    {sub.status === 'revision_requested' && (
+                      <span style={{ fontSize: '0.75rem', color: '#d97706', fontStyle: 'italic' }}>Revision requested</span>
+                    )}
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {viewArticle && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }} onClick={() => setViewArticle(null)}>
+            <div style={{ background: '#faf9f7', maxWidth: '760px', width: '100%', maxHeight: '90vh', overflow: 'auto', borderRadius: '8px', padding: '2rem', position: 'relative' }} onClick={e => e.stopPropagation()}>
+              <button onClick={() => setViewArticle(null)} style={{ position: 'absolute', top: '1rem', right: '3.5rem', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}>×</button>
+              <button onClick={() => handleDownload(viewArticle)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: '#1a1a1a', border: 'none', color: '#faf9f7', padding: '0.35rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8125rem' }}>Download .txt</button>
+              <h2 style={{ fontFamily: "'Playfair Display', serif", marginBottom: '0.5rem', paddingRight: '6rem' }}>{viewArticle.topic}</h2>
+              <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.5rem' }}>By {viewArticle.author} · {viewArticle.email}</p>
+              {viewArticle.status === 'revision_requested' && viewArticle.revision_notes && (
+                <div style={{ background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '6px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+                  <strong style={{ color: '#92400e' }}>Your revision request:</strong>
+                  <p style={{ color: '#78350f', marginTop: '0.25rem', whiteSpace: 'pre-wrap' }}>{viewArticle.revision_notes}</p>
+                </div>
+              )}
+              <div style={{ fontSize: '1.0625rem', lineHeight: '1.85', whiteSpace: 'pre-wrap', color: '#1a1a1a' }}>{viewArticle.article_content || viewArticle.brief}</div>
+              {viewArticle.status === 'done' && (
+                <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #e5e5e5', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button onClick={handleRequestEdits} className="btn-secondary" style={{ padding: '0.5rem 1.25rem' }}>Request Edits</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {showRevisionModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }} onClick={() => setShowRevisionModal(false)}>
+            <div style={{ background: '#faf9f7', maxWidth: '600px', width: '100%', borderRadius: '8px', padding: '2rem', position: 'relative' }} onClick={e => e.stopPropagation()}>
+              <button onClick={() => setShowRevisionModal(false)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}>×</button>
+              <h2 style={{ fontFamily: "'Playfair Display', serif", marginBottom: '0.5rem' }}>Request Edits</h2>
+              <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.25rem' }}>Describe the changes you need. Be specific about what to adjust, add, or remove.</p>
+              <textarea
+                value={revisionNotes}
+                onChange={e => setRevisionNotes(e.target.value)}
+                placeholder="Example: The third paragraph is too wordy, cut it in half. Also, can you add a sentence about durability near the end?"
+                rows={6}
+                style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.9375rem', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', lineHeight: '1.6' }}
+              />
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                <button onClick={() => setShowRevisionModal(false)} className="btn-secondary" style={{ padding: '0.5rem 1rem' }}>Cancel</button>
+                <button onClick={submitRevision} disabled={revisionLoading || !revisionNotes.trim()} className="btn-primary" style={{ padding: '0.5rem 1rem' }}>{revisionLoading ? 'Submitting...' : 'Submit Revision Request'}</button>
+              </div>
             </div>
           </div>
         )}
@@ -629,7 +762,6 @@ function Account({ navigate }) {
 
   return (
     <div className="page">
-      <nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /><div className="nav-links"><a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/dashboard') }}>Dashboard</a><a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/author') }}>Submit Brief</a></div></div></div></nav>
       <div className="container"><div className="account-section">
         <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '1.625rem', fontWeight: 700, color: 'var(--cream)', marginBottom: '2rem' }}>Account Settings.</h1>
         <div className="account-grid">
@@ -661,6 +793,137 @@ function Account({ navigate }) {
           )}
         </div>
       </div></div></div>
+  )
+}
+
+// ─── Writer (Sydney/Ben — edit article content) ─────────────────────────────────────
+function Writer({ navigate }) {
+  const { user } = useAuth()
+  const [submissions, setSubmissions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(null) // { id, article_content, status }
+  const [saveLoading, setSaveLoading] = useState(false)
+  const [saveMsg, setSaveMsg] = useState('')
+
+  const loadSubs = () => {
+    setLoading(true)
+    api('/api/submissions')
+      .then(data => {
+        // Show: done (needs content or needs revision), revision_requested
+        const writable = (data.submissions || []).filter(s =>
+          s.status === 'done' || s.status === 'revision_requested' || s.status === 'draft' || s.status === 'notified'
+        )
+        setSubmissions(writable)
+      })
+      .catch(err => console.error(err))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { loadSubs() }, [])
+
+  const handleEdit = (sub) => {
+    setEditing({ id: sub.id, article_content: sub.article_content || '', status: sub.status, topic: sub.topic, revision_notes: sub.revision_notes || '' })
+    setSaveMsg('')
+  }
+
+  const handleSave = async () => {
+    if (!editing) return
+    setSaveLoading(true)
+    setSaveMsg('')
+    try {
+      const body = { article_content: editing.article_content }
+      // If it doesn't have content yet, mark as done on first save
+      const sub = submissions.find(s => s.id === editing.id)
+      if (sub && (!sub.article_content || sub.status === 'draft' || sub.status === 'notified')) {
+        body.status = 'done'
+      }
+      await api(`/api/submissions/${editing.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body)
+      })
+      setSaveMsg('Saved!')
+      setEditing(null)
+      loadSubs()
+    } catch (e) {
+      setSaveMsg('Error: ' + e.message)
+    }
+    setSaveLoading(false)
+  }
+
+  if (editing) {
+    const wordCount = editing.article_content.trim().split(/\s+/).filter(Boolean).length
+    return (
+      <div className="page">
+        <div className="container">
+          <div style={{ marginBottom: '1.5rem' }}>
+            <button onClick={() => setEditing(null)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '0.875rem', marginBottom: '0.75rem' }}>← Back to list</button>
+            <h1 style={{ fontFamily: "'Playfair Display', serif", marginBottom: '0.25rem' }}>{editing.topic}</h1>
+            {editing.status === 'revision_requested' && editing.revision_notes && (
+              <div style={{ background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '6px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.875rem', marginTop: '0.75rem' }}>
+                <strong style={{ color: '#92400e' }}>Revision requested:</strong>
+                <p style={{ color: '#78350f', marginTop: '0.25rem', whiteSpace: 'pre-wrap' }}>{editing.revision_notes}</p>
+              </div>
+            )}
+            <p style={{ fontSize: '0.8125rem', color: '#6b7280' }}>{wordCount} words</p>
+          </div>
+          <textarea
+            value={editing.article_content}
+            onChange={e => setEditing(prev => ({ ...prev, article_content: e.target.value }))}
+            style={{ width: '100%', minHeight: '60vh', padding: '1rem', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '1rem', fontFamily: 'Georgia, serif', lineHeight: '1.8', boxSizing: 'border-box', resize: 'vertical' }}
+            placeholder="Paste or write the article content here..."
+          />
+          {saveMsg && <p style={{ marginTop: '0.75rem', color: saveMsg.includes('Error') ? '#b05050' : '#16a34a', fontSize: '0.875rem' }}>{saveMsg}</p>}
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+            <button onClick={handleSave} disabled={saveLoading} className="btn-primary">{saveLoading ? 'Saving...' : 'Save & Mark Done'}</button>
+            <button onClick={() => setEditing(null)} className="btn-secondary">Cancel</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="page">
+      <div className="container">
+        <div className="dashboard-header">
+          <h1 className="dashboard-title">Writer.</h1>
+          <p className="dashboard-sub">Edit and deliver article content.</p>
+        </div>
+        {loading ? (
+          <p style={{ color: 'var(--text-muted)' }}>Loading...</p>
+        ) : submissions.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)' }}>No articles to write right now.</p>
+        ) : (
+          <div className="section">
+            <div className="grid">
+              {submissions.map(sub => (
+                <div key={sub.id} className="card">
+                  <div className="card-meta">
+                    {new Date(sub.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                    {' · '}{sub.article_format}
+                  </div>
+                  <div className="card-title">{sub.topic}</div>
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <span className={`card-status status-${sub.status}`}>{sub.status}</span>
+                    {' '}<span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{sub.author}</span>
+                  </div>
+                  {sub.status === 'revision_requested' && sub.revision_notes && (
+                    <p style={{ fontSize: '0.8125rem', color: '#d97706', marginTop: '0.5rem', fontStyle: 'italic' }}>{sub.revision_notes.slice(0, 100)}{sub.revision_notes.length > 100 ? '...' : ''}</p>
+                  )}
+                  <button
+                    onClick={() => handleEdit(sub)}
+                    className="btn-primary"
+                    style={{ marginTop: '0.75rem', padding: '0.4rem 1rem', fontSize: '0.875rem' }}
+                  >
+                    {sub.article_content ? 'Edit Content' : 'Write Content'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -710,20 +973,20 @@ function Reset({ navigate }) {
   }
 
   if (done) return (
-    <div className="page"><nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /></div></div></nav><div className="container"><div className="form-card"><div className="confirm-icon">✓</div><h1 className="confirm-title">Password updated.</h1><p className="confirm-sub">You can log in now.</p><button className="btn-primary" style={{ width: '100%' }} onClick={() => navigate('/login')}>Back to login</button></div></div></div>
+    <div className="page"><div className="container"><div className="form-card"><div className="confirm-icon">✓</div><h1 className="confirm-title">Password updated.</h1><p className="confirm-sub">You can log in now.</p><button className="btn-primary" style={{ width: '100%' }} onClick={() => navigate('/login')}>Back to login</button></div></div></div>
   )
 
 
   if (token) return (
-    <div className="page"><nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /></div></div></nav><div className="container"><div className="form-card"><h1 className="form-title">New password.</h1><p className="form-sub">Enter your new password.</p><form onSubmit={handlePasswordReset}><div className="form-group"><label className="form-label">Password</label><input type="password" className="form-input" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} /></div>{error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}<button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading}>{loading ? 'Saving...' : 'Save password'}</button></form></div></div></div>
+    <div className="page"><div className="container"><div className="form-card"><h1 className="form-title">New password.</h1><p className="form-sub">Enter your new password.</p><form onSubmit={handlePasswordReset}><div className="form-group"><label className="form-label">Password</label><input type="password" className="form-input" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} /></div>{error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}<button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading}>{loading ? 'Saving...' : 'Save password'}</button></form></div></div></div>
   )
 
   if (sent) return (
-    <div className="page"><nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /></div></div></nav><div className="container"><div className="form-card"><div className="confirm-icon">✓</div><h1 className="confirm-title">Check your inbox.</h1><p className="confirm-sub">If an account exists with that email, we've sent a password reset link. It expires in 30 minutes.</p><button className="btn-secondary" style={{ width: '100%' }} onClick={() => navigate('/login')}>Back to login</button></div></div></div>
+    <div className="page"><div className="container"><div className="form-card"><div className="confirm-icon">✓</div><h1 className="confirm-title">Check your inbox.</h1><p className="confirm-sub">If an account exists with that email, we've sent a password reset link. It expires in 30 minutes.</p><button className="btn-secondary" style={{ width: '100%' }} onClick={() => navigate('/login')}>Back to login</button></div></div></div>
   )
 
   return (
-    <div className="page"><nav className="nav"><div className="container"><div className="nav-inner"><img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} /></div></div></nav><div className="container"><div className="form-card"><h1 className="form-title">Reset your password.</h1><p className="form-sub">We'll send you a link to create a new password.</p><form onSubmit={handleSubmit}><div className="form-group"><label className="form-label">Email</label><input type="email" className="form-input" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required /></div>{error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}<button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading}>{loading ? 'Sending...' : 'Send Reset Link'}</button><p className="form-link"><a href="#" onClick={e => { e.preventDefault(); navigate('/login') }}>Back to login</a></p></form></div></div></div>
+    <div className="page"><div className="container"><div className="form-card"><h1 className="form-title">Reset your password.</h1><p className="form-sub">We'll send you a link to create a new password.</p><form onSubmit={handleSubmit}><div className="form-group"><label className="form-label">Email</label><input type="email" className="form-input" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required /></div>{error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}<button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading}>{loading ? 'Sending...' : 'Send Reset Link'}</button><p className="form-link"><a href="#" onClick={e => { e.preventDefault(); navigate('/login') }}>Back to login</a></p></form></div></div></div>
   )
 }
 
@@ -750,6 +1013,7 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={authValue}>
+      <Nav navigate={navigate} />
       <div className="page">
         {page === '/login' && <Login navigate={navigate} />}
         {page === '/request' && <RequestAccess navigate={navigate} />}
@@ -757,8 +1021,9 @@ export default function App() {
         {page === '/author' && (user ? <Author navigate={navigate} /> : <Login navigate={navigate} />)}
         {page === '/dashboard' && (user ? <Dashboard navigate={navigate} /> : <Login navigate={navigate} />)}
         {page === '/account' && (user ? <Account navigate={navigate} /> : <Login navigate={navigate} />)}
+        {page === '/writer' && (user ? <Writer navigate={navigate} /> : <Login navigate={navigate} />)}
         {page === '/reset' && <Reset navigate={navigate} />}
-        {page === '/' && <Landing />}
+        {page === '/' && <Landing navigate={navigate} />}
       </div>
     </AuthContext.Provider>
   )

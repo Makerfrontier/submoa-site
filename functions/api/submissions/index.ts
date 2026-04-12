@@ -1,12 +1,13 @@
-import { json, getSessionUser, generateId, Env } from '../_utils';
-import { articleRequestEmail, sendEmail } from '../_email-templates';
+import { json, getSessionUser } from '../_utils';
 
-export async function onRequest(context: { request: Request; env: Env }) {
+// GET /api/submissions — list submissions
+// Admin sees all. Regular users see only their own (non-deleted).
+export async function onRequest(context) {
   if (context.request.method === 'OPTIONS') {
     return new Response(null, {
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       },
     });
@@ -15,108 +16,40 @@ export async function onRequest(context: { request: Request; env: Env }) {
   const user = await getSessionUser(context.request, context.env);
   if (!user) return json({ error: 'Not authenticated' }, 401);
 
-  if (context.request.method === 'GET') {
-    const submissions = await context.env.submoacontent_db
-      .prepare('SELECT * FROM submissions WHERE user_id = ? ORDER BY created_at DESC')
-      .bind(user.id)
-      .all();
-
-    return json({ submissions: submissions.results });
+  if (context.request.method !== 'GET') {
+    return json({ error: 'Method not allowed' }, 405);
   }
 
-  if (context.request.method === 'POST') {
-    try {
-      const {
-        topic,
-        author,
-        article_format,
-        vocal_tone,
-        min_word_count,
-        product_link,
-        target_keywords,
-        seo_research,
-        human_observation,
-        anecdotal_stories,
-        email,
-      } = await context.request.json();
-
-      if (!topic || !author || !article_format || !human_observation || !email) {
-        return json({ error: 'Missing required fields' }, 400);
-      }
-
-      const id = generateId();
-      const now = Date.now();
-
-      await context.env.submoacontent_db
-        .prepare(`
-          INSERT INTO submissions
-          (id, user_id, topic, author, article_format, vocal_tone, min_word_count, product_link, target_keywords, seo_research, human_observation, anecdotal_stories, email, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
-        `)
-        .bind(
-          id, user.id, topic, author, article_format,
-          vocal_tone || null,
-          min_word_count || '1200',
-          product_link || null,
-          target_keywords || null,
-          seo_research ? 1 : 0,
-          human_observation,
-          anecdotal_stories || null,
-          email,
-          now, now
-        )
-        .run();
-
-      // Notify via Discord
-      try {
-        const discordPayload = {
-          embeds: [{
-            title: `New Submission: ${topic}`,
-            color: 0xa07c2e,
-            fields: [
-              { name: 'Author', value: author, inline: true },
-              { name: 'Format', value: article_format, inline: true },
-              { name: 'Word Count', value: `${min_word_count || 1200}+`, inline: true },
-              { name: 'Email', value: email, inline: false },
-            ],
-            footer: { text: 'SubMoa Content Intake' },
-            timestamp: new Date().toISOString(),
-          }],
-        };
-
-        await fetch(context.env.DISCORD_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(discordPayload),
-        });
-      } catch (_) {
-        // Discord notification is non-blocking
-      }
-
-      const submission = await context.env.submoacontent_db
-        .prepare('SELECT * FROM submissions WHERE id = ?')
-        .bind(id)
-        .first();
-
-      // Send confirmation email
-      try {
-        const { subject, html } = articleRequestEmail({
-          name: user.name,
-          topic,
-          articleFormat: article_format,
-          submissionId: id,
-          dashboardUrl: `${new URL(context.request.url).origin}/dashboard`,
-        })
-        await sendEmail(context.env, { to: email, subject, html })
-      } catch (emailErr) {
-        console.error('Failed to send confirmation email:', emailErr.message)
-      }
-
-      return json({ submission }, 201);
-    } catch (err: any) {
-      return json({ error: err.message || 'Server error' }, 500);
+  try {
+    let stmt;
+    if (user.role === 'admin') {
+      // Admin sees everything including deleted
+      stmt = context.env.submoacontent_db.prepare(`
+        SELECT id, user_id, topic, author, article_format, vocal_tone, min_word_count,
+          product_link, target_keywords, seo_research, human_observation, anecdotal_stories,
+          email, status, created_at, updated_at, content_path, article_content,
+          revision_notes, is_hidden, is_deleted, deleted_at
+        FROM submissions
+        ORDER BY updated_at DESC
+      `);
+    } else {
+      // Regular users see their own, not deleted
+      stmt = context.env.submoacontent_db.prepare(`
+        SELECT id, user_id, topic, author, article_format, vocal_tone, min_word_count,
+          product_link, target_keywords, seo_research, human_observation, anecdotal_stories,
+          email, status, created_at, updated_at, content_path, article_content,
+          revision_notes, is_hidden, is_deleted
+        FROM submissions
+        WHERE user_id = ? AND is_deleted = 0
+        ORDER BY updated_at DESC
+      `);
+      stmt = stmt.bind(user.id);
     }
-  }
 
-  return json({ error: 'Method not allowed' }, 405);
+    const results = await stmt.all();
+    return json({ submissions: results.results || [], role: user.role });
+
+  } catch (e) {
+    return json({ error: e.message }, 500);
+  }
 }

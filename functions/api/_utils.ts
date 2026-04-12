@@ -15,6 +15,7 @@ export interface User {
   email: string;
   name: string;
   password_hash: string;
+  role: string;
   created_at: number;
   updated_at: number;
 }
@@ -36,6 +37,11 @@ export interface Submission {
   status: string;
   created_at: number;
   updated_at: number;
+  content_path: string | null;
+  article_content: string | null;
+  revision_notes: string | null;
+  is_hidden: number;
+  is_deleted: number;
 }
 
 export function generateId(): string {
@@ -45,8 +51,6 @@ export function generateId(): string {
 }
 
 export function hashPassword(password: string): string {
-  // Simple hash for Cloudflare Workers environment
-  // In production, use Web Crypto API with a proper algorithm
   const encoder = new TextEncoder();
   const data = encoder.encode(password + 'submoa_salt_2026');
   let hash = 0;
@@ -74,7 +78,7 @@ export async function getSessionUser(request: Request, env: Env): Promise<User |
   if (!token) return null;
 
   const sessions = await env.submoacontent_db
-    .prepare('SELECT s.*, u.id as uid, u.email, u.name, u.password_hash, u.created_at, u.updated_at FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = ? AND s.expires_at > ?')
+    .prepare('SELECT s.*, u.id as uid, u.email, u.name, u.password_hash, u.role, u.created_at, u.updated_at FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = ? AND s.expires_at > ?')
     .bind(token, Date.now())
     .all();
 
@@ -86,6 +90,7 @@ export async function getSessionUser(request: Request, env: Env): Promise<User |
     email: row.email,
     name: row.name,
     password_hash: row.password_hash,
+    role: row.role || 'user',
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

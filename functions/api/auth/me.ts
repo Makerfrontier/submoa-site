@@ -21,5 +21,5 @@ export async function onRequest(context: { request: Request; env: Env }) {
     return json({ error: 'Not authenticated' }, 401);
   }
 
-  return json({ user: { id: user.id, email: user.email, name: user.name } });
+  return json({ user: { id: user.id, email: user.email, name: user.name, role: user.role } });
 }

@@ -175,7 +175,7 @@ export async function sendEmail(env, { to, subject, html }) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: `SubMoa Content <onboarding@resend.dev>`,
+      from: `SubMoa Content <content@submoacontent.com>`,
       to,
       subject,
       html,

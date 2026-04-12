@@ -47,7 +47,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
 
     return new Response(JSON.stringify({
       ok: true,
-      user: { id: user.id, email: user.email, name: user.name }
+      user: { id: user.id, email: user.email, name: user.name, role: user.role || 'user' }
     }), { headers });
   } catch (err: any) {
     return json({ error: err.message || 'Server error' }, 500);

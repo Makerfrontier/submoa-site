@@ -95,7 +95,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
       console.error('Failed to send registration email:', emailErr.message)
     }
 
-    return new Response(JSON.stringify({ ok: true, user: { id: userId, email: email.toLowerCase(), name } }), {
+    return new Response(JSON.stringify({ ok: true, user: { id: userId, email: email.toLowerCase(), name, role: 'user' } }), {
       status: 201,
       headers,
     });
