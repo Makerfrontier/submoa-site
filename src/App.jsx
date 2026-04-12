@@ -1,4 +1,5 @@
 import { useState, useEffect, createContext, useContext } from 'react'
+import { marked } from 'marked'
 import './index.css'
 
 const AuthContext = createContext(null)
@@ -604,11 +605,11 @@ function Dashboard({ navigate }) {
     URL.revokeObjectURL(url)
   }
 
-  const handleViewArticle = (sub) => setViewArticle(sub)
+  const handleViewArticle = (sub) => navigate('/content/' + sub.id)
 
   const handleRequestEdits = () => {
     if (!viewArticle) return
-    setRevisionNotes(sub.revision_notes || '')
+    setRevisionNotes(viewArticle.revision_notes || '')
     setShowRevisionModal(true)
   }
 
@@ -687,7 +688,7 @@ function Dashboard({ navigate }) {
                     <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>·</span>
                     <button onClick={() => handleHide(sub)} disabled={actionLoading === sub.id} style={{ background: 'none', border: 'none', color: sub.is_hidden ? '#6b7280' : '#9ca3af', cursor: 'pointer', fontSize: '0.75rem', padding: '0', textDecoration: 'underline' }}>{sub.is_hidden ? 'Unhide' : 'Hide'}</button>
                     <button onClick={() => handleDelete(sub)} disabled={actionLoading === sub.id} style={{ background: 'none', border: 'none', color: '#b05050', cursor: 'pointer', fontSize: '0.75rem', padding: '0', textDecoration: 'underline' }}>Delete</button>
-                    {sub.status === 'done' && (
+                    {(sub.status === 'done' || sub.status === 'article_done' || sub.status === 'in_review') && (
                       <>
                         <button onClick={() => handleDownload(sub)} className="btn-primary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem' }}>Download</button>
                         {sub.seo_research && sub.seo_report_content && (
@@ -719,8 +720,8 @@ function Dashboard({ navigate }) {
                   <p style={{ color: '#78350f', marginTop: '0.25rem', whiteSpace: 'pre-wrap' }}>{viewArticle.revision_notes}</p>
                 </div>
               )}
-              <div style={{ fontSize: '1.0625rem', lineHeight: '1.85', whiteSpace: 'pre-wrap', color: '#1a1a1a' }}>{viewArticle.article_content || viewArticle.brief}</div>
-              {viewArticle.status === 'done' && (
+              <div style={{ fontSize: '1.0625rem', lineHeight: '1.85', color: '#1a1a1a' }} dangerouslySetInnerHTML={{ __html: marked.parse(viewArticle.article_content || viewArticle.brief || '') }} />
+              {(viewArticle.status === 'done' || viewArticle.status === 'article_done' || viewArticle.status === 'in_review') && (
                 <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #e5e5e5', display: 'flex', justifyContent: 'flex-end' }}>
                   <button onClick={handleRequestEdits} className="btn-secondary" style={{ padding: '0.5rem 1.25rem' }}>Request Edits</button>
                 </div>
@@ -1087,6 +1088,58 @@ function NotificationBell() {
   )
 }
 
+// ─── ContentPage (CMS View) ─────────────────────────────────────────────────
+function ContentPage({ navigate }) {
+  const { user } = useAuth()
+  const [article, setArticle] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const id = window.location.pathname.split('/content/')[1]
+    if (!id) {
+      setError('No article ID provided')
+      setLoading(false)
+      return
+    }
+    api(`/api/articles/content?id=${encodeURIComponent(id)}`)
+      .then(data => {
+        if (data.error) throw new Error(data.error)
+        setArticle(data.article)
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="page"><div className="container"><p style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading article...</p></div></div>
+  if (error) return <div className="page"><div className="container"><p style={{ padding: '2rem', textAlign: 'center', color: '#b05050' }}>{error}</p><button onClick={() => navigate('/dashboard')} className="btn-secondary">Back to Dashboard</button></div></div>
+  if (!article) return null
+
+  return (
+    <div className="page">
+      <Nav navigate={navigate} />
+      <div className="container" style={{ maxWidth: '800px', padding: '2rem 1rem' }}>
+        <button onClick={() => navigate('/dashboard')} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '0.875rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          ← Back to Dashboard
+        </button>
+        <article>
+          <header style={{ marginBottom: '2rem', borderBottom: '1px solid #e5e5e5', paddingBottom: '1.5rem' }}>
+            <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: '2.25rem', fontWeight: '700', color: '#1a1a1a', marginBottom: '0.75rem', lineHeight: '1.2' }}>{article.topic}</h1>
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', color: '#6b7280', fontSize: '0.9375rem' }}>
+              <span>By {article.author}</span>
+              <span>·</span>
+              <span>{new Date(article.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+              {article.status && <><span>·</span><span className={`card-status status-${article.status}`}>{article.status}</span></>}
+            </div>
+          </header>
+          <div style={{ fontSize: '1.0625rem', lineHeight: '1.85', color: '#1a1a1a' }} dangerouslySetInnerHTML={{ __html: marked.parse(article.article_content || article.brief || '') }} />
+        </article>
+      </div>
+      <Footer />
+    </div>
+  )
+}
+
 // ─── Reset ─────────────────────────────────────────────────────────────────
 function Reset({ navigate }) {
   const [email, setEmail] = useState('')
@@ -1182,6 +1235,7 @@ export default function App() {
         {page === '/dashboard' && (user ? <Dashboard navigate={navigate} /> : <Login navigate={navigate} />)}
         {page === '/account' && (user ? <Account navigate={navigate} /> : <Login navigate={navigate} />)}
         {page === '/writer' && (user ? <Writer navigate={navigate} /> : <Login navigate={navigate} />)}
+        {page.startsWith('/content/') && <ContentPage navigate={navigate} />}
         {page === '/reset' && <Reset navigate={navigate} />}
         {page === '/' && <Landing navigate={navigate} />}
       </div>
