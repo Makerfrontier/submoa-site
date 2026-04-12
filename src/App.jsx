@@ -822,9 +822,37 @@ function Writer({ navigate }) {
 
   useEffect(() => { loadSubs() }, [])
 
-  const handleEdit = (sub) => {
-    setEditing({ id: sub.id, article_content: sub.article_content || '', status: sub.status, topic: sub.topic, revision_notes: sub.revision_notes || '' })
+  const handleEdit = async (sub) => {
+    setEditing({ id: sub.id, article_content: sub.article_content || '', status: sub.status, topic: sub.topic, revision_notes: sub.revision_notes || '', target_keywords: sub.target_keywords || '', seo_research: sub.seo_research, seoContextBlock: null, deepReport: null, researchLoading: false })
     setSaveMsg('')
+    // Fetch SEO research if this submission has keywords or seo_research flag
+    if (sub.target_keywords || sub.seo_research) {
+      setEditing(prev => ({ ...prev, researchLoading: true }))
+      try {
+        const res = await fetch('/api/seo/research', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            topic: sub.topic,
+            target_keywords: sub.target_keywords || '',
+            seo_research: sub.seo_research,
+            article_format: sub.article_format
+          })
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setEditing(prev => ({
+            ...prev,
+            seoContextBlock: data.seoContextBlock,
+            deepReport: data.deepReport,
+            researchLoading: false
+          }))
+        }
+      } catch (e) {
+        console.warn('SEO research fetch failed:', e)
+        setEditing(prev => ({ ...prev, researchLoading: false }))
+      }
+    }
   }
 
   const handleSave = async () => {
@@ -832,9 +860,16 @@ function Writer({ navigate }) {
     setSaveLoading(true)
     setSaveMsg('')
     try {
-      const body = { article_content: editing.article_content }
-      // If it doesn't have content yet, mark as done on first save
       const sub = submissions.find(s => s.id === editing.id)
+      let content = editing.article_content
+
+      // Append deep research report if seo_research is set and report is available
+      if (editing.seo_research && editing.deepReport) {
+        content = content.trim() + '\n' + editing.deepReport
+      }
+
+      const body = { article_content: content }
+      // If it doesn't have content yet, mark as done on first save
       if (sub && (!sub.article_content || sub.status === 'draft' || sub.status === 'notified')) {
         body.status = 'done'
       }
@@ -867,6 +902,18 @@ function Writer({ navigate }) {
             )}
             <p style={{ fontSize: '0.8125rem', color: '#6b7280' }}>{wordCount} words</p>
           </div>
+          {editing.researchLoading && (
+            <div style={{ background: '#f0f9ff', border: '1px solid #0ea5e9', borderRadius: '6px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.875rem', color: '#0369a1' }}>
+              Running SEO research via DataforSEO...
+            </div>
+          )}
+          {editing.seoContextBlock && !editing.article_content && (
+            <div style={{ background: '#fefce8', border: '1px solid #facc15', borderRadius: '6px', padding: '1rem', marginBottom: '1rem', fontSize: '0.875rem', fontFamily: 'Georgia, serif', whiteSpace: 'pre-wrap' }}>
+              <strong style={{ color: '#92400e' }}>SEO Context Block</strong> — paste this at the top of the article or use it as a reference while writing:
+              <hr style={{ margin: '0.75rem 0', borderColor: '#facc15' }} />
+              {editing.seoContextBlock}
+            </div>
+          )}
           <textarea
             value={editing.article_content}
             onChange={e => setEditing(prev => ({ ...prev, article_content: e.target.value }))}
