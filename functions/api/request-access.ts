@@ -1,5 +1,8 @@
 import { json, generateId, Env } from './_utils';
+import { invitationEmail, sendEmail } from './_email-templates';
 
+// POST /api/request-access
+// User submits name + email → system generates a single-use invite link and emails it
 export async function onRequest(context: { request: Request; env: Env }) {
   if (context.request.method === 'OPTIONS') {
     return new Response(null, {
@@ -22,45 +25,69 @@ export async function onRequest(context: { request: Request; env: Env }) {
       return json({ error: 'Name and email are required' }, 400);
     }
 
-    // Store the access request in D1
-    const id = generateId();
-    const now = Date.now();
+    const normalizedEmail = email.toLowerCase();
+    const now = Math.floor(Date.now() / 1000);
 
-    try {
-      await context.env.submoacontent_db
-        .prepare('INSERT INTO access_requests (id, name, email, status, created_at) VALUES (?, ?, ?, ?, ?)')
-        .bind(id, name, email.toLowerCase(), 'pending', now)
-        .run();
-    } catch (_) {
-      // Table might not exist yet — non-fatal
+    // Check if user already exists
+    const existing = await context.env.submoacontent_db
+      .prepare('SELECT id FROM users WHERE email = ?')
+      .bind(normalizedEmail)
+      .first();
+
+    if (existing) {
+      return json({ error: 'An account with this email already exists. Try logging in instead.' }, 409);
     }
 
-    // Notify Ben via Discord
-    try {
-      const discordPayload = {
-        embeds: [{
-          title: `Access Request`,
-          color: 0xb8922e,
-          fields: [
-            { name: 'Name', value: name, inline: true },
-            { name: 'Email', value: email, inline: true },
-          ],
-          description: `Someone is requesting access to SubMoa Content. Generate an invite link and send it to them.`,
-          footer: { text: 'SubMoa Content — Access Request' },
-          timestamp: new Date().toISOString(),
-        }],
-      };
+    // Check for existing pending invite for this email
+    const existingInvite = await context.env.submoacontent_db
+      .prepare('SELECT id FROM invites WHERE email = ? AND status = ? AND expires_at > ?')
+      .bind(normalizedEmail, 'pending', now)
+      .first();
 
-      await fetch(context.env.DISCORD_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(discordPayload),
-      });
-    } catch (_) {
-      // Discord notification is non-blocking
+    if (existingInvite) {
+      return json({ error: 'An invite has already been sent to this email. Check your inbox or try again later.' }, 429);
     }
 
-    return json({ ok: true }, 201);
+    // Generate single-use invite token (256-bit)
+    const tokenBytes = new Uint8Array(32);
+    crypto.getRandomValues(tokenBytes);
+    const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    // Invite expires in 48 hours
+    const expiresAt = now + 48 * 60 * 60;
+
+    // Store invite
+    const inviteId = generateId();
+    await context.env.submoacontent_db
+      .prepare(`INSERT INTO invites (id, email, name, token, max_uses, used_count, expires_at, created_at)
+        VALUES (?, ?, ?, ?, 1, 0, ?, ?)`)
+      .bind(inviteId, normalizedEmail, name, token, expiresAt, now)
+      .run();
+
+    // Build invite URL
+    const origin = new URL(context.request.url).origin;
+    const inviteUrl = `${origin}/register?invite=${token}&email=${encodeURIComponent(normalizedEmail)}`;
+
+    // Send invite email
+    const { subject, html } = invitationEmail({
+      name,
+      inviteUrl,
+      expiresIn: '48 hours',
+      loginUrl: `${origin}/login`,
+    });
+
+    try {
+      await sendEmail(context.env, { to: normalizedEmail, subject, html });
+    } catch (emailErr) {
+      console.error('Failed to send invite email:', emailErr.message);
+      return json({ error: 'Failed to send invite email. Try again or contact support.' }, 500);
+    }
+
+    return json({
+      ok: true,
+      message: `Invite sent to ${normalizedEmail}. Check your inbox.`
+    }, 201);
+
   } catch (err: any) {
     return json({ error: err.message || 'Server error' }, 500);
   }

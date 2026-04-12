@@ -102,14 +102,27 @@ export function registrationEmail({ name, email, loginUrl }) {
   const body = `
     ${h1(`Welcome, ${name || 'Hunter'}.`)}
     ${p(`Your access is confirmed. You're in position to start submitting article briefs and receiving content crafted for the hunting and shooting community.`)}
-    ${p(`Your submitter account is active. Here's your reference:`)}
-    ${metaRow('Email', email)}
     ${p(`If you ever lose access, use the password reset flow — we'll get you back in.`)}
     ${cta('Submit Your First Brief', loginUrl || `${BRAND.url}/author`)}
   `
   return {
     subject: `You're in — welcome to SubMoa Content`,
     html: baseTemplate({ title: `Welcome to SubMoa Content`, bodyContent: body }),
+  }
+}
+
+// ─── Invite email ─────────────────────────────────────────────────────
+export function invitationEmail({ name, inviteUrl, expiresIn }) {
+  const body = `
+    ${h1(`${name || 'Hunter'}, you've been invited to SubMoa Content.`)}
+    ${p(`You've been given access to request precision content — written by field experts, structured for your audience, and optimized for performance.`)}
+    ${p(`Your invite is valid for <strong>${expiresIn || '48 hours'}</strong>. Use the link below to create your account.`)}
+    ${cta('Accept Your Invite', inviteUrl)}
+    ${p(`If you didn't expect this invitation, you can safely ignore it.`)}
+  `
+  return {
+    subject: `You're invited — SubMoa Content`,
+    html: baseTemplate({ title: `You're invited`, bodyContent: body }),
   }
 }
 

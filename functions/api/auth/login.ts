@@ -32,8 +32,12 @@ export async function onRequest(context: { request: Request; env: Env }) {
     }
 
     // Create session
+    const role = user.role || 'user'
+    const isAdmin = role === 'admin'
+    // Admin sessions expire in 48h, regular users in 7 days
+    const expiresAt = Date.now() + (isAdmin ? 48 : 168) * 60 * 60 * 1000;
+
     const sessionId = generateId();
-    const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
 
     await context.env.submoacontent_db
       .prepare('INSERT INTO sessions (id, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
@@ -47,7 +51,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
 
     return new Response(JSON.stringify({
       ok: true,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role || 'user' }
+      user: { id: user.id, email: user.email, name: user.name, role }
     }), { headers });
   } catch (err: any) {
     return json({ error: err.message || 'Server error' }, 500);
