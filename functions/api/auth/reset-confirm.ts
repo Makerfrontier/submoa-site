@@ -1,14 +1,5 @@
 import { json, Env, hashPassword } from '../_utils'
 
-function generateId() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
-  for (let i = 0; i < 32; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  return result
-}
-
 export async function onRequest(context: { request: Request; env: Env }) {
   const { token, password } = await context.request.json()
 
@@ -32,7 +23,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
     return json({ error: 'Reset token is invalid or expired' }, 400)
   }
 
-  const passwordHash = hashPassword(password)
+  const passwordHash = await hashPassword(password)
 
   await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
     .bind(passwordHash, now, reset.user_id).run()
@@ -40,17 +31,4 @@ export async function onRequest(context: { request: Request; env: Env }) {
   await db.prepare('DELETE FROM password_resets WHERE token = ?').bind(token).run()
 
   return json({ ok: true })
-}
-
-function hashPassword(password: string): string {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(password + 'submoa_salt_2026')
-  let hash = 0
-  const str = password
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash
-  }
-  return Math.abs(hash).toString(16)
 }

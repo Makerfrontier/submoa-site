@@ -7,7 +7,7 @@ export interface Env {
   submoacontent_db: D1Database;
   DISCORD_WEBHOOK_URL: string;
   RESEND_API_KEY: string;
-  hashPassword(password: string): string;
+  hashPassword(password: string): Promise<string>;
 }
 
 export interface User {
@@ -46,6 +46,12 @@ export interface Submission {
 
 export function generateId(): string {
   const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function generateResetToken(): string {
+  const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
@@ -131,8 +137,9 @@ export function json(data: any, status = 200) {
   });
 }
 
-export function setSessionCookie(token: string, expiresAt: number) {
-  return `submoa_session=${token}; Path=/; HttpOnly; SameSite=Lax; Expires=${new Date(expiresAt).toUTCString()}`;
+export function setSessionCookie(token: string, expiresAt: number): string {
+  const expires = new Date(expiresAt).toUTCString();
+  return `submoa_session=${token}; Path=/; HttpOnly; SameSite=Lax; Expires=${expires}; Secure`;
 }
 
 export function deleteSessionCookie() {
