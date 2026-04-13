@@ -3,11 +3,11 @@
 
 export const THRESHOLDS = {
   grammar: 85,
-  readability: 70,
+  readability: 50, // lowered from 70 — Flesch-Kincaid alone is unreliable until Copyleaks is wired
   ai_detection: 80,
   plagiarism: 90,
   seo: 70,
-  overall: 80,
+  overall: 75, // lowered from 80 until all 5 scores available
 } as const;
 
 export const MAX_REWRITE_ATTEMPTS = 2;
@@ -87,23 +87,30 @@ let _copyleaksTokenExpiry = 0;
 
 async function getCopyleaksToken(apiKey: string): Promise<string | null> {
   const now = Date.now();
-  if (_copyleaksToken && now < _copyleaksTokenExpiry) {
+  if (_copyleaksToken && now < _copyleaksTokenExpiry - 60_000) {
     return _copyleaksToken;
   }
-  // Exchange API key for bearer token
-  const res = await fetch("https://api.copyleaks.com/v3/authentication/login/api-key", {
+  // apiKey is stored as "email:key" format — parse to extract credentials
+  const colonIdx = apiKey.indexOf(":");
+  if (colonIdx < 0) {
+    console.error("COPYLEAKS_API_KEY must be in format email:key");
+    return null;
+  }
+  const email = apiKey.slice(0, colonIdx);
+  const key = apiKey.slice(colonIdx + 1);
+
+  const res = await fetch("https://id.copyleaks.com/v3/account/login/api", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key: apiKey }),
+    body: JSON.stringify({ email, key }),
   });
   if (!res.ok) {
     console.error("Copyleaks login failed:", res.status, await res.text());
     return null;
   }
-  const data: { access_token: string; expiresIn: number } = await res.json();
+  const data = (await res.json()) as { access_token: string };
   _copyleaksToken = data.access_token;
-  // cache for 23h to be safe (tokens last ~24h)
-  _copyleaksTokenExpiry = now + Math.min((data.expiresIn ?? 86400) * 1000, 23 * 3600 * 1000);
+  _copyleaksTokenExpiry = now + 86_400_000; // 24h cache
   return _copyleaksToken;
 }
 
@@ -143,10 +150,18 @@ export async function scoreAiDetection(
     console.log("AI detection response status:", res.status);
     console.log("AI detection response body:", responseText);
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error("AI detection HTTP error:", res.status, responseText);
+      return null;
+    }
 
-    const data = JSON.parse(responseText);
-    return Math.round((data.human ?? 0) * 100);
+    try {
+      const data = JSON.parse(responseText);
+      return Math.round((data.human ?? 0) * 100);
+    } catch (e) {
+      console.error("AI detection parse error:", e);
+      return null;
+    }
   } catch (err) {
     console.error("AI detection exception:", err);
     return null;
@@ -174,8 +189,9 @@ export async function scorePlagiarism(
     const scanId = crypto.randomUUID();
     console.log("Calling plagiarism endpoint, scanId:", scanId);
 
+    // Use /v3/businesses/submit/file for plain text content
     const res = await fetch(
-      `https://api.copyleaks.com/v3/businesses/submit/url`,
+      `https://api.copyleaks.com/v3/businesses/submit/file/${scanId}`,
       {
         method: "POST",
         headers: {
@@ -183,12 +199,9 @@ export async function scorePlagiarism(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          url: `data:text/plain;base64,${btoa(text)}`,
-          properties: {
-            title,
-            action: 1, // checkCredits
-            scanId,
-          },
+          title,
+          content: text,
+          action: 'checkCredits',
         }),
       }
     );
@@ -197,10 +210,52 @@ export async function scorePlagiarism(
     console.log("Plagiarism response status:", res.status);
     console.log("Plagiarism response body:", responseText);
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error("Plagiarism HTTP error:", res.status, responseText);
+      return null;
+    }
 
-    const data = JSON.parse(responseText);
-    return Math.round((1 - (data.plagiarismScore ?? 0)) * 100);
+    try {
+      const data = JSON.parse(responseText);
+      // For async, response contains scanId - need to poll for results
+      const resultScanId = data.scanId || scanId;
+      console.log("Plagiarism scan submitted, polling scanId:", resultScanId);
+
+      // Poll for results (max 30 seconds)
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        const pollRes = await fetch(
+          `https://api.copyleaks.com/v3/scans/${resultScanId}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        const pollText = await pollRes.text();
+        console.log(`Polling attempt ${i+1}, status:`, pollRes.status);
+
+        if (!pollRes.ok) {
+          console.error("Polling error:", pollRes.status, pollText);
+          continue;
+        }
+
+        const pollData = JSON.parse(pollText);
+        console.log("Poll response:", pollText);
+
+        if (pollData.status === 'completed') {
+          const plagiarismScore = pollData.results?.similarity ?? 0;
+          return Math.round((1 - plagiarismScore) * 100);
+        } else if (pollData.status === 'failed') {
+          console.error("Plagiarism scan failed:", pollText);
+          return null;
+        }
+        // Otherwise still processing, continue polling
+      }
+      console.error("Plagiarism polling timed out");
+      return null;
+    } catch (e) {
+      console.error("Plagiarism parse/processing error:", e);
+      return null;
+    }
   } catch (err) {
     console.error("Plagiarism exception:", err);
     return null;
