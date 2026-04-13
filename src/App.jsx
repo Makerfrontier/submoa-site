@@ -224,6 +224,7 @@ function Nav({ navigate, syncUser }) {
             )}
             {!loading && user && (
               <>
+                <a href="#" className={isActive('/') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/') }}>Home</a>
                 <a href="#" className={isActive('/author') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/author') }}>Submit brief</a>
                 <a href="#" className={isActive('/dashboard') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/dashboard') }}>Dashboard</a>
                 <a href="#" className={isActive('/account') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/account') }}>Account</a>
@@ -255,6 +256,7 @@ function Nav({ navigate, syncUser }) {
               )}
               {!loading && user && (
                 <>
+                  <a href="#" className={`nav-link${isActive('/')}`} onClick={e => { e.preventDefault(); navigate('/') }}>Home</a>
                   <a href="#" className={`nav-link${isActive('/author')}`} onClick={e => { e.preventDefault(); navigate('/author') }}>Submit brief</a>
                   <a href="#" className={`nav-link${isActive('/dashboard')}`} onClick={e => { e.preventDefault(); navigate('/dashboard') }}>Dashboard</a>
                   <a href="#" className={`nav-link${isActive('/account')}`} onClick={e => { e.preventDefault(); navigate('/account') }}>Account</a>
@@ -1169,6 +1171,20 @@ function Account({ navigate, syncUser }) {
           )}
         </div>
         )}
+
+        {/* Sign out */}
+        <div style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '1px solid var(--hunter-border)' }}>
+          <button
+            onClick={async () => {
+              await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+              if (syncUser) syncUser(null);
+              navigate('/');
+            }}
+            style={{ background: 'none', border: '0.5px solid #5a3a2a', color: '#a06050', padding: '7px 16px', borderRadius: '5px', fontSize: '12px', cursor: 'pointer', fontFamily: 'sans-serif' }}
+          >
+            Sign out
+          </button>
+        </div>
       </div></div></div>
   )
 }

@@ -1,4 +1,5 @@
 import { json, getSessionUser } from '../../_utils';
+import { generateDocx } from '../../../../src/docx_generator';
 
 export async function onRequest(context) {
   if (context.request.method !== 'GET') {
@@ -45,24 +46,35 @@ export async function onRequest(context) {
     zip.file('article.html', sub.article_content);
   }
 
-  // article.md — raw markdown if stored separately (fallback to content if not)
-  if (sub.article_content) {
-    // Strip HTML tags for a rough markdown version
-    const md = sub.article_content
-      .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n\n')
-      .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n\n')
-      .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n')
-      .replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<[^>]+>/g, '')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-    zip.file('article.md', md);
+  // Construct grade object from flat sub fields for generateDocx
+  const grade = sub.grammar_score !== null ? {
+    grammar_score: sub.grammar_score,
+    readability_score: sub.readability_score,
+    ai_detection_score: sub.ai_detection_score,
+    plagiarism_score: sub.plagiarism_score,
+    seo_score: sub.seo_score,
+    overall_score: sub.overall_score,
+  } : null;
+
+  // Generate DOCX
+  let docxBuffer = null;
+  try {
+    docxBuffer = await generateDocx(
+      sub.article_content,
+      sub.topic,
+      sub.author_display_name ?? sub.author,
+      sub.word_count ?? 0,
+      grade,
+      sub.article_format ?? 'Article',
+      sub.created_at,
+    );
+  } catch (err) {
+    console.error('DOCX generation failed:', err);
+    // Continue without DOCX — zip will still have HTML and meta
+  }
+
+  if (docxBuffer) {
+    zip.file('article.docx', docxBuffer);
   }
 
   // meta.json — metadata
@@ -109,7 +121,7 @@ export async function onRequest(context) {
   }
 
   const zipBuffer = await zip.generateAsync({
-    type: 'nodebuffer',
+    type: 'arraybuffer',
     compression: 'DEFLATE',
     compressionOptions: { level: 6 },
   });
@@ -118,7 +130,7 @@ export async function onRequest(context) {
     headers: {
       'Content-Type': 'application/zip',
       'Content-Disposition': `attachment; filename="${slug}.zip"`,
-      'Content-Length': String(zipBuffer.length),
+      'Content-Length': String(zipBuffer.byteLength),
     },
   });
 }
