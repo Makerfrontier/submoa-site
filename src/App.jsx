@@ -1,6 +1,61 @@
-import { useState, useEffect, createContext, useContext } from 'react'
+import { useState, useEffect, createContext, useContext, useRef } from 'react'
 import { marked } from 'marked'
+
+// Strip the first H1/H2 from article markdown (page title already shows it above the divider)
+function stripFirstHeading(text) {
+  return text.replace(/^#{1,2}\s+[^\n]+\n?/, '')
+}
+
+// Extract YouTube video ID from various URL formats
+function extractYouTubeVideoId(url) {
+  if (!url) return null
+  if (/^[a-zA-Z0-9_-]{11}$/.test(url)) return url
+  try {
+    const parsed = new URL(url)
+    if (parsed.hostname.includes('youtube.com')) return parsed.searchParams.get('v')
+    if (parsed.hostname === 'youtu.be') return parsed.pathname.slice(1)
+    if (parsed.pathname.startsWith('/embed/')) return parsed.pathname.split('/embed/')[1]?.split('?')[0]
+    if (parsed.pathname.startsWith('/v/')) return parsed.pathname.split('/v/')[1]?.split('?')[0]
+  } catch {}
+  return null
+}
+
+function formatTime(seconds) {
+  if (!seconds || isNaN(seconds)) return '0:00'
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+// Override H1 in markdown body to render as H2 (page title is the real H1)
+const renderer = new marked.Renderer()
+let firstHeadingSkipped = false
+renderer.heading = function(token) {
+  if (!firstHeadingSkipped && (token.depth === 1 || token.depth === 2)) {
+    firstHeadingSkipped = true
+    return ''
+  }
+  const level = token.depth === 1 ? 2 : token.depth
+  const text = token.text
+  return `<h${level} class="article-h${level}">${text}</h${level}>`
+}
+// Rewrite image src: articles/* paths and relative paths → /api/images/serve?path=...
+renderer.image = function(token) {
+  const src = token.href
+  const alt = token.text || ''
+  const title = token.title || ''
+  let finalSrc = src
+  if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('//') && !src.startsWith('/')) {
+    finalSrc = `/api/images/serve?path=${src}`
+  } else if (src && src.startsWith('articles/')) {
+    finalSrc = `/api/images/serve?path=${src}`
+  }
+  const titleAttr = title ? ` title="${title}"` : ''
+  return `<img src="${finalSrc}" alt="${alt}"${titleAttr} loading="lazy" />`
+}
+marked.setOptions({ renderer })
 import './index.css'
+import './App.css'
 
 const AuthContext = createContext(null)
 function useAuth() { return useContext(AuthContext) }
@@ -645,10 +700,15 @@ const WORD_COUNTS = [
 function Author({ navigate, syncUser, editingDraft, onEditDone }) {
   const { user } = useAuth()
   const [authors, setAuthors] = useState([])
-  const [form, setForm] = useState({ author: '', topic: '', productLink: '', humanObservation: '', anecdotalStories: '', includeFaq: false, productImages: [], minWordCount: '', targetKeywords: '', articleFormat: 'blog-general', optimizationTarget: 'seo-search', tone_stance: 'neutral', vocalTone: '' })
+  const [form, setForm] = useState({ author: '', topic: '', productLink: '', productDetailsManual: '', humanObservation: '', anecdotalStories: '', includeFaq: false, generateAudio: false, productImages: [], minWordCount: '', targetKeywords: '', articleFormat: 'blog-general', optimizationTarget: 'seo-search', tone_stance: 'neutral', vocalTone: '', youtube_url: '', use_youtube: false })
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // Post-submission image upload state
+  const [submissionId, setSubmissionId] = useState(null)
+  const [uploadedImages, setUploadedImages] = useState([])
+  const [uploadingImages, setUploadingImages] = useState(false)
+  const [uploadError, setUploadError] = useState('')
 
   useEffect(() => {
     api('/api/authors')
@@ -661,9 +721,11 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
               author: editingDraft.author || data.authors[0].slug,
               topic: editingDraft.topic || '',
               productLink: editingDraft.product_link || '',
+              productDetailsManual: editingDraft.product_details_manual || '',
               humanObservation: editingDraft.human_observation || '',
               anecdotalStories: editingDraft.anecdotal_stories || '',
               includeFaq: !!editingDraft.include_faq,
+              generateAudio: !!editingDraft.generate_audio,
               productImages: [],
               minWordCount: editingDraft.min_word_count || '',
               targetKeywords: editingDraft.target_keywords || '',
@@ -671,7 +733,9 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
               optimizationTarget: editingDraft.optimization_target || 'seo-search',
               tone_stance: editingDraft.tone_stance || 'neutral',
               vocalTone: editingDraft.vocal_tone || '',
-              email: editingDraft.email || user?.email || ''
+              email: editingDraft.email || user?.email || '',
+              youtube_url: editingDraft.youtube_url || '',
+              use_youtube: !!editingDraft.use_youtube,
             })
           } else {
             setForm(f => ({ ...f, author: data.authors[0].slug }))
@@ -717,7 +781,7 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
     }
     setLoading(true)
     try {
-      await api('/api/submissions', {
+      const result = await api('/api/submissions', {
         method: 'POST',
         body: JSON.stringify({
           topic: form.topic,
@@ -728,17 +792,22 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
           vocal_tone: form.vocalTone,
           min_word_count: form.minWordCount,
           product_link: form.productLink,
+          product_details_manual: form.productDetailsManual || null,
           target_keywords: form.targetKeywords,
           human_observation: form.humanObservation,
           anecdotal_stories: form.anecdotalStories,
           include_faq: form.includeFaq ? 1 : 0,
+          generate_audio: form.generateAudio ? 1 : 0,
           has_images: form.productImages.length > 0 ? 1 : 0,
           email: form.email,
+          youtube_url: form.youtube_url,
+          use_youtube: form.use_youtube ? 1 : 0,
           status: saveType,
         }),
       })
       if (editingDraft) onEditDone()
       setSubmitted(true)
+      if (result.submission?.id) setSubmissionId(result.submission.id)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -746,8 +815,40 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
     }
   }
 
+  const handlePostSubmitImageUpload = async (e) => {
+    const files = Array.from(e.target.files)
+    if (!files.length || !submissionId) return
+    setUploadingImages(true)
+    setUploadError('')
+    try {
+      const newUrls = []
+      for (const file of files) {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('submission_id', submissionId)
+        const res = await fetch('/api/images/upload', { method: 'POST', credentials: 'include', body: fd })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Upload failed')
+        newUrls.push(data.url)
+      }
+      const allUrls = [...uploadedImages, ...newUrls]
+      setUploadedImages(allUrls)
+      // Store back in submission record
+      await api(`/api/submissions/${submissionId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ article_images: JSON.stringify(allUrls) }),
+      })
+    } catch (err) {
+      setUploadError(err.message)
+    } finally {
+      setUploadingImages(false)
+    }
+  }
+
   if (submitted) return (
-    <div className="page"><div className="container"><div className="form-card"><div className="confirm-icon">✓</div><h1 className="confirm-title">Brief received.</h1><p className="confirm-sub">We'll have your content ready same-day. You'll receive a notification when it's available in your dashboard.</p><div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}><button className="btn-primary" onClick={() => { if (editingDraft) onEditDone(); setSubmitted(false); setForm({ author: authors.length > 0 ? authors[0].slug : '', topic: '', productLink: '', humanObservation: '', anecdotalStories: '', includeFaq: false, productImages: [], minWordCount: '', targetKeywords: '', articleFormat: 'blog-general', optimizationTarget: 'seo-search', tone_stance: 'neutral', vocalTone: '', email: user?.email || '' }) }}>Submit Another</button><button className="btn-secondary" onClick={() => navigate('/dashboard')}>View Dashboard</button></div></div></div></div>
+    <div className="page"><div className="container"><div className="form-card"><div className="confirm-icon">✓</div><h1 className="confirm-title">Brief received.</h1><p className="confirm-sub">We'll have your content ready same-day. You'll receive a notification when it's available in your dashboard.</p>
+
+    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '1.5rem' }}><button className="btn-primary" onClick={() => { if (editingDraft) onEditDone(); setSubmitted(false); setForm({ author: authors.length > 0 ? authors[0].slug : '', topic: '', productLink: '', productDetailsManual: '', humanObservation: '', anecdotalStories: '', includeFaq: false, generateAudio: false, productImages: [], minWordCount: '', targetKeywords: '', articleFormat: 'blog-general', optimizationTarget: 'seo-search', tone_stance: 'neutral', vocalTone: '', email: user?.email || '', youtube_url: '', use_youtube: false }); setSubmissionId(null); setUploadedImages([]); }}>Submit Another</button><button className="btn-secondary" onClick={() => navigate('/dashboard')}>View Dashboard</button></div></div></div></div>
   )
 
   return (
@@ -763,6 +864,20 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
           <div className="form-group"><label className="form-label">Vocal Tone (Optional) (writing style and rhythm)</label><select name="vocalTone" className="form-input" value={form.vocalTone} onChange={handleChange}><option value="">Select a tone...</option>{VOCAL_TONES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}</select></div>
           <div className="form-group"><label className="form-label">Min Word Count</label><select name="minWordCount" className="form-input" value={form.minWordCount} onChange={handleChange}><option value="">Select word count...</option>{WORD_COUNTS.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></div>
           <div className="form-group"><label className="form-label">Product Link (Optional)</label><input type="url" name="productLink" className="form-input" placeholder="https://..." value={form.productLink} onChange={handleChange} /></div>
+          {form.productLink && (
+            <div className="form-group">
+              <label className="form-label">Product Details (Optional)</label>
+              <textarea
+                name="productDetailsManual"
+                className="form-input"
+                rows="4"
+                placeholder="Paste product name, specs, price, features, availability..."
+                value={form.productDetailsManual}
+                onChange={handleChange}
+              />
+              <p className="form-helper">If the product page is age-gated or behind a login, paste the product specs and details here manually.</p>
+            </div>
+          )}
           <div className="form-group"><label className="form-label">Target Keywords (If Known)</label><TagInput value={form.targetKeywords} onChange={v => setForm(f => ({ ...f, targetKeywords: v }))} placeholder="Type keyword, press Enter" /></div>
           
           <div className="form-group"><label className="form-label">Human Observation on the Product</label><textarea name="humanObservation" className="form-input" rows="4" placeholder="Your direct experience with the product..." value={form.humanObservation} onChange={handleChange} required /></div>
@@ -798,11 +913,40 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
             )}
           </div>
           <div className="form-group">
+            <label className="form-label">YouTube URL (Optional)</label>
+            <input
+              type="url"
+              name="youtube_url"
+              className="form-input"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={form.youtube_url}
+              onChange={handleChange}
+            />
+          </div>
+          {form.youtube_url && (
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input type="checkbox" name="use_youtube" checked={form.use_youtube} onChange={handleChange} />
+                Base article content on this video
+              </label>
+            </div>
+          )}
+          <div className="form-group">
             <label className="checkbox-label">
               <input type="checkbox" name="includeFaq" checked={form.includeFaq} onChange={handleChange} />
               Include FAQ Section
             </label>
             <p className="form-helper">Adds a 5 to 7 question FAQ section at the end of the article and generates FAQPage structured data schema.</p>
+          </div>
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+              <input type="checkbox" name="generateAudio" checked={form.generateAudio} onChange={handleChange} />
+              <span>
+                <strong>Generate audio version</strong>
+                <br />
+                <span style={{ fontWeight: 'normal', fontSize: '0.875rem', color: '#9ca3af' }}>Creates an MP3 audio reading of the article included in your download package.</span>
+              </span>
+            </label>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
             <button type="submit" className="btn-primary" style={{ flex: 1 }} disabled={loading} onClick={() => {}}>{loading ? 'Submitting...' : 'Submit Brief'}</button>
@@ -826,7 +970,54 @@ function Dashboard({ navigate, syncUser, onEditDraft }) {
   const [revisionLoading, setRevisionLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(null)
   const [userRole, setUserRole] = useState('user')
-  const [viewMode, setViewMode] = useState('user')
+  const [statusFilter, setStatusFilter] = useState('all')
+
+  const KNOWN_AUTHORS = { 'ben-ryder': 'Ben Ryder', 'andy-husek': 'Andy Husek', 'sydney': 'Sydney', 'adam-scepaniak': 'Adam Scepaniak' }
+  const getAuthorDisplayName = (sub) => {
+    return sub.author_display_name || KNOWN_AUTHORS[sub.author] || sub.author || 'Unknown'
+  }
+
+  const getPipelineStep = (sub) => {
+    const { status, grade_status } = sub
+    if (status === 'saved' || status === 'draft') return 1
+    if (status === 'generating') return 2
+    if (status === 'article_done' && grade_status !== 'passed') return 3
+    if (status === 'article_done' && grade_status === 'passed') return 4
+    if (status === 'done') return 4
+    return 0
+  }
+
+  const getGradeColor = (score) => {
+    if (score == null) return '#9ca3af'
+    if (score >= 80) return '#5ab85a'
+    if (score >= 60) return '#d4a85a'
+    return '#d45a5a'
+  }
+
+  const handlePublish = async (sub) => {
+    if (!confirm('Mark this article as published? This marks the project as complete.')) return
+    setActionLoading(sub.id)
+    try {
+      await api(`/api/submissions/${sub.id}/publish`, { method: 'PATCH' })
+      setSubmissions(prev => prev.filter(s => s.id !== sub.id))
+    } catch (e) { console.error(e); alert('Failed to publish: ' + e.message) }
+    setActionLoading(null)
+  }
+
+  const handleDeleteCard = async (sub) => {
+    if (!confirm('Delete this article request? This cannot be undone.')) return
+    setSubmissions(prev => prev.filter(s => s.id !== sub.id))
+  }
+
+  const handleDiscardDraft = async (sub) => {
+    if (!confirm('Discard this draft? This cannot be undone.')) return
+    setActionLoading(sub.id)
+    try {
+      await api(`/api/submissions/${sub.id}`, { method: 'DELETE' })
+      setSubmissions(prev => prev.filter(s => s.id !== sub.id))
+    } catch (e) { console.error(e) }
+    setActionLoading(null)
+  }
 
   const loadSubmissions = () => {
     api('/api/submissions')
@@ -909,53 +1100,12 @@ function Dashboard({ navigate, syncUser, onEditDraft }) {
     setRevisionLoading(false)
   }
 
-  const handleHide = async (sub) => {
-    setActionLoading(sub.id)
-    try {
-      await api(`/api/submissions/${sub.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ is_hidden: sub.is_hidden ? 0 : 1 })
-      })
-      loadSubmissions()
-    } catch (e) { console.error(e) }
-    setActionLoading(null)
-  }
-
-  const handleDelete = async (sub) => {
-    if (!confirm('Delete this article request? This cannot be undone.')) return
-    setActionLoading(sub.id)
-    try {
-      await api(`/api/submissions/${sub.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ is_deleted: 1 })
-      })
-      loadSubmissions()
-    } catch (e) { console.error(e) }
-    setActionLoading(null)
-  }
-
-  const handleDiscardDraft = async (sub) => {
-    setActionLoading(sub.id)
-    try {
-      await api(`/api/submissions/${sub.id}`, { method: 'DELETE' })
-      loadSubmissions()
-    } catch (e) { console.error(e) }
-    setActionLoading(null)
-  }
-
   return (
     <div className="page">
       <div className="container">
         <div className="dashboard-header">
           <h1 className="dashboard-title">Your Content.</h1>
           <p className="dashboard-sub">{user ? `Signed in as ${user.name}` : 'Track and manage all your content requests.'}</p>
-          {userRole === 'admin' && (
-            <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>View:</span>
-              <button className={viewMode === 'user' ? 'btn-primary' : 'btn-secondary'} style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem' }} onClick={() => setViewMode('user')}>My Dashboard</button>
-              <button className={viewMode === 'global' ? 'btn-primary' : 'btn-secondary'} style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem', cursor: 'pointer' }} onClick={() => setViewMode('global')}>Global (admin)</button>
-            </div>
-          )}
         </div>
         {error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}
         {loading ? (
@@ -967,10 +1117,36 @@ function Dashboard({ navigate, syncUser, onEditDraft }) {
           </div>
         ) : (
           <div className="section">
+            <div className="filter-row">
+              {['all', 'queued', 'in-progress', 'done', 'failed', 'published'].map(f => (
+                <button
+                  key={f}
+                  onClick={() => setStatusFilter(f)}
+                  className={`filter-btn${statusFilter === f ? ' active' : ''}`}
+                >
+                  {f === 'in-progress' ? 'In Progress' : f.charAt(0).toUpperCase() + f.slice(1)}
+                </button>
+              ))}
+            </div>
             <div className="grid">
-              {(viewMode === 'global' ? submissions : submissions.filter(s => s.user_id === user?.id)).map(sub => (
-                <div key={sub.id} className="card">
+              {submissions.filter(s => {
+                if (s.user_id !== user?.id) return false
+                if (statusFilter === 'all') return true
+                if (statusFilter === 'queued') return s.status === 'saved' || s.status === 'draft' || s.status === 'queued'
+                if (statusFilter === 'in-progress') return s.status === 'generating' || (s.status === 'article_done' && s.grade_status !== 'passed')
+                if (statusFilter === 'done') return (s.status === 'article_done' && s.grade_status === 'passed') || s.status === 'done'
+                if (statusFilter === 'failed') return s.status === 'generation_failed'
+                if (statusFilter === 'published') return s.status === 'published'
+                return true
+              }).map(sub => (
+                <div key={sub.id} className={`card${sub.status === 'generation_failed' ? ' failed' : sub.status === 'published' ? ' published' : ''}`}>
                   <div className="card-meta">{new Date(sub.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} · {FORMAT_LABELS[sub.article_format] ?? FORMATS.find(f => f.id === sub.article_format)?.name ?? sub.article_format ?? 'Unknown'}</div>
+                  {sub.status === 'published' && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#5ab85a', background: '#0a1f0a', padding: '3px 10px', borderRadius: '10px', border: '0.5px solid #1a4a2a', marginTop: '6px' }}>
+                      <svg width="8" height="8"><circle cx="4" cy="4" r="3" fill="#5ab85a"/></svg>
+                      Published
+                    </span>
+                  )}
                   <div className="card-title">{sub.topic}</div>
                   {sub.product_link && (
                     <a href={sub.product_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', color: 'var(--gold)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
@@ -978,32 +1154,122 @@ function Dashboard({ navigate, syncUser, onEditDraft }) {
                     </a>
                   )}
                   <KeywordPills keywordsJson={sub.target_keywords} />
+                  {sub.audio_path && (
+                    <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const audio = document.getElementById(`audio-mini-${sub.id}`)
+                          if (!audio) return
+                          if (audio.paused) audio.play()
+                          else audio.pause()
+                        }}
+                        style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#92400e', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                      >
+                        <span style={{ fontSize: '0.6rem', lineHeight: 1 }}>▶</span>
+                      </button>
+                      <audio id={`audio-mini-${sub.id}`} src={`/api/images/serve?path=${sub.audio_path}`} style={{ height: '20px', width: '100%' }} />
+                    </div>
+                  )}
                   <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                    {sub.status === 'saved' ? (
-                      <>
-                        <span style={{ background: '#d97706', color: 'white', fontSize: '0.75rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '4px' }}>DRAFT</span>
-                        <button onClick={() => onEditDraft(sub)} style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem', background: '#d97706', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Edit</button>
-                        <button onClick={() => { if (window.confirm('Discard this draft? This cannot be undone.')) handleDiscardDraft(sub) }} style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem', background: 'none', color: '#b05050', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Discard</button>
-                      </>
+                    {getPipelineStep(sub) === 0 ? (
+                      <span style={{ background: '#dc2626', color: 'white', fontSize: '0.75rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '4px' }}>Failed</span>
+                    ) : sub.status === 'revision_requested' ? (
+                      <span style={{ background: '#d97706', color: 'white', fontSize: '0.75rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '4px' }}>In Revision</span>
                     ) : (
-                      <span className={`card-status status-${sub.status}`}>{sub.status}</span>
+                      <div className="pipeline">
+                        <div className="step">
+                          <div className={`step-dot ${getPipelineStep(sub) > 0 ? 'done' : getPipelineStep(sub) === 0 ? 'active' : ''}`}>
+                            {getPipelineStep(sub) > 0 && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </div>
+                          <div className={`step-label ${getPipelineStep(sub) === 0 ? 'active' : ''}`}>Brief</div>
+                        </div>
+                        <div className={`step-line ${getPipelineStep(sub) > 0 ? 'done' : ''}`}></div>
+                        <div className="step">
+                          <div className={`step-dot ${getPipelineStep(sub) > 1 ? 'done' : getPipelineStep(sub) === 1 ? 'active' : ''}`}>
+                            {getPipelineStep(sub) > 1 && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </div>
+                          <div className={`step-label ${getPipelineStep(sub) === 1 ? 'active' : ''}`}>Generating</div>
+                        </div>
+                        <div className={`step-line ${getPipelineStep(sub) > 1 ? 'done' : ''}`}></div>
+                        <div className="step">
+                          <div className={`step-dot ${getPipelineStep(sub) > 2 ? 'done' : getPipelineStep(sub) === 2 ? 'active' : ''}`}>
+                            {getPipelineStep(sub) > 2 && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </div>
+                          <div className={`step-label ${getPipelineStep(sub) === 2 ? 'active' : ''}`}>Grading</div>
+                        </div>
+                        <div className={`step-line ${getPipelineStep(sub) > 2 ? 'done' : ''}`}></div>
+                        <div className="step">
+                          <div className={`step-dot ${getPipelineStep(sub) > 3 ? 'done' : getPipelineStep(sub) === 3 ? 'active' : ''}`}>
+                            {getPipelineStep(sub) > 3 && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </div>
+                          <div className={`step-label ${getPipelineStep(sub) === 3 ? 'active' : ''}`}>Done</div>
+                        </div>
+                      </div>
                     )}
-                    <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{sub.author}</span>
-                    <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>·</span>
-                    <button onClick={() => handleHide(sub)} disabled={actionLoading === sub.id} style={{ background: 'none', border: 'none', color: sub.is_hidden ? '#6b7280' : '#9ca3af', cursor: 'pointer', fontSize: '0.75rem', padding: '0', textDecoration: 'underline' }}>{sub.is_hidden ? 'Unhide' : 'Hide'}</button>
-                    <button onClick={() => handleDelete(sub)} disabled={actionLoading === sub.id} style={{ background: 'none', border: 'none', color: '#b05050', cursor: 'pointer', fontSize: '0.75rem', padding: '0', textDecoration: 'underline' }}>Delete</button>
-                    {(sub.status === 'done' || sub.status === 'article_done' || sub.status === 'in_review') && (
-                      <>
-                        <button onClick={() => handleDownload(sub)} className="btn-primary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem' }}>Download</button>
-                        {sub.seo_research && sub.seo_report_content && (
-                          <button onClick={() => handleDownloadSeoReport(sub)} style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem', background: '#1a1a1a', color: '#faf9f7', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>SEO Report</button>
+                    {getPipelineStep(sub) === 4 && (
+                      <div className="grade-row">
+                        {[
+                          { label: 'Grammar', score: sub.grammar_score },
+                          { label: 'Readability', score: sub.readability_score },
+                          { label: 'AI Detect', score: sub.ai_detection_score },
+                          { label: 'Plagiarism', score: sub.plagiarism_score },
+                          { label: 'SEO', score: sub.seo_score },
+                        ].map(g => (
+                          <div key={g.label} className="grade-pill">
+                            <div className="grade-label">{g.label}</div>
+                            <div className="grade-num" style={{ color: sub.grade_status === 'ungraded' ? '#9ca3af' : getGradeColor(g.score) }}>
+                              {sub.grade_status === 'ungraded' ? '—' : g.score}
+                            </div>
+                          </div>
+                        ))}
+                        {sub.overall_score != null && (
+                          <div className="overall-pill">
+                            <div className="grade-label">Overall</div>
+                            <div className="overall-num" style={{ color: sub.grade_status === 'ungraded' ? '#9ca3af' : getGradeColor(sub.overall_score) }}>
+                              {sub.grade_status === 'ungraded' ? '—' : sub.overall_score}
+                            </div>
+                          </div>
                         )}
-                        <button onClick={() => handleViewArticle(sub)} className="btn-secondary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.8125rem' }}>View</button>
-                      </>
+                      </div>
+                    )}
+                    {getPipelineStep(sub) === 4 && (
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', width: '100%' }}>
+                        <button onClick={() => handleViewArticle(sub)} className="btn-gold-outline">View rendered article</button>
+                        <button onClick={() => window.open(`/api/articles?id=${sub.id}&format=zip`, '_blank')} className="btn-gold-outline">Download zip package</button>
+                        <button onClick={() => handlePublish(sub)} disabled={actionLoading === sub.id} className="btn-publish">Mark as published</button>
+                        <button onClick={() => handleDeleteCard(sub)} className="btn-danger">Delete</button>
+                      </div>
+                    )}
+                    {(sub.status === 'saved' || sub.status === 'draft') && (
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', width: '100%' }}>
+                        <button onClick={() => onEditDraft(sub)} className="btn-gold-outline">Edit</button>
+                        <button onClick={() => handleDiscardDraft(sub)} disabled={actionLoading === sub.id} className="btn-danger">Discard draft</button>
+                      </div>
+                    )}
+                    {sub.status === 'generating' && (
+                      <span style={{ fontSize: '0.75rem', color: '#6b7280', fontStyle: 'italic' }}>Generating your article...</span>
+                    )}
+                    {getPipelineStep(sub) === 3 && (
+                      <span style={{ fontSize: '0.75rem', color: '#6b7280', fontStyle: 'italic' }}>Grading in progress...</span>
+                    )}
+                    {sub.status === 'generation_failed' && (
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', width: '100%' }}>
+                        <button onClick={() => { setViewArticle(sub); setRevisionNotes(sub.revision_notes || ''); setShowRevisionModal(true) }} className="btn-gold-outline">Request revision</button>
+                        <button onClick={() => handleDeleteCard(sub)} className="btn-danger">Delete</button>
+                      </div>
                     )}
                     {sub.status === 'revision_requested' && (
-                      <span style={{ fontSize: '0.75rem', color: '#d97706', fontStyle: 'italic' }}>Revision requested</span>
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', width: '100%' }}>
+                        <button onClick={() => handleViewArticle(sub)} className="btn-gold-outline">View rendered article</button>
+                        <button onClick={() => window.open(`/api/articles?id=${sub.id}&format=zip`, '_blank')} className="btn-gold-outline">Download zip package</button>
+                      </div>
                     )}
+                  </div>
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <span style={{ fontSize: '12px', color: '#5a7a5a' }}>
+                      By <span style={{ color: '#8aaa8a' }}>{getAuthorDisplayName(sub)}</span>{sub.article_content ? ` · ${sub.article_content.split(/\s+/).filter(Boolean).length} words` : ''}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -1458,13 +1724,13 @@ function NotificationBell({ syncUser }) {
     poll()
     const interval = setInterval(poll, 30000)
     return () => { mounted = false; clearInterval(interval) }
-  }, [user, syncUser])
+  }, [user])
 
   useEffect(() => {
     const onFocus = () => { syncUser().then(data => { if (data?.notifications) { setNotifs(data.notifications.items); setCount(data.notifications.unread_count) } }) }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
-  }, [syncUser])
+  }, [])
 
   const loadNotifs = async () => {
     setLoading(true)
@@ -1553,9 +1819,20 @@ function NotificationBell({ syncUser }) {
 function ContentPage({ navigate }) {
   const { user } = useAuth()
   const [article, setArticle] = useState(null)
+  const [articleContent, setArticleContent] = useState('')
   const [authorProfiles, setAuthorProfiles] = useState([])
+  const [rating, setRating] = useState(0)
+  const [whatWorked, setWhatWorked] = useState('')
+  const [whatNeedsWork, setWhatNeedsWork] = useState('')
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
+  const [showTranscript, setShowTranscript] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const audioRef = useRef(null)
+  const [audioPlaying, setAudioPlaying] = useState(false)
+  const [audioProgress, setAudioProgress] = useState(0)
+  const [audioDuration, setAudioDuration] = useState(0)
+  const [audioSpeed, setAudioSpeed] = useState(1)
 
   useEffect(() => {
     // Fetch author profiles for display name lookup
@@ -1600,12 +1877,14 @@ function ContentPage({ navigate }) {
       .then(data => {
         if (!data) return
         if (data.error) throw new Error(data.error)
-        // Ownership check
-        if (data.user_id !== user.id && user.role !== 'admin') {
+        // Ownership check on data.article.user_id
+        if (data.article.user_id !== user.id && user.role !== 'admin') {
           navigate('/dashboard')
           return
         }
-        setArticle(data)
+        firstHeadingSkipped = false
+        setArticle(data.article)
+        setArticleContent(data.content || '')
       })
       .catch(err => {
         console.error('[/api/articles/content] fetch error:', err)
@@ -1633,19 +1912,25 @@ function ContentPage({ navigate }) {
 
   if (!article) return null
 
+  // Known author fallback map
+  const KNOWN_AUTHORS = { 'ben-ryder': 'Ben Ryder', 'andy-husek': 'Andy Husek', 'sydney': 'Sydney', 'adam-scepaniak': 'Adam Scepaniak' }
+
   // Author display name lookup
   const authorProfile = authorProfiles.find(p => p.slug === article.author)
-  const authorDisplayName = authorProfile?.display_name || authorProfile?.name || article.author || 'Unknown'
+  const authorDisplayName = authorProfile?.display_name || authorProfile?.name || KNOWN_AUTHORS[article.author] || article.author || 'Unknown'
+
+  console.log('article.article_format:', article.article_format)
+  console.log('FORMAT_LABELS:', FORMAT_LABELS)
+  console.log('formatLabel computed:', FORMAT_LABELS[article.article_format])
 
   // Format badge label
   const formatLabel = FORMAT_LABELS[article.article_format] || article.article_format || 'Article'
 
   // Date formatting: "April 12, 2026"
-  const formattedDate = new Date(article.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  const dateStr = new Date(article.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
-  // Read time: word_count / 238, rounded up
-  const wordCount = article.word_count || 0
-  const readTimeMinutes = Math.ceil(wordCount / 238)
+  // Read time: article content word count / 238, rounded up
+  const readTimeMinutes = articleContent ? Math.ceil(articleContent.split(/\s+/).length / 238) : 0
   const readTimeDisplay = readTimeMinutes > 0 ? `${readTimeMinutes} min read` : ''
 
   return (
@@ -1677,7 +1962,7 @@ function ContentPage({ navigate }) {
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.875rem', color: '#6b7280', fontFamily: 'Inter, sans-serif', marginBottom: '1.5rem' }}>
               <span>{authorDisplayName}</span>
               <span>·</span>
-              <span>{formattedDate}</span>
+              <span>{dateStr}</span>
               {readTimeDisplay && (
                 <>
                   <span>·</span>
@@ -1690,7 +1975,247 @@ function ContentPage({ navigate }) {
             <div style={{ borderBottom: '1px solid #e5e5e5' }} />
           </header>
 
-          {/* Article body goes here - not implemented yet per Ben chunk 2 */}
+          {/* Photo gallery */}
+          {(() => {
+            let galleryImages = []
+            try { galleryImages = JSON.parse(article.article_images || '[]') } catch {}
+            if (!galleryImages.length) return null
+            return (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                  {galleryImages.map((img, i) => (
+                    <a key={i} href={`/api/images/serve?path=${img}`} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                      <img
+                        src={`/api/images/serve?path=${img}`}
+                        alt=""
+                        style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: '4px', cursor: 'pointer', display: 'block' }}
+                      />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* YouTube embed */}
+          {(() => {
+            const videoId = extractYouTubeVideoId(article.youtube_url)
+            if (!videoId) return null
+            return (
+              <div style={{ marginBottom: '2rem' }}>
+                <iframe
+                  width="100%"
+                  height="auto"
+                  style={{ aspectRatio: '16/9', borderRadius: '8px', display: 'block' }}
+                  src={`https://www.youtube.com/embed/${videoId}`}
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  title="YouTube video"
+                />
+              </div>
+            )
+          })()}
+
+          {/* Transcript toggle */}
+          {article.youtube_transcript && (
+            <div style={{ marginBottom: '2rem' }}>
+              <button
+                onClick={() => setShowTranscript(v => !v)}
+                style={{ background: 'none', border: '1px solid #d97706', color: '#d97706', padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600 }}
+              >
+                {showTranscript ? 'Hide transcript' : 'View transcript'}
+              </button>
+              {showTranscript && (
+                <div style={{ marginTop: '1rem', padding: '1rem', background: '#f9fafb', border: '1px solid #e5e5e5', borderRadius: '6px', maxHeight: '300px', overflowY: 'auto', fontSize: '0.875rem', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                  {article.youtube_transcript}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Audio player */}
+          {article.audio_path && (
+            <div style={{ marginBottom: '2rem', background: '#fef9c3', border: '1px solid #f59e0b', borderRadius: '8px', padding: '1rem' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#92400e', marginBottom: '0.75rem' }}>Audio Version</div>
+              <audio
+                ref={audioRef}
+                src={`/api/images/serve?path=${article.audio_path}`}
+                onTimeUpdate={() => {
+                  if (audioRef.current) setAudioProgress(audioRef.current.currentTime)
+                }}
+                onLoadedMetadata={() => {
+                  if (audioRef.current) setAudioDuration(audioRef.current.duration)
+                }}
+                onEnded={() => setAudioPlaying(false)}
+                style={{ display: 'none' }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <button
+                  onClick={() => {
+                    if (!audioRef.current) return
+                    if (audioPlaying) { audioRef.current.pause(); setAudioPlaying(false) }
+                    else { audioRef.current.play(); setAudioPlaying(true) }
+                  }}
+                  style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#92400e', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '1rem' }}
+                >
+                  {audioPlaying ? '\u23F8' : '\u25B6'}
+                </button>
+                <div style={{ flex: 1 }}>
+                  <div style={{ height: '4px', background: '#e5e5e5', borderRadius: '2px', marginBottom: '0.25rem', cursor: 'pointer' }}
+                    onClick={(e) => {
+                      if (!audioRef.current) return
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      const ratio = (e.clientX - rect.left) / rect.width
+                      audioRef.current.currentTime = ratio * audioRef.current.duration
+                      setAudioProgress(ratio * audioRef.current.duration)
+                    }}
+                  >
+                    <div style={{ height: '100%', background: '#92400e', borderRadius: '2px', width: `${audioDuration ? (audioProgress / audioDuration) * 100 : 0}%`, transition: 'width 0.1s linear' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#6b7280' }}>
+                    <span>{audioDuration ? formatTime(audioProgress) : '0:00'}</span>
+                    <span>{audioDuration ? formatTime(audioDuration) : '--:--'}</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
+                  {[1, 1.25, 1.5].map(speed => (
+                    <button
+                      key={speed}
+                      onClick={() => {
+                        if (audioRef.current) { audioRef.current.playbackRate = speed; setAudioSpeed(speed) }
+                      }}
+                      style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid', borderColor: audioSpeed === speed ? '#92400e' : '#d1d5db', background: audioSpeed === speed ? '#92400e' : 'transparent', color: audioSpeed === speed ? '#fff' : '#6b7280', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
+                    >
+                      {speed}x
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Article body */}
+          <div className="article-body" dangerouslySetInnerHTML={{ __html: marked.parse(articleContent || '') }} />
+
+          {/* Author bio card */}
+          {(() => {
+            const profile = authorProfiles.find(p => p.slug === article.author)
+            const initials = (name) => name ? name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '??'
+            const bioText = profile?.style_guide ? profile.style_guide.slice(0, 200) : 'Field reviewer and outdoor content writer.'
+            return (
+              <div style={{ background: '#f9fafb', border: '1px solid #e5e5e5', borderRadius: '8px', padding: '24px', marginTop: '2rem', display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#92400e', color: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', fontWeight: 700, flexShrink: 0 }}>
+                  {initials(authorDisplayName)}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, color: '#1a1a1a', marginBottom: '0.25rem' }}>{authorDisplayName}</div>
+                  <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>{bioText}</div>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Revision request */}
+          <div style={{ marginTop: '2rem' }}>
+            <textarea
+              id="revision-notes"
+              placeholder="Describe what you would like changed..."
+              style={{ width: '100%', minHeight: '120px', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.9375rem', fontFamily: 'Inter, sans-serif', resize: 'vertical', boxSizing: 'border-box' }}
+            />
+            <button
+              onClick={() => {
+                const notes = document.getElementById('revision-notes').value
+                if (!notes.trim()) return
+                fetch(`/api/articles/${article.id}`, {
+                  method: 'PUT',
+                  credentials: 'include',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ revision_notes: notes, status: 'revision_requested' })
+                }).then(res => res.json()).then(data => {
+                  if (data.error) throw new Error(data.error)
+                  alert('Revision request submitted.')
+                }).catch(err => alert('Error: ' + err.message))
+              }}
+              style={{ marginTop: '0.75rem', background: '#1a1a1a', color: '#faf9f7', border: 'none', padding: '0.625rem 1.25rem', borderRadius: '6px', fontSize: '0.875rem', cursor: 'pointer', fontWeight: 500 }}
+            >
+              Submit revision request
+            </button>
+          </div>
+
+          {/* Feedback block */}
+          <div style={{ marginTop: '2rem', padding: '1.5rem', background: '#f9fafb', border: '1px solid #e5e5e5', borderRadius: '8px' }}>
+            <div style={{ fontWeight: 600, color: '#1a1a1a', marginBottom: '1rem' }}>How was this article?</div>
+
+            {/* Star rating */}
+            <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '1.25rem' }}>
+              {[1, 2, 3, 4, 5].map(star => (
+                <button
+                  key={star}
+                  type="button"
+                  className="star-btn"
+                  onClick={() => !feedbackSubmitted && setRating(star)}
+                  disabled={feedbackSubmitted}
+                  style={{ cursor: feedbackSubmitted ? 'default' : 'pointer', fontSize: '1.5rem', lineHeight: 1, color: star <= rating ? '#d97706' : '#d1d5db' }}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+
+            {/* Side-by-side textareas on desktop, stacked on mobile */}
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 45%', minWidth: '240px' }}>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: '0.375rem' }}>What did we get right?</label>
+                <textarea
+                  value={whatWorked}
+                  onChange={e => !feedbackSubmitted && setWhatWorked(e.target.value)}
+                  disabled={feedbackSubmitted}
+                  placeholder="The tone was perfect..."
+                  style={{ width: '100%', minHeight: '96px', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'Inter, sans-serif', resize: 'vertical', boxSizing: 'border-box', background: feedbackSubmitted ? '#f3f4f6' : '#fff' }}
+                />
+              </div>
+              <div style={{ flex: '1 1 45%', minWidth: '240px' }}>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: '0.375rem' }}>What needs work?</label>
+                <textarea
+                  value={whatNeedsWork}
+                  onChange={e => !feedbackSubmitted && setWhatNeedsWork(e.target.value)}
+                  disabled={feedbackSubmitted}
+                  placeholder="The conclusion felt rushed..."
+                  style={{ width: '100%', minHeight: '96px', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'Inter, sans-serif', resize: 'vertical', boxSizing: 'border-box', background: feedbackSubmitted ? '#f3f4f6' : '#fff' }}
+                />
+              </div>
+            </div>
+
+            {/* Submit */}
+            <button
+              onClick={() => {
+                if (!rating) return
+                fetch(`/api/articles/${article.id}/feedback`, {
+                  method: 'POST',
+                  credentials: 'include',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ rating, what_worked: whatWorked, what_needs_work: whatNeedsWork })
+                }).then(res => res.json()).then(data => {
+                  if (data.error) throw new Error(data.error)
+                  setFeedbackSubmitted(true)
+                  alert('Feedback submitted. Thank you!')
+                }).catch(err => alert('Error: ' + err.message))
+              }}
+              disabled={feedbackSubmitted || !rating}
+              style={{ marginTop: '1rem', background: feedbackSubmitted ? '#9ca3af' : '#1a1a1a', color: '#faf9f7', border: 'none', padding: '0.625rem 1.25rem', borderRadius: '6px', fontSize: '0.875rem', cursor: feedbackSubmitted || !rating ? 'default' : 'pointer', fontWeight: 500 }}
+            >
+              {feedbackSubmitted ? 'Feedback submitted' : 'Submit Feedback'}
+            </button>
+          </div>
+
+          {/* Download button */}
+          <a
+            href={`/api/articles/${article.id}/download?format=zip`}
+            style={{ display: 'block', marginTop: '2rem', width: '100%', background: '#1a1a1a', color: '#faf9f7', border: 'none', padding: '0.875rem 1.25rem', borderRadius: '6px', fontSize: '0.9375rem', cursor: 'pointer', fontWeight: 600, textAlign: 'center', textDecoration: 'none' }}
+          >
+            Download article package
+          </a>
         </article>
       </div>
     </div>

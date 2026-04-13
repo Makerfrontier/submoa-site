@@ -1,0 +1,360 @@
+// src/routes/grade.ts
+// Grading endpoints — all admin only
+//
+// POST /api/admin/articles/:id/grade     — grade a single article
+// GET  /api/admin/articles/:id/grade     — fetch latest grade for an article
+// POST /api/admin/articles/grade-all     — grade all ungraded article_done submissions
+
+import {
+  scoreGrammar,
+  scoreReadability,
+  scoreAiDetection,
+  scorePlagiarism,
+  scoreSeo,
+  calcOverall,
+  buildRewriteInstructions,
+  THRESHOLDS,
+  MAX_REWRITE_ATTEMPTS,
+  type GradeScores,
+} from "../grading";
+import {
+  notifyGradingPassed,
+  notifyNeedsReview,
+  emailArticleReady,
+} from "../notifications";
+
+// ---------------------------------------------------------------------------
+// Types — adjust to match your Env binding names
+// ---------------------------------------------------------------------------
+interface Env {
+  submoacontent_db: D1Database;
+  COPYLEAKS_API_KEY?: string;
+  LANGUAGETOOL_API_KEY?: string;
+  DISCORD_WEBHOOK_URL?: string;
+  OPENROUTER_API_KEY: string;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: generate a simple ID
+// ---------------------------------------------------------------------------
+function newId(): string {
+  return crypto.randomUUID();
+}
+
+// ---------------------------------------------------------------------------
+// Core grading pipeline — runs scoring, saves to DB, handles rewrite loop
+// ---------------------------------------------------------------------------
+async function runGradingPipeline(
+  env: Env,
+  submissionId: string,
+  attempt = 0
+): Promise<{ grade: Record<string, unknown>; status: number }> {
+  // Fetch submission
+  const submission = await env.submoacontent_db.prepare(
+    `SELECT s.*, ap.name as author_display_name, ap.style_guide, u.email as author_email
+     FROM submissions s
+     LEFT JOIN author_profiles ap ON s.author = ap.slug
+     LEFT JOIN users u ON ap.account_id = u.account_id
+     WHERE s.id = ?`
+  )
+    .bind(submissionId)
+    .first<{
+      id: string;
+      title: string;
+      article_content: string;
+      human_observation: string;
+      target_keywords: string;
+      author: string;
+      author_display_name: string | null;
+      style_guide: string | null;
+      author_email: string | null;
+    }>();
+
+  if (!submission) return { grade: { error: "Submission not found" }, status: 404 };
+  if (!submission.article_content?.trim()) {
+    return { grade: { error: "article_content is empty" }, status: 400 };
+  }
+
+  // Mark as grading
+  await env.submoacontent_db.prepare(
+    `UPDATE submissions SET grade_status = 'grading' WHERE id = ?`
+  )
+    .bind(submissionId)
+    .run();
+
+  const keywords = submission.target_keywords
+    ? JSON.parse(submission.target_keywords)
+    : [];
+
+  const text = submission.article_content;
+  const firstParagraph = text.split(/\n\n/)[0] ?? text.slice(0, 300);
+
+  // Run all scoring in parallel
+  const [grammar, readability, ai_detection, plagiarism, seo] =
+    await Promise.all([
+      scoreGrammar(text, env.LANGUAGETOOL_API_KEY),
+      Promise.resolve(scoreReadability(text)),
+      scoreAiDetection(text, env.COPYLEAKS_API_KEY),
+      scorePlagiarism(text, env.COPYLEAKS_API_KEY, submission.topic),
+      Promise.resolve(scoreSeo(text, keywords, submission.topic, firstParagraph)),
+    ]);
+
+  // Fallback scores if external APIs fail
+  const safeGrammar = grammar ?? 75;
+  const safeReadability = readability ?? 70;
+  const safeAiDetection = ai_detection ?? 70;
+  const safePlagiarism = plagiarism ?? 85;
+  const safeSeo = seo ?? 65;
+
+
+  const scores: GradeScores = {
+    grammar: safeGrammar,
+    readability: safeReadability,
+    ai_detection: safeAiDetection,
+    plagiarism: safePlagiarism,
+    seo: safeSeo,
+    overall: null,
+  };
+  scores.overall = calcOverall(scores);
+
+  const now = Date.now();
+  const gradeId = newId();
+
+  // Determine pass/fail/rewrite
+  let gradeStatus: string;
+  let submissionGradeStatus: string;
+
+  if (scores.overall >= THRESHOLDS.overall) {
+    gradeStatus = "passed";
+    submissionGradeStatus = "passed";
+  } else if (attempt < MAX_REWRITE_ATTEMPTS) {
+    gradeStatus = "rewriting";
+    submissionGradeStatus = "rewriting";
+  } else {
+    gradeStatus = "needs_review";
+    submissionGradeStatus = "needs_review";
+  }
+
+  // Upsert grade row
+  await env.submoacontent_db.prepare(
+    `INSERT INTO grades (id, submission_id, grammar_score, readability_score,
+       ai_detection_score, plagiarism_score, seo_score, overall_score,
+       rewrite_attempts, status, graded_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(submission_id) DO UPDATE SET
+       grammar_score = excluded.grammar_score,
+       readability_score = excluded.readability_score,
+       ai_detection_score = excluded.ai_detection_score,
+       plagiarism_score = excluded.plagiarism_score,
+       seo_score = excluded.seo_score,
+       overall_score = excluded.overall_score,
+       rewrite_attempts = excluded.rewrite_attempts,
+       status = excluded.status,
+       graded_at = excluded.graded_at`
+  )
+    .bind(
+      gradeId,
+      submissionId,
+      grammar,
+      readability,
+      ai_detection,
+      plagiarism,
+      seo,
+      scores.overall,
+      attempt,
+      gradeStatus,
+      now,
+      now
+    )
+    .run();
+
+  // Update submission grade_status
+  await env.submoacontent_db.prepare(
+    `UPDATE submissions SET grade_status = ? WHERE id = ?`
+  )
+    .bind(submissionGradeStatus, submissionId)
+    .run();
+
+  const grade = {
+    id: gradeId,
+    submission_id: submissionId,
+    grammar_score: grammar,
+    readability_score: readability,
+    ai_detection_score: ai_detection,
+    plagiarism_score: plagiarism,
+    seo_score: seo,
+    overall_score: scores.overall,
+    rewrite_attempts: attempt,
+    status: gradeStatus,
+    graded_at: now,
+  };
+
+  // Handle rewrite
+  if (gradeStatus === "rewriting") {
+    await triggerRewrite(env, submission, scores, keywords, attempt);
+    return runGradingPipeline(env, submissionId, attempt + 1);
+  }
+
+  // PASSED — notify Discord + email author
+  if (gradeStatus === "passed") {
+    const authorName = (submission as any).author_display_name ?? submission.author;
+    await notifyGradingPassed(env as any, {
+      id: submissionId,
+      title: submission.topic,
+      author_display_name: authorName,
+      overall_score: scores.overall,
+    });
+    if (submission.author_email) {
+      await emailArticleReady(env as any, submission.author_email, {
+        id: submissionId,
+        title: submission.topic,
+        overall_score: scores.overall,
+      });
+    }
+  }
+
+  // NEEDS REVIEW — Discord alert
+  if (gradeStatus === "needs_review") {
+    const authorName = (submission as any).author_display_name ?? submission.author;
+    await notifyNeedsReview(env as any, {
+      id: submissionId,
+      title: submission.topic,
+      author_display_name: authorName,
+    }, scores);
+  }
+
+  return { grade, status: 200 };
+}
+
+// ---------------------------------------------------------------------------
+// Auto-rewrite
+// ---------------------------------------------------------------------------
+async function triggerRewrite(
+  env: Env,
+  submission: {
+    id: string;
+    title: string;
+    article_content: string;
+    human_observation: string;
+    style_guide: string | null;
+  },
+  scores: GradeScores,
+  keywords: string[],
+  attempt: number
+): Promise<void> {
+  const instructions = buildRewriteInstructions(scores, keywords);
+
+  const prompt = `AUTHOR VOICE:
+${submission.style_guide ?? "Write in a clear, natural, engaging style."}
+
+ORIGINAL BRIEF:
+${submission.human_observation ?? ""}
+
+REWRITE INSTRUCTIONS:
+${instructions}
+
+Rewrite the following article addressing all listed issues while preserving the author's voice and all factual content:
+
+${submission.article_content}`;
+
+  // Use OpenRouter for rewrites
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${env.OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://www.submoacontent.com",
+      "X-Title": "SubMoa Content",
+    },
+    body: JSON.stringify({
+      model: "anthropic/claude-3.5-sonnet",
+      max_tokens: 4096,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  const data = await res.json() as { choices: Array<{ message: { content: string } }> };
+  const newContent = data.choices?.[0]?.message?.content?.trim();
+  if (!newContent) {
+    console.error("Rewrite returned empty content for submission", submission.id);
+    return;
+  }
+
+  await env.submoacontent_db.prepare(
+    `UPDATE submissions SET article_content = ? WHERE id = ?`
+  )
+    .bind(newContent, submission.id)
+    .run();
+
+  console.log(
+    `Rewrite attempt ${attempt + 1} complete for submission ${submission.id}`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Route handlers
+// ---------------------------------------------------------------------------
+
+// POST /api/admin/articles/:id/grade
+export async function handleGradeArticle(
+  request: Request,
+  env: Env,
+  submissionId: string
+): Promise<Response> {
+  const { grade, status } = await runGradingPipeline(env, submissionId);
+  return Response.json(grade, { status });
+}
+
+// GET /api/admin/articles/:id/grade
+export async function handleGetGrade(
+  _request: Request,
+  env: Env,
+  submissionId: string
+): Promise<Response> {
+  const grade = await env.submoacontent_db.prepare(
+    `SELECT * FROM grades WHERE submission_id = ? ORDER BY graded_at DESC LIMIT 1`
+  )
+    .bind(submissionId)
+    .first();
+
+  if (!grade) {
+    return Response.json({ error: "No grade found for this submission" }, { status: 404 });
+  }
+
+  return Response.json(grade);
+}
+
+// POST /api/admin/articles/grade-all
+export async function handleGradeAll(
+  _request: Request,
+  env: Env
+): Promise<Response> {
+  const { results } = await env.submoacontent_db.prepare(
+    `SELECT id, topic FROM submissions
+     WHERE status = 'article_done' AND grade_status = 'ungraded'
+     ORDER BY created_at ASC`
+  ).all<{ id: string; topic: string }>();
+
+  const summary = {
+    total: results.length,
+    passed: 0,
+    needs_review: 0,
+    rewriting: 0,
+    errors: 0,
+  };
+
+  // Run sequentially to avoid rate-limiting external APIs
+  for (const sub of results) {
+    try {
+      const { grade } = await runGradingPipeline(env, sub.id);
+      const s = (grade as { status: string }).status;
+      if (s === "passed") summary.passed++;
+      else if (s === "needs_review") summary.needs_review++;
+      else if (s === "rewriting") summary.rewriting++;
+    } catch (err) {
+      console.error(`Error grading ${sub.id}:`, err);
+      summary.errors++;
+    }
+  }
+
+  return Response.json(summary);
+}

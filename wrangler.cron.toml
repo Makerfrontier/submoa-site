@@ -1,0 +1,14 @@
+name = "submoa-cron"
+main = "src/cron.ts"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "submoacontent-db"
+database_id = "f7d72bbc-3ec6-4b50-b22f-9700811939e1"
+
+[ai]
+binding = "AI"
+
+[triggers]
+crons = ["*/10 * * * *"]

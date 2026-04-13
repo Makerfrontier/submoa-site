@@ -7,6 +7,15 @@
 export default {
   async scheduled(event: any, env: Env, ctx: ExecutionContext) {
     await notifyNewSubmissions(env);
+    // Trigger grading for any ungraded articles
+    if (env.CRON_SECRET) {
+      ctx.waitUntil(
+        fetch(`${env.APP_URL || 'https://www.submoacontent.com'}/api/admin/grading/grade-all`, {
+          method: 'POST',
+          headers: { 'x-cron-secret': env.CRON_SECRET },
+        })
+      );
+    }
   },
 
   // Allow manual trigger via fetch for testing
@@ -22,6 +31,8 @@ export default {
 interface Env {
   submoacontent_db: D1Database;
   DISCORD_WEBHOOK_URL: string;
+  APP_URL?: string;
+  CRON_SECRET?: string;
 }
 
 async function notifyNewSubmissions(env: Env): Promise<void> {

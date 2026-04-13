@@ -9,7 +9,18 @@
       "database_id": "f7d72bbc-3ec6-4b50-b22f-9700811939e1"
     }
   ],
-  "vars": {
-    // "DISCORD_WEBHOOK_URL": moved to secret
+  "r2_buckets": [
+    {
+      "binding": "SUBMOA_IMAGES",
+      "bucket_name": "submoa-images"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "queue": "submoa-generation-queue",
+        "binding": "GENERATION_QUEUE"
+      }
+    ]
   }
 }

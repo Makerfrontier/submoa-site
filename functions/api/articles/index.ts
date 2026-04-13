@@ -1,4 +1,5 @@
 import { json, getSessionUser, generateId } from '../_utils';
+import JSZip from 'jszip';
 
 // Convert markdown to plain text for .txt download
 function markdownToText(md) {
@@ -79,6 +80,35 @@ export async function onRequest(context) {
               'Content-Type': 'text/plain; charset=utf-8',
               'Content-Disposition': `attachment; filename="${filename}.txt"`,
               'Content-Length': String(data.length),
+            }
+          });
+        }
+
+        if (format === 'zip') {
+          const zip = new JSZip();
+          const filename = (article.content_path || 'article').replace('/content/', '').replace('.md', '');
+
+          // Add article text
+          const content = article.article_content || '';
+          const text = markdownToText(content);
+          zip.file(`${filename}.txt`, text);
+
+          // Add SEO report if exists
+          if (article.seo_report_content) {
+            zip.file(`${filename}-seo-report.txt`, article.seo_report_content);
+          }
+
+          // Add YouTube transcript if exists
+          if (article.youtube_transcript) {
+            zip.file('extras/transcript.txt', article.youtube_transcript);
+          }
+
+          const zipData = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+          return new Response(zipData, {
+            headers: {
+              'Content-Type': 'application/zip',
+              'Content-Disposition': `attachment; filename="${filename}.zip"`,
+              'Content-Length': String(zipData.length),
             }
           });
         }

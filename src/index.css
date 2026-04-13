@@ -291,22 +291,6 @@ a:hover { text-decoration: underline; }
 .hero-logo-overlay { display: none; }
 
 /* Buttons */
-.btn-primary {
-  padding: 1rem 2.5rem;
-  background: var(--gold);
-  color: var(--hunter);
-  border: none;
-  border-radius: 2px;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: inline-block;
-  font-family: inherit;
-}
-.btn-primary:hover { background: var(--gold-bright); transform: translateY(-1px); text-decoration: none; }
 .btn-secondary {
   padding: 1rem 2.5rem;
   background: transparent;
@@ -464,7 +448,9 @@ a:hover { text-decoration: underline; }
 .dashboard-sub { color: var(--text-muted); font-size: 0.9375rem; }
 .section { padding: 0 0 3.5rem; }
 .grid { display: grid; gap: 1px; background: var(--hunter-border); border: 1px solid var(--hunter-border); }
-.card { background: var(--hunter-mid); padding: 2rem; }
+.card { background: #0f200f; padding: 2rem; border: 0.5px solid #1e3a1e; }
+.card.failed { border-color: #5a1a1a; }
+.card.published { border-color: #1a4a2a; }
 .card-meta { font-size: 0.6875rem; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.5rem; font-family: 'Inter', sans-serif; }
 .card-title { font-size: 1.0625rem; font-weight: 600; color: var(--cream); margin-bottom: 0.75rem; }
 .card-status { display: inline-block; padding: 0.25rem 0.875rem; border-radius: 2px; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
@@ -533,3 +519,38 @@ a:hover { text-decoration: underline; }
     align-items: stretch;
   }
 }
+
+/* Article body prose styles */
+.article-body {
+  color: #2a2a2a;
+  line-height: 1.9;
+}
+.article-body p {
+  margin-bottom: 1.6rem;
+}
+.article-body h2 {
+  margin-top: 2.4rem;
+  margin-bottom: 0.8rem;
+  color: #1a1a1a;
+}
+.article-body h3 {
+  margin-top: 2rem;
+  margin-bottom: 0.6rem;
+  color: #1a1a1a;
+}
+.article-body h1 {
+  color: #1a1a1a;
+}
+.article-h1, .article-h2, .article-h3 {
+  color: #1a1a1a;
+}
+.article-h2 {
+  margin-top: 2.4rem;
+  margin-bottom: 0.8rem;
+}
+.article-h3 {
+  margin-top: 2rem;
+  margin-bottom: 0.6rem;
+}
+.star-btn { outline: none; border: none; background: none; cursor: pointer; padding: 2px; }
+.star-btn:focus { outline: none; }

@@ -5,7 +5,9 @@
 
 export interface Env {
   submoacontent_db: D1Database;
+  SUBMOA_IMAGES: R2Bucket;
   DISCORD_WEBHOOK_URL: string;
+  DISCORD_BOT_TOKEN: string;
   RESEND_API_KEY: string;
   OPENROUTER_API_KEY: string;
   OPENROUTER_DEFAULT_MODEL: string;
@@ -14,6 +16,9 @@ export interface Env {
   DATAFORSEO_PASSWORD: string;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
+  YOUTUBE_API_KEY: string;
+  GENERATION_QUEUE: Queue;
+  AI: Ai;
   hashPassword(password: string): Promise<string>;
 }
 
@@ -167,13 +172,28 @@ export async function scrapeProductPage(url: string): Promise<string> {
     });
     if (!response.ok) return '';
     const html = await response.text();
-    return html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+
+    // Age gate detection — return null if page is age-restricted
+    const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 5000);
+      .trim();
+
+    if (text.length < 200) return '';
+
+    const ageGatePatterns = [
+      'verify your age', "you must be 18", 'age verification',
+      'date of birth', 'are you of legal age', 'age gate',
+      'confirm your age', 'adult verification', 'you must be of legal age',
+    ];
+    const lower = text.toLowerCase();
+    if (ageGatePatterns.some(p => lower.includes(p))) {
+      console.log('[scrapeProductPage] Age gate detected for:', url);
+      return '';
+    }
+
+    return text.slice(0, 5000);
   } catch {
     return '';
   }

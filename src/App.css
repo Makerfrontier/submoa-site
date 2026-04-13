@@ -182,3 +182,29 @@
     border-right-color: var(--border);
   }
 }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Dashboard pipeline stepper */
+.pipeline { display: flex; align-items: center; margin-bottom: 14px; }
+.step { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.step-dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #1e3a1e; background: #0f200f; display: flex; align-items: center; justify-content: center; }
+.step-dot.done { background: #c8973a; border-color: #c8973a; }
+.step-dot.active { border-color: #c8973a; box-shadow: 0 0 0 3px rgba(200,151,58,0.2); }
+.step-line { flex: 1; height: 2px; background: #1e3a1e; margin: 0 4px 13px; }
+.step-line.done { background: #c8973a; }
+.step-label { font-size: 9px; color: #5a7a5a; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.step-label.active { color: #c8973a; }
+
+/* Dashboard filter buttons */
+.filter-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.filter-btn { padding: 6px 14px; border-radius: 20px; font-size: 12px; cursor: pointer; border: 0.5px solid #1e3a1e; background: transparent; color: #6a8a6a; white-space: nowrap; }
+.filter-btn.active { background: #c8973a; color: #000; border-color: #c8973a; font-weight: 500; }
+
+/* Dashboard card buttons */
+.btn-gold-outline { padding: 7px 16px; border-radius: 5px; font-size: 12px; font-weight: 500; cursor: pointer; border: 0.5px solid #c8973a; color: #c8973a; background: transparent; }
+.btn-publish { padding: 7px 16px; border-radius: 5px; font-size: 12px; font-weight: 500; cursor: pointer; border: 0.5px solid #5ab85a; color: #5ab85a; background: transparent; }
+.btn-danger { background: none; border: none; font-size: 12px; color: #d45a5a; cursor: pointer; text-decoration: underline; padding: 0; }

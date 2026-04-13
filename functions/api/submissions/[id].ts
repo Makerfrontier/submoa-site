@@ -1,4 +1,5 @@
 import { json, getSessionUser, generateId } from '../_utils';
+import { emailArticlePublished } from '../notifications';
 
 async function createNotification(env, userId, type, message, link) {
   const id = generateId();
@@ -81,7 +82,7 @@ export async function onRequest(context) {
 
     try {
       const body = await context.request.json();
-      const { is_hidden, is_deleted, status, article_content, seo_report_content } = body;
+      const { is_hidden, is_deleted, status, article_content, seo_report_content, article_images, youtube_url, use_youtube, youtube_transcript } = body;
 
       if (user.role !== 'admin') {
         const check = await context.env.submoacontent_db.prepare('SELECT id FROM submissions WHERE id = ? AND user_id = ?').bind(id, user.id).first();
@@ -99,6 +100,11 @@ export async function onRequest(context) {
       if (status !== undefined) { updates.push('status = ?'); values.push(status); }
       if (article_content !== undefined) { updates.push('article_content = ?'); values.push(article_content); }
       if (seo_report_content !== undefined) { updates.push('seo_report_content = ?'); values.push(seo_report_content); }
+      if (article_images !== undefined) { updates.push('article_images = ?'); values.push(article_images); }
+      if (youtube_url !== undefined) { updates.push('youtube_url = ?'); values.push(youtube_url); }
+      if (use_youtube !== undefined) { updates.push('use_youtube = ?'); values.push(use_youtube ? 1 : 0); }
+      if (youtube_transcript !== undefined) { updates.push('youtube_transcript = ?'); values.push(youtube_transcript); }
+      if (product_details_manual !== undefined) { updates.push('product_details_manual = ?'); values.push(product_details_manual); }
 
       updates.push('updated_at = ?');
       values.push(Date.now());
@@ -134,6 +140,25 @@ export async function onRequest(context) {
       }
 
       return json({ success: true, submission: sub });
+
+    } catch (e) {
+      return json({ error: e.message }, 500);
+    }
+  }
+
+  // PATCH /api/submissions/:id/publish — mark as published
+  if (context.request.method === 'PATCH' && pathname.endsWith('/publish')) {
+    const id = (pathname.split('/').filter(Boolean))[2];
+    if (!id) return json({ error: 'Missing submission id' }, 400);
+
+    try {
+      const sub = await context.env.submoacontent_db.prepare('SELECT * FROM submissions WHERE id = ?').bind(id).first();
+      if (!sub) return json({ error: 'Not found' }, 404);
+      if (sub.user_id !== user.id && user.role !== 'admin') return json({ error: 'Forbidden' }, 403);
+
+      await context.env.submoacontent_db.prepare('UPDATE submissions SET status = ? WHERE id = ?').bind('published', id).run();
+
+      return json({ success: true });
 
     } catch (e) {
       return json({ error: e.message }, 500);

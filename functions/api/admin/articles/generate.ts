@@ -3,6 +3,8 @@ import { scrapeProductPage } from '../../_utils';
 import { runPhaseA } from '../../dataforseo/phase-a';
 import { runPhaseB } from '../../dataforseo/phase-b';
 import { dfs } from '../../dataforseo/_client';
+import { fetchYouTubeTranscript } from '../../_youtube';
+import { generateAudio } from '../../_tts';
 
 const VOCAL_TONE_DEFINITIONS: Record<string, string> = {
   'expert': 'Authoritative and confident. Makes definitive statements. Commands authority on the subject.',
@@ -89,10 +91,38 @@ export async function onRequest(context: { request: Request; env: Env }) {
 
     if (!authorProfile) return json({ error: 'Author profile not found for: ' + submission.author }, 404);
 
-    // 3. Scrape product page if product_link exists
+    // 3. Product context: manual details override scraped content
     let productPageText = '';
-    if (submission.product_link) {
+    if (submission.product_details_manual) {
+      productPageText = submission.product_details_manual;
+      console.log('Using manual product_details_manual for submission:', submission_id);
+    } else if (submission.product_link) {
       productPageText = await scrapeProductPage(submission.product_link);
+      if (!productPageText) console.log('No product page content (gate or scrape fail) for submission:', submission_id);
+    }
+
+    // 4. Fetch YouTube transcript if use_youtube is enabled
+    let youtubeTranscript: string | null = null;
+    if (submission.use_youtube && submission.youtube_url) {
+      // Use stored transcript on revision requests
+      if (submission.youtube_transcript) {
+        youtubeTranscript = submission.youtube_transcript;
+        console.log('Reusing stored YouTube transcript for submission:', submission_id);
+      } else {
+        // Fetch fresh transcript from YouTube
+        const apiKey = context.env.YOUTUBE_API_KEY;
+        if (apiKey) {
+          const result = await fetchYouTubeTranscript(submission.youtube_url, apiKey);
+          if (result.transcript) {
+            youtubeTranscript = result.transcript;
+            console.log('Fetched YouTube transcript:', youtubeTranscript.length, 'chars for video:', result.videoId);
+          } else {
+            console.log('No YouTube transcript available for:', submission.youtube_url);
+          }
+        } else {
+          console.warn('YOUTUBE_API_KEY not configured');
+        }
+      }
     }
 
     // 4. Expand keywords via DataforSEO if seo_research is enabled
@@ -161,6 +191,10 @@ ${submission.human_observation || 'No brief provided.'}`;
       prompt += `\n\nANECDOTAL STORIES TO INCLUDE:\n${submission.anecdotal_stories}`;
     }
 
+    if (youtubeTranscript) {
+      prompt += `\n\nVIDEO TRANSCRIPT SOURCE: The following is a transcript from a YouTube video. Use it as your primary factual source material. Write in the author voice, do not quote the transcript directly: ${youtubeTranscript}`;
+    }
+
     prompt += `\n\nWrite a ${submission.min_word_count || 1200}+ word article on: ${submission.topic}`;
 
     if (submission.include_faq) {
@@ -219,12 +253,27 @@ ${submission.human_observation || 'No brief provided.'}`;
     // 7 & 8. Save result to submissions
     const now = Date.now();
     await context.env.submoacontent_db
-      .prepare('UPDATE submissions SET article_content = ?, status = ?, updated_at = ?, seo_report_content = ? WHERE id = ?')
-      .bind(articleContent, 'article_done', now, deepReport || null, submission_id)
+      .prepare('UPDATE submissions SET article_content = ?, status = ?, updated_at = ?, seo_report_content = ?, youtube_transcript = ? WHERE id = ?')
+      .bind(articleContent, 'article_done', now, deepReport || null, youtubeTranscript || null, submission_id)
       .run();
 
-    // 9. Return
-    return json({ success: true, article_content: articleContent });
+    // 9. Generate audio if requested
+    let audioPath: string | null = null;
+    if (submission.generate_audio) {
+      try {
+        audioPath = await generateAudio(articleContent, submission, authorProfile, context.env);
+        await context.env.submoacontent_db
+          .prepare('UPDATE submissions SET audio_path = ? WHERE id = ?')
+          .bind(audioPath, submission_id)
+          .run();
+        console.log('Audio generated and saved for submission:', submission_id);
+      } catch (audioErr: any) {
+        console.error('Audio generation failed for submission:', submission_id, audioErr.message);
+      }
+    }
+
+    // 10. Return
+    return json({ success: true, article_content: articleContent, audio_path: audioPath });
 
   } catch (err: any) {
     console.error('Generate error:', err.message, err.stack);
