@@ -17,7 +17,7 @@ async function requireAdmin(request: Request, env: Env): Promise<{ id: string; r
   const session = request.headers.get('Cookie')?.match(/session=([^;]+)/)?.[1];
   if (!session) return new Response('Unauthorized', { status: 401 });
 
-  const user = await env.DB.prepare(
+  const user = await env.submoacontent_db.prepare(
     `SELECT id, role FROM users WHERE id = (
       SELECT user_id FROM sessions WHERE token = ? AND expires_at > ?
     )`
@@ -50,7 +50,7 @@ export async function handleGetSubmissions(request: Request, env: Env): Promise<
   const auth = await requireAdmin(request, env);
   if (auth instanceof Response) return auth;
 
-  const { results } = await env.DB.prepare(
+  const { results } = await env.submoacontent_db.prepare(
     `SELECT s.*,
             ap.name as author_display_name,
             g.grammar_score, g.readability_score, g.ai_detection_score,
@@ -84,11 +84,11 @@ export async function handleGetSubmissions(request: Request, env: Env): Promise<
 // ---------------------------------------------------------------------------
 export async function handleGetStats(_request: Request, env: Env): Promise<Response> {
   const rows = await Promise.all([
-    env.DB.prepare(`SELECT COUNT(*) as n FROM submissions`).first<{ n: number }>(),
-    env.DB.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status IN ('queued','generating')`).first<{ n: number }>(),
-    env.DB.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'article_done' AND grade_status = 'passed'`).first<{ n: number }>(),
-    env.DB.prepare(`SELECT COUNT(*) as n FROM submissions WHERE grade_status = 'needs_review'`).first<{ n: number }>(),
-    env.DB.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'failed'`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status IN ('queued','generating')`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'article_done' AND grade_status = 'passed'`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE grade_status = 'needs_review'`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'failed'`).first<{ n: number }>(),
   ]);
 
   return json({
@@ -107,11 +107,11 @@ export async function handleApproveArticle(request: Request, env: Env, id: strin
   const auth = await requireAdmin(request, env);
   if (auth instanceof Response) return auth;
 
-  await env.DB.prepare(
+  await env.submoacontent_db.prepare(
     `UPDATE submissions SET grade_status = 'passed', updated_at = ? WHERE id = ?`
   ).bind(Date.now(), id).run();
 
-  await env.DB.prepare(
+  await env.submoacontent_db.prepare(
     `UPDATE grades SET status = 'passed' WHERE submission_id = ?`
   ).bind(id).run();
 
@@ -129,7 +129,7 @@ export async function handleUploadForGrading(request: Request, env: Env): Promis
   const id = crypto.randomUUID();
   const now = Date.now();
 
-  await env.DB.prepare(
+  await env.submoacontent_db.prepare(
     `INSERT INTO submissions (id, title, article_content, status, grade_status, author, created_at, updated_at)
      VALUES (?, ?, ?, 'article_done', 'ungraded', 'admin-upload', ?, ?)`
   ).bind(id, body.filename || 'Uploaded Article', body.content, now, now).run();
@@ -145,20 +145,20 @@ export async function handleGetQueue(_request: Request, env: Env): Promise<Respo
   const cutoff = Date.now() - STALE_MS;
 
   const [generating, queued, stuck] = await Promise.all([
-    env.DB.prepare(
+    env.submoacontent_db.prepare(
       `SELECT s.id, s.title, s.updated_at, ap.name as author_display_name, s.article_format
        FROM submissions s
        LEFT JOIN author_profiles ap ON s.author = ap.slug
        WHERE s.status = 'generating'`
     ).all<any>(),
-    env.DB.prepare(
+    env.submoacontent_db.prepare(
       `SELECT s.id, s.title, s.created_at, ap.name as author_display_name, s.article_format
        FROM submissions s
        LEFT JOIN author_profiles ap ON s.author = ap.slug
        WHERE s.status = 'queued'
        ORDER BY s.created_at ASC`
     ).all<any>(),
-    env.DB.prepare(
+    env.submoacontent_db.prepare(
       `SELECT s.id, s.title, s.updated_at, ap.name as author_display_name
        FROM submissions s
        LEFT JOIN author_profiles ap ON s.author = ap.slug
@@ -194,7 +194,7 @@ export async function handleRequeue(request: Request, env: Env, id: string): Pro
   const auth = await requireAdmin(request, env);
   if (auth instanceof Response) return auth;
 
-  await env.DB.prepare(
+  await env.submoacontent_db.prepare(
     `UPDATE submissions SET status = 'queued', grade_status = 'ungraded', updated_at = ? WHERE id = ?`
   ).bind(Date.now(), id).run();
 
@@ -210,7 +210,7 @@ export async function handleCancelQueue(request: Request, env: Env, id: string):
   const auth = await requireAdmin(request, env);
   if (auth instanceof Response) return auth;
 
-  await env.DB.prepare(
+  await env.submoacontent_db.prepare(
     `UPDATE submissions SET status = 'draft', updated_at = ? WHERE id = ? AND status = 'queued'`
   ).bind(Date.now(), id).run();
 
@@ -241,13 +241,13 @@ export async function handleGetHealth(_request: Request, env: Env): Promise<Resp
   );
 
   const [stuck, lastGen, stats] = await Promise.all([
-    env.DB.prepare(
+    env.submoacontent_db.prepare(
       `SELECT s.id, s.title, s.updated_at, s.status, ap.name as author_display_name
        FROM submissions s
        LEFT JOIN author_profiles ap ON s.author = ap.slug
        WHERE s.status = 'generating' AND s.updated_at < ?`
     ).bind(cutoff).all<any>(),
-    env.DB.prepare(
+    env.submoacontent_db.prepare(
       `SELECT s.id, s.title, s.word_count, s.updated_at, g.overall_score,
               CASE WHEN g.status = 'passed' THEN 1 ELSE 0 END as grade_passed
        FROM submissions s
@@ -255,7 +255,7 @@ export async function handleGetHealth(_request: Request, env: Env): Promise<Resp
        WHERE s.status = 'article_done'
        ORDER BY s.updated_at DESC LIMIT 1`
     ).first<any>(),
-    env.DB.prepare(
+    env.submoacontent_db.prepare(
       `SELECT
          COUNT(*) as total,
          SUM(CASE WHEN DATE(created_at/1000, 'unixepoch') = DATE('now') THEN 1 ELSE 0 END) as today,
@@ -301,7 +301,7 @@ export async function handleGetUsage(request: Request, env: Env): Promise<Respon
       ? Date.now() - 7 * 24 * 60 * 60 * 1000
       : Date.now() - 30 * 24 * 60 * 60 * 1000;
 
-  const { results: log } = await env.DB.prepare(
+  const { results: log } = await env.submoacontent_db.prepare(
     `SELECT api_name, input_tokens, output_tokens, cost, submission_id,
             title, created_at
      FROM api_usage_log
@@ -345,7 +345,7 @@ export async function handleGetUsage(request: Request, env: Env): Promise<Respon
   } as any);
 
   const recent_log = log.slice(0, 20).map((r: any) => ({
-    time: new Date(r.created_at).toLocaleTimeString('en-US', hour: '2-digit', minute: '2-digit'),
+    time: new Date(r.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
     article: r.title || r.submission_id?.slice(0, 8),
     api: r.api_name,
     input_tokens: r.input_tokens,
@@ -360,7 +360,7 @@ export async function handleGetUsage(request: Request, env: Env): Promise<Respon
 // GET /api/admin/authors
 // ---------------------------------------------------------------------------
 export async function handleGetAuthors(_request: Request, env: Env): Promise<Response> {
-  const { results } = await env.DB.prepare(
+  const { results } = await env.submoacontent_db.prepare(
     `SELECT ap.*,
        COUNT(s.id) as article_count,
        ROUND(AVG(CASE WHEN g.status = 'passed' THEN 100.0 ELSE 0 END), 0) as pass_rate
@@ -382,7 +382,7 @@ export async function handleUpdateAuthor(request: Request, env: Env, slug: strin
   if (auth instanceof Response) return auth;
 
   const body = await request.json() as { name: string };
-  await env.DB.prepare(
+  await env.submoacontent_db.prepare(
     `UPDATE author_profiles SET name = ?, updated_at = ? WHERE slug = ?`
   ).bind(body.name, Date.now(), slug).run();
 
@@ -397,7 +397,7 @@ export async function handleToggleAuthor(request: Request, env: Env, slug: strin
   if (auth instanceof Response) return auth;
 
   const body = await request.json() as { is_active: boolean };
-  await env.DB.prepare(
+  await env.submoacontent_db.prepare(
     `UPDATE author_profiles SET is_active = ?, updated_at = ? WHERE slug = ?`
   ).bind(body.is_active ? 1 : 0, Date.now(), slug).run();
 
@@ -408,7 +408,7 @@ export async function handleToggleAuthor(request: Request, env: Env, slug: strin
 // GET /api/admin/skills
 // ---------------------------------------------------------------------------
 export async function handleGetSkills(_request: Request, env: Env): Promise<Response> {
-  const { results } = await env.DB.prepare(
+  const { results } = await env.submoacontent_db.prepare(
     `SELECT id, name, version, active, updated_at,
             SUBSTR(content, 1, 100) as preview
      FROM agent_skills
@@ -418,7 +418,7 @@ export async function handleGetSkills(_request: Request, env: Env): Promise<Resp
   // Full content on demand
   const skills = await Promise.all(
     results.map(async (row: any) => {
-      const full = await env.DB.prepare(
+      const full = await env.submoacontent_db.prepare(
         `SELECT content FROM agent_skills WHERE id = ?`
       ).bind(row.id).first<{ content: string }>();
       return { ...row, content: full?.content ?? '' };
@@ -432,7 +432,7 @@ export async function handleGetSkills(_request: Request, env: Env): Promise<Resp
 // GET /api/admin/users
 // ---------------------------------------------------------------------------
 export async function handleGetUsers(_request: Request, env: Env): Promise<Response> {
-  const { results } = await env.DB.prepare(
+  const { results } = await env.submoacontent_db.prepare(
     `SELECT id, name, email, role, account_id, created_at FROM users ORDER BY created_at DESC`
   ).all();
 
@@ -451,7 +451,7 @@ export async function handleUpdateUserRole(request: Request, env: Env, id: strin
     return json({ error: 'Invalid role' }, 400);
   }
 
-  await env.DB.prepare(
+  await env.submoacontent_db.prepare(
     `UPDATE users SET role = ?, updated_at = ? WHERE id = ?`
   ).bind(body.role, Date.now(), id).run();
 
@@ -466,9 +466,9 @@ export async function handleGetBadgeCounts(_request: Request, env: Env): Promise
   const cutoff = Date.now() - STALE_MS;
 
   const [queueRow, stuckRow, reviewRow] = await Promise.all([
-    env.DB.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status IN ('queued','generating')`).first<{ n: number }>(),
-    env.DB.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'generating' AND updated_at < ?`).bind(cutoff).first<{ n: number }>(),
-    env.DB.prepare(`SELECT COUNT(*) as n FROM submissions WHERE grade_status = 'needs_review'`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status IN ('queued','generating')`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'generating' AND updated_at < ?`).bind(cutoff).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE grade_status = 'needs_review'`).first<{ n: number }>(),
   ]);
 
   return json({
