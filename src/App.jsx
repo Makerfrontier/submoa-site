@@ -1601,11 +1601,11 @@ function ContentPage({ navigate }) {
         if (!data) return
         if (data.error) throw new Error(data.error)
         // Ownership check
-        if (data.article.user_id !== user.id && user.role !== 'admin') {
+        if (data.user_id !== user.id && user.role !== 'admin') {
           navigate('/dashboard')
           return
         }
-        setArticle(data.article)
+        setArticle(data)
       })
       .catch(err => {
         console.error('[/api/articles/content] fetch error:', err)
