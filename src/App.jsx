@@ -1580,16 +1580,22 @@ function ContentPage({ navigate }) {
     // Use fetch directly to get status code for proper redirects
     fetch(`/api/articles/content?id=${encodeURIComponent(id)}`, { credentials: 'include' })
       .then(res => {
-        if (res.status === 401) {
-          navigate('/login')
-          return null
-        }
-        if (res.status === 404) {
-          navigate('/dashboard')
-          return null
-        }
-        if (!res.ok) throw new Error('Failed to load article')
-        return res.json()
+        console.log('[/api/articles/content] status:', res.status)
+        return res.text().then(text => {
+          console.log('[/api/articles/content] body:', text)
+          let data
+          try { data = JSON.parse(text) } catch { data = { error: text } }
+          if (res.status === 401) {
+            navigate('/login')
+            return null
+          }
+          if (res.status === 404) {
+            navigate('/dashboard')
+            return null
+          }
+          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+          return data
+        })
       })
       .then(data => {
         if (!data) return
@@ -1601,7 +1607,10 @@ function ContentPage({ navigate }) {
         }
         setArticle(data.article)
       })
-      .catch(err => setError(err.message))
+      .catch(err => {
+        console.error('[/api/articles/content] fetch error:', err)
+        setError(err.message)
+      })
       .finally(() => setLoading(false))
   }, [user])
 
