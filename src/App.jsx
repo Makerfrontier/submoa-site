@@ -1,5 +1,6 @@
 import { useState, useEffect, createContext, useContext, useRef } from 'react'
 import { marked } from 'marked'
+import Dashboard from './pages/Dashboard'
 
 // Strip the first H1/H2 from article markdown (page title already shows it above the divider)
 function stripFirstHeading(text) {
@@ -172,11 +173,31 @@ function LogoutButton() {
 }
 
 // ─── Nav ────────────────────────────────────────────────────────────────
+// Replace the existing Nav function in App.jsx with this entire block.
+// Changes:
+//   - Logo larger (48px height)
+//   - Link order: Submit Brief · Dashboard · Account · Bell
+//   - Bell far right
+//   - Sentence case links
+//   - Sign out removed from nav (moved to Account page)
+//   - LogoutButton removed from nav
+//   - Mobile menu updated to match
+
 function Nav({ navigate, syncUser }) {
   const { user, loading } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const toggleMenu = () => setMenuOpen(o => !o)
   const closeMenu = () => setMenuOpen(false)
+  const [activePath, setActivePath] = useState('')
+
+  useEffect(() => {
+    setActivePath(window.location.pathname)
+    const handleNav = () => setActivePath(window.location.pathname)
+    window.addEventListener('popstate', handleNav)
+    return () => window.removeEventListener('popstate', handleNav)
+  }, [])
+
+  const isActive = (path) => activePath === path ? ' active' : ''
 
   return (
     <>
@@ -191,21 +212,21 @@ function Nav({ navigate, syncUser }) {
       <div className={`nav-mobile-overlay${menuOpen ? ' nav-mobile-overlay--open' : ''}`} onClick={closeMenu}>
         <div className="nav-mobile-menu" onClick={e => e.stopPropagation()}>
           <button className="nav-mobile-close" onClick={closeMenu}>×</button>
-          <img src="/logo.jpg" alt="SubMoa Content" className="nav-mobile-logo" onClick={() => { closeMenu(); navigate('/') }} />
+          <img src="/logo.png" alt="SubMoa Content" className="nav-mobile-logo" onClick={() => { closeMenu(); navigate('/') }} />
           <div className="nav-mobile-links">
             {!loading && !user && (
               <>
-                <a href="#how-it-works" onClick={e => { e.preventDefault(); closeMenu(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>How It Works</a>
+                <a href="#how-it-works" onClick={e => { e.preventDefault(); closeMenu(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>How it works</a>
                 <a href="#features" onClick={e => { e.preventDefault(); closeMenu(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>Features</a>
                 <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/login') }}>Login</a>
-                <a href="#" className="nav-mobile-cta" onClick={e => { e.preventDefault(); closeMenu(); navigate('/request') }}>Request Access</a>
+                <a href="#" className="nav-mobile-cta" onClick={e => { e.preventDefault(); closeMenu(); navigate('/request') }}>Request access</a>
               </>
             )}
             {!loading && user && (
               <>
-                <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/author') }}>Submit Brief</a>
-                <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/dashboard') }}>Dashboard</a>
-                <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/account') }}>Account</a>
+                <a href="#" className={isActive('/author') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/author') }}>Submit brief</a>
+                <a href="#" className={isActive('/dashboard') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/dashboard') }}>Dashboard</a>
+                <a href="#" className={isActive('/account') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/account') }}>Account</a>
               </>
             )}
           </div>
@@ -216,22 +237,28 @@ function Nav({ navigate, syncUser }) {
       <nav className="nav">
         <div className="container">
           <div className="nav-inner">
-            <img src="/logo.jpg" alt="SubMoa Content" className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }} />
+            <img
+              src="/logo.png"
+              alt="SubMoa Content"
+              className="nav-logo"
+              onClick={() => navigate('/')}
+              style={{ cursor: 'pointer' }}
+            />
             <div className="nav-links">
               {!loading && !user && (
                 <>
-                  <a href="#how-it-works" className="nav-link" onClick={e => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>How It Works</a>
+                  <a href="#how-it-works" className="nav-link" onClick={e => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>How it works</a>
                   <a href="#features" className="nav-link" onClick={e => { e.preventDefault(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>Features</a>
-                  <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/login') }}>login</a>
-                  <a href="#" className="nav-cta" onClick={e => { e.preventDefault(); navigate('/request') }}>Request Access</a>
+                  <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/login') }}>Login</a>
+                  <a href="#" className="nav-cta" onClick={e => { e.preventDefault(); navigate('/request') }}>Request access</a>
                 </>
               )}
               {!loading && user && (
                 <>
-                  <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/author') }}>Submit Brief</a>
-                  <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/dashboard') }}>Dashboard</a>
+                  <a href="#" className={`nav-link${isActive('/author')}`} onClick={e => { e.preventDefault(); navigate('/author') }}>Submit brief</a>
+                  <a href="#" className={`nav-link${isActive('/dashboard')}`} onClick={e => { e.preventDefault(); navigate('/dashboard') }}>Dashboard</a>
+                  <a href="#" className={`nav-link${isActive('/account')}`} onClick={e => { e.preventDefault(); navigate('/account') }}>Account</a>
                   <NotificationBell syncUser={syncUser} />
-                  <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/account') }}>Account</a>
                 </>
               )}
             </div>
@@ -939,18 +966,18 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
             <p className="form-helper">Adds a 5 to 7 question FAQ section at the end of the article and generates FAQPage structured data schema.</p>
           </div>
           <div className="form-group">
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+            <label className="checkbox-label">
               <input type="checkbox" name="generateAudio" checked={form.generateAudio} onChange={handleChange} />
               <span>
                 <strong>Generate audio version</strong>
                 <br />
-                <span style={{ fontWeight: 'normal', fontSize: '0.875rem', color: '#9ca3af' }}>Creates an MP3 audio reading of the article included in your download package.</span>
+                <span style={{ fontWeight: 'normal', fontSize: '0.875rem', color: 'var(--text-dim)' }}>Creates an MP3 audio reading of the article included in your download package.</span>
               </span>
             </label>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
             <button type="submit" className="btn-primary" style={{ flex: 1 }} disabled={loading} onClick={() => {}}>{loading ? 'Submitting...' : 'Submit Brief'}</button>
-            <button type="button" className="btn-secondary" style={{ flex: 1, border: '1px solid #d97706', color: '#d97706' }} disabled={loading} onClick={(e) => { e.preventDefault(); handleSubmit(e, 'saved') }}>{loading ? 'Saving...' : 'Save as Draft'}</button>
+            <button type="button" className="btn-secondary" style={{ flex: 1 }} disabled={loading} onClick={(e) => { e.preventDefault(); handleSubmit(e, 'saved') }}>{loading ? 'Saving...' : 'Save as Draft'}</button>
           </div>
         </form>
       </div></div>
@@ -958,372 +985,6 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
   )
 }
 
-// ─── Dashboard ──────────────────────────────────────────────────────────────
-function Dashboard({ navigate, syncUser, onEditDraft }) {
-  const { user } = useAuth()
-  const [submissions, setSubmissions] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [viewArticle, setViewArticle] = useState(null)
-  const [showRevisionModal, setShowRevisionModal] = useState(false)
-  const [revisionNotes, setRevisionNotes] = useState('')
-  const [revisionLoading, setRevisionLoading] = useState(false)
-  const [actionLoading, setActionLoading] = useState(null)
-  const [userRole, setUserRole] = useState('user')
-  const [statusFilter, setStatusFilter] = useState('all')
-
-  const KNOWN_AUTHORS = { 'ben-ryder': 'Ben Ryder', 'andy-husek': 'Andy Husek', 'sydney': 'Sydney', 'adam-scepaniak': 'Adam Scepaniak' }
-  const getAuthorDisplayName = (sub) => {
-    return sub.author_display_name || KNOWN_AUTHORS[sub.author] || sub.author || 'Unknown'
-  }
-
-  const getPipelineStep = (sub) => {
-    const { status, grade_status } = sub
-    if (status === 'saved' || status === 'draft') return 1
-    if (status === 'generating') return 2
-    if (status === 'article_done' && grade_status !== 'passed') return 3
-    if (status === 'article_done' && grade_status === 'passed') return 4
-    if (status === 'done') return 4
-    return 0
-  }
-
-  const getGradeColor = (score) => {
-    if (score == null) return '#9ca3af'
-    if (score >= 80) return '#5ab85a'
-    if (score >= 60) return '#d4a85a'
-    return '#d45a5a'
-  }
-
-  const handlePublish = async (sub) => {
-    if (!confirm('Mark this article as published? This marks the project as complete.')) return
-    setActionLoading(sub.id)
-    try {
-      await api(`/api/submissions/${sub.id}/publish`, { method: 'PATCH' })
-      setSubmissions(prev => prev.filter(s => s.id !== sub.id))
-    } catch (e) { console.error(e); alert('Failed to publish: ' + e.message) }
-    setActionLoading(null)
-  }
-
-  const handleDeleteCard = async (sub) => {
-    if (!confirm('Delete this article request? This cannot be undone.')) return
-    setSubmissions(prev => prev.filter(s => s.id !== sub.id))
-  }
-
-  const handleDiscardDraft = async (sub) => {
-    if (!confirm('Discard this draft? This cannot be undone.')) return
-    setActionLoading(sub.id)
-    try {
-      await api(`/api/submissions/${sub.id}`, { method: 'DELETE' })
-      setSubmissions(prev => prev.filter(s => s.id !== sub.id))
-    } catch (e) { console.error(e) }
-    setActionLoading(null)
-  }
-
-  const loadSubmissions = () => {
-    api('/api/submissions')
-      .then(data => {
-        setSubmissions(data.submissions || [])
-        setUserRole(data.role || 'user')
-      })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => {
-    loadSubmissions()
-    const interval = setInterval(loadSubmissions, 30000)
-    const onFocus = () => loadSubmissions()
-    window.addEventListener('focus', onFocus)
-    return () => { clearInterval(interval); window.removeEventListener('focus', onFocus) }
-  }, [])
-
-  const handleDownload = (sub) => {
-    const content = sub.article_content || sub.brief || ''
-    const text = content
-      .replace(/#{1,6}\s+/g, '')
-      .replace(/\*\*(.+?)\*\*/g, '$1')
-      .replace(/\*(.+?)\*/g, '$1')
-      .replace(/\[(.+?)\]\(.+?\)/g, '$1')
-      .replace(/^\s*[-*]\s+/gm, '')
-      .replace(/^\s*\d+\.\s+/gm, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-    const blob = new Blob([text], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${(sub.topic || 'article').replace(/[^a-z0-9]/gi, '-').toLowerCase()}.txt`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handleDownloadSeoReport = (sub) => {
-    if (!sub.seo_report_content) return
-    const blob = new Blob([sub.seo_report_content], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${(sub.topic || 'article').replace(/[^a-z0-9]/gi, '-').toLowerCase()}-seo-report.txt`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handleViewArticle = (sub) => {
-    // Navigate to the published content page (always relative path)
-    if (sub.content_path) {
-      const slug = sub.content_path.replace('/content/', '').replace('.md', '')
-      navigate('/content/' + slug)
-    } else {
-      // Fallback to CMS view if no content_path
-      navigate('/content/' + sub.id)
-    }
-  }
-
-  const handleRequestEdits = () => {
-    if (!viewArticle) return
-    setRevisionNotes(viewArticle.revision_notes || '')
-    setShowRevisionModal(true)
-  }
-
-  const submitRevision = async () => {
-    if (!revisionNotes.trim()) return
-    setRevisionLoading(true)
-    try {
-      await api(`/api/submissions/${viewArticle.id}/revision`, {
-        method: 'PUT',
-        body: JSON.stringify({ revision_notes: revisionNotes })
-      })
-      setShowRevisionModal(false)
-      setViewArticle(null)
-      loadSubmissions()
-    } catch (e) { console.error(e) }
-    setRevisionLoading(false)
-  }
-
-  return (
-    <div className="page">
-      <div className="container">
-        <div className="dashboard-header">
-          <h1 className="dashboard-title">Your Content.</h1>
-          <p className="dashboard-sub">{user ? `Signed in as ${user.name}` : 'Track and manage all your content requests.'}</p>
-        </div>
-        {error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}
-        {loading ? (
-          <p style={{ color: 'var(--text-muted)' }}>Loading...</p>
-        ) : submissions.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem 0', border: '1px solid var(--hunter-border)', background: 'var(--hunter-mid)' }}>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>No submissions yet.</p>
-            <button className="btn-primary" onClick={() => navigate('/author')}>Submit Your First Brief</button>
-          </div>
-        ) : (
-          <div className="section">
-            <div className="filter-row">
-              {['all', 'queued', 'in-progress', 'done', 'failed', 'published'].map(f => (
-                <button
-                  key={f}
-                  onClick={() => setStatusFilter(f)}
-                  className={`filter-btn${statusFilter === f ? ' active' : ''}`}
-                >
-                  {f === 'in-progress' ? 'In Progress' : f.charAt(0).toUpperCase() + f.slice(1)}
-                </button>
-              ))}
-            </div>
-            <div className="grid">
-              {submissions.filter(s => {
-                if (s.user_id !== user?.id) return false
-                if (statusFilter === 'all') return true
-                if (statusFilter === 'queued') return s.status === 'saved' || s.status === 'draft' || s.status === 'queued'
-                if (statusFilter === 'in-progress') return s.status === 'generating' || (s.status === 'article_done' && s.grade_status !== 'passed')
-                if (statusFilter === 'done') return (s.status === 'article_done' && s.grade_status === 'passed') || s.status === 'done'
-                if (statusFilter === 'failed') return s.status === 'generation_failed'
-                if (statusFilter === 'published') return s.status === 'published'
-                return true
-              }).map(sub => (
-                <div key={sub.id} className={`card${sub.status === 'generation_failed' ? ' failed' : sub.status === 'published' ? ' published' : ''}`}>
-                  <div className="card-meta">{new Date(sub.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} · {FORMAT_LABELS[sub.article_format] ?? FORMATS.find(f => f.id === sub.article_format)?.name ?? sub.article_format ?? 'Unknown'}</div>
-                  {sub.status === 'published' && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#5ab85a', background: '#0a1f0a', padding: '3px 10px', borderRadius: '10px', border: '0.5px solid #1a4a2a', marginTop: '6px' }}>
-                      <svg width="8" height="8"><circle cx="4" cy="4" r="3" fill="#5ab85a"/></svg>
-                      Published
-                    </span>
-                  )}
-                  <div className="card-title">{sub.topic}</div>
-                  {sub.product_link && (
-                    <a href={sub.product_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', color: 'var(--gold)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
-                      🔗 Product link
-                    </a>
-                  )}
-                  <KeywordPills keywordsJson={sub.target_keywords} />
-                  {sub.audio_path && (
-                    <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          const audio = document.getElementById(`audio-mini-${sub.id}`)
-                          if (!audio) return
-                          if (audio.paused) audio.play()
-                          else audio.pause()
-                        }}
-                        style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#92400e', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                      >
-                        <span style={{ fontSize: '0.6rem', lineHeight: 1 }}>▶</span>
-                      </button>
-                      <audio id={`audio-mini-${sub.id}`} src={`/api/images/serve?path=${sub.audio_path}`} style={{ height: '20px', width: '100%' }} />
-                    </div>
-                  )}
-                  <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                    {getPipelineStep(sub) === 0 ? (
-                      <span style={{ background: '#dc2626', color: 'white', fontSize: '0.75rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '4px' }}>Failed</span>
-                    ) : sub.status === 'revision_requested' ? (
-                      <span style={{ background: '#d97706', color: 'white', fontSize: '0.75rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '4px' }}>In Revision</span>
-                    ) : (
-                      <div className="pipeline">
-                        <div className="step">
-                          <div className={`step-dot ${getPipelineStep(sub) > 0 ? 'done' : getPipelineStep(sub) === 0 ? 'active' : ''}`}>
-                            {getPipelineStep(sub) > 0 && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                          </div>
-                          <div className={`step-label ${getPipelineStep(sub) === 0 ? 'active' : ''}`}>Brief</div>
-                        </div>
-                        <div className={`step-line ${getPipelineStep(sub) > 0 ? 'done' : ''}`}></div>
-                        <div className="step">
-                          <div className={`step-dot ${getPipelineStep(sub) > 1 ? 'done' : getPipelineStep(sub) === 1 ? 'active' : ''}`}>
-                            {getPipelineStep(sub) > 1 && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                          </div>
-                          <div className={`step-label ${getPipelineStep(sub) === 1 ? 'active' : ''}`}>Generating</div>
-                        </div>
-                        <div className={`step-line ${getPipelineStep(sub) > 1 ? 'done' : ''}`}></div>
-                        <div className="step">
-                          <div className={`step-dot ${getPipelineStep(sub) > 2 ? 'done' : getPipelineStep(sub) === 2 ? 'active' : ''}`}>
-                            {getPipelineStep(sub) > 2 && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                          </div>
-                          <div className={`step-label ${getPipelineStep(sub) === 2 ? 'active' : ''}`}>Grading</div>
-                        </div>
-                        <div className={`step-line ${getPipelineStep(sub) > 2 ? 'done' : ''}`}></div>
-                        <div className="step">
-                          <div className={`step-dot ${getPipelineStep(sub) > 3 ? 'done' : getPipelineStep(sub) === 3 ? 'active' : ''}`}>
-                            {getPipelineStep(sub) > 3 && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                          </div>
-                          <div className={`step-label ${getPipelineStep(sub) === 3 ? 'active' : ''}`}>Done</div>
-                        </div>
-                      </div>
-                    )}
-                    {getPipelineStep(sub) === 4 && (
-                      <div className="grade-row">
-                        {[
-                          { label: 'Grammar', score: sub.grammar_score },
-                          { label: 'Readability', score: sub.readability_score },
-                          { label: 'AI Detect', score: sub.ai_detection_score },
-                          { label: 'Plagiarism', score: sub.plagiarism_score },
-                          { label: 'SEO', score: sub.seo_score },
-                        ].map(g => (
-                          <div key={g.label} className="grade-pill">
-                            <div className="grade-label">{g.label}</div>
-                            <div className="grade-num" style={{ color: sub.grade_status === 'ungraded' ? '#9ca3af' : getGradeColor(g.score) }}>
-                              {sub.grade_status === 'ungraded' ? '—' : g.score}
-                            </div>
-                          </div>
-                        ))}
-                        {sub.overall_score != null && (
-                          <div className="overall-pill">
-                            <div className="grade-label">Overall</div>
-                            <div className="overall-num" style={{ color: sub.grade_status === 'ungraded' ? '#9ca3af' : getGradeColor(sub.overall_score) }}>
-                              {sub.grade_status === 'ungraded' ? '—' : sub.overall_score}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {getPipelineStep(sub) === 4 && (
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', width: '100%' }}>
-                        <button onClick={() => handleViewArticle(sub)} className="btn-gold-outline">View rendered article</button>
-                        <button onClick={() => window.open(`/api/articles?id=${sub.id}&format=zip`, '_blank')} className="btn-gold-outline">Download zip package</button>
-                        <button onClick={() => handlePublish(sub)} disabled={actionLoading === sub.id} className="btn-publish">Mark as published</button>
-                        <button onClick={() => handleDeleteCard(sub)} className="btn-danger">Delete</button>
-                      </div>
-                    )}
-                    {(sub.status === 'saved' || sub.status === 'draft') && (
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', width: '100%' }}>
-                        <button onClick={() => onEditDraft(sub)} className="btn-gold-outline">Edit</button>
-                        <button onClick={() => handleDiscardDraft(sub)} disabled={actionLoading === sub.id} className="btn-danger">Discard draft</button>
-                      </div>
-                    )}
-                    {sub.status === 'generating' && (
-                      <span style={{ fontSize: '0.75rem', color: '#6b7280', fontStyle: 'italic' }}>Generating your article...</span>
-                    )}
-                    {getPipelineStep(sub) === 3 && (
-                      <span style={{ fontSize: '0.75rem', color: '#6b7280', fontStyle: 'italic' }}>Grading in progress...</span>
-                    )}
-                    {sub.status === 'generation_failed' && (
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', width: '100%' }}>
-                        <button onClick={() => { setViewArticle(sub); setRevisionNotes(sub.revision_notes || ''); setShowRevisionModal(true) }} className="btn-gold-outline">Request revision</button>
-                        <button onClick={() => handleDeleteCard(sub)} className="btn-danger">Delete</button>
-                      </div>
-                    )}
-                    {sub.status === 'revision_requested' && (
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', width: '100%' }}>
-                        <button onClick={() => handleViewArticle(sub)} className="btn-gold-outline">View rendered article</button>
-                        <button onClick={() => window.open(`/api/articles?id=${sub.id}&format=zip`, '_blank')} className="btn-gold-outline">Download zip package</button>
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ marginTop: '0.5rem' }}>
-                    <span style={{ fontSize: '12px', color: '#5a7a5a' }}>
-                      By <span style={{ color: '#8aaa8a' }}>{getAuthorDisplayName(sub)}</span>{sub.article_content ? ` · ${sub.article_content.split(/\s+/).filter(Boolean).length} words` : ''}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {viewArticle && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }} onClick={() => setViewArticle(null)}>
-            <div style={{ background: '#faf9f7', maxWidth: '760px', width: '100%', maxHeight: '90vh', overflow: 'auto', borderRadius: '8px', padding: '2rem', position: 'relative' }} onClick={e => e.stopPropagation()}>
-              <button onClick={() => setViewArticle(null)} style={{ position: 'absolute', top: '1rem', right: '3.5rem', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}>×</button>
-              <button onClick={() => handleDownload(viewArticle)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: '#1a1a1a', border: 'none', color: '#faf9f7', padding: '0.35rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8125rem' }}>Download .txt</button>
-              <h2 style={{ fontFamily: "'Playfair Display', serif", marginBottom: '0.5rem', paddingRight: '6rem' }}>{viewArticle.topic}</h2>
-              <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.5rem' }}>By {viewArticle.author} · {viewArticle.email}</p>
-              {viewArticle.status === 'revision_requested' && viewArticle.revision_notes && (
-                <div style={{ background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '6px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
-                  <strong style={{ color: '#92400e' }}>Your revision request:</strong>
-                  <p style={{ color: '#78350f', marginTop: '0.25rem', whiteSpace: 'pre-wrap' }}>{viewArticle.revision_notes}</p>
-                </div>
-              )}
-              <div style={{ fontSize: '1.0625rem', lineHeight: '1.85', color: '#1a1a1a' }} dangerouslySetInnerHTML={{ __html: marked.parse(viewArticle.article_content || viewArticle.brief || '') }} />
-              {(viewArticle.status === 'done' || viewArticle.status === 'article_done' || viewArticle.status === 'in_review') && (
-                <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #e5e5e5', display: 'flex', justifyContent: 'flex-end' }}>
-                  <button onClick={handleRequestEdits} className="btn-secondary" style={{ padding: '0.5rem 1.25rem' }}>Request Edits</button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {showRevisionModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }} onClick={() => setShowRevisionModal(false)}>
-            <div style={{ background: '#faf9f7', maxWidth: '600px', width: '100%', borderRadius: '8px', padding: '2rem', position: 'relative' }} onClick={e => e.stopPropagation()}>
-              <button onClick={() => setShowRevisionModal(false)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}>×</button>
-              <h2 style={{ fontFamily: "'Playfair Display', serif", marginBottom: '0.5rem' }}>Request Edits</h2>
-              <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.25rem' }}>Describe the changes you need. Be specific about what to adjust, add, or remove.</p>
-              <textarea
-                value={revisionNotes}
-                onChange={e => setRevisionNotes(e.target.value)}
-                placeholder="Example: The third paragraph is too wordy, cut it in half. Also, can you add a sentence about durability near the end?"
-                rows={6}
-                style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.9375rem', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', lineHeight: '1.6' }}
-              />
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                <button onClick={() => setShowRevisionModal(false)} className="btn-secondary" style={{ padding: '0.5rem 1rem' }}>Cancel</button>
-                <button onClick={submitRevision} disabled={revisionLoading || !revisionNotes.trim()} className="btn-primary" style={{ padding: '0.5rem 1rem' }}>{revisionLoading ? 'Submitting...' : 'Submit Revision Request'}</button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 // ─── Account ───────────────────────────────────────────────────────────────
 function Account({ navigate, syncUser }) {
@@ -2323,7 +1984,7 @@ export default function App() {
         {page === '/request' && <RequestAccess navigate={navigate} />}
         {page === '/register' && <Register navigate={navigate} />}
         {page === '/author' && (user ? <Author navigate={navigate} syncUser={syncUser} editingDraft={editingDraft} onEditDone={() => setEditingDraft(null)} /> : <Login navigate={navigate} syncUser={syncUser} />)}
-        {page === '/dashboard' && (user ? <Dashboard navigate={navigate} syncUser={syncUser} onEditDraft={(sub) => { setEditingDraft(sub); navigate('/author') }} /> : <Login navigate={navigate} />)}
+        {page === '/dashboard' && (user ? <Dashboard /> : <Login navigate={navigate} />)}
         {page === '/account' && (user ? <Account navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/writer' && (user ? <Writer navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page.startsWith('/content/') && (user ? <ContentPage navigate={navigate} user={user} /> : <Login navigate={navigate} />)}

@@ -156,7 +156,39 @@ export async function onRequest(context) {
       if (!sub) return json({ error: 'Not found' }, 404);
       if (sub.user_id !== user.id && user.role !== 'admin') return json({ error: 'Forbidden' }, 403);
 
-      await context.env.submoacontent_db.prepare('UPDATE submissions SET status = ? WHERE id = ?').bind('published', id).run();
+      await context.env.submoacontent_db.prepare('UPDATE submissions SET status = ?, updated_at = ? WHERE id = ?').bind('published', Date.now(), id).run();
+
+      // Fire published notification email
+      if (sub.email) {
+        emailArticlePublished(context.env as any, sub.email, { id: sub.id, title: sub.topic }).catch(e => console.error('emailArticlePublished failed:', e));
+      }
+
+      return json({ success: true });
+
+    } catch (e) {
+      return json({ error: e.message }, 500);
+    }
+  }
+
+  // POST /api/submissions/:id/revise — reset and requeue for regeneration
+  if (context.request.method === 'POST' && pathname.endsWith('/revise')) {
+    const id = (pathname.split('/').filter(Boolean))[2];
+    if (!id) return json({ error: 'Missing submission id' }, 400);
+
+    try {
+      const sub = await context.env.submoacontent_db.prepare('SELECT * FROM submissions WHERE id = ?').bind(id).first();
+      if (!sub) return json({ error: 'Not found' }, 404);
+      if (sub.user_id !== user.id && user.role !== 'admin') return json({ error: 'Forbidden' }, 403);
+
+      await context.env.submoacontent_db.prepare(`
+        UPDATE submissions
+        SET status = 'queued', grade_status = 'ungraded', article_content = NULL, word_count = NULL, updated_at = ?
+        WHERE id = ?
+      `).bind(Date.now(), id).run();
+
+      // Enqueue regeneration
+      const { enqueueGenerationJob } = await import('../queue-producer');
+      await (enqueueGenerationJob as any)(context.env, id);
 
       return json({ success: true });
 

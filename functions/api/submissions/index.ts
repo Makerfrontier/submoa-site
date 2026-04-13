@@ -19,44 +19,103 @@ export async function onRequest(context) {
   // GET — list submissions
   if (context.request.method === 'GET') {
     try {
-      let stmt;
-      // Join with author_profiles to get display name
       let results;
-      const scoreCols = `s.submission_type, s.grade_status,
-        s.grammar_score, s.readability_score, s.ai_detection_score,
-        s.plagiarism_score, s.seo_score, s.overall_score,
-        s.rewrite_attempts, s.generation_attempts,
-        s.analysis_report, s.source_url, s.source_content`;
-
       if (user.role === 'admin') {
         const stmt = context.env.submoacontent_db.prepare(`
-          SELECT s.id, s.user_id, s.topic, s.author, s.article_format, s.optimization_target, s.tone_stance, s.vocal_tone, s.min_word_count,
-            s.product_link, s.product_details_manual, s.target_keywords, s.seo_research, s.human_observation, s.anecdotal_stories,
-            s.email, s.status, s.created_at, s.updated_at, s.content_path, s.article_content,
-            s.revision_notes, s.is_hidden, s.is_deleted, s.deleted_at, s.seo_report_content,
+          SELECT
+            s.id,
+            s.topic,
+            s.article_format,
+            s.optimization_target,
+            s.status,
+            s.grade_status,
+            s.word_count,
+            s.created_at,
+            s.updated_at,
+            s.zip_url,
+            CASE WHEN s.article_content IS NOT NULL AND s.article_content != '' THEN 1 ELSE 0 END as has_article,
             ap.name as author_display_name,
-            ${scoreCols}
+            g.grammar_score,
+            g.readability_score,
+            g.ai_detection_score,
+            g.plagiarism_score,
+            g.seo_score,
+            g.overall_score,
+            g.rewrite_attempts,
+            g.status as grade_result
           FROM submissions s
           LEFT JOIN author_profiles ap ON s.author = ap.slug
-          ORDER BY s.updated_at DESC
+          LEFT JOIN grades g ON g.id = (
+            SELECT id FROM grades
+            WHERE submission_id = s.id
+            ORDER BY COALESCE(graded_at, created_at) DESC
+            LIMIT 1
+          )
+          ORDER BY s.created_at DESC
         `);
         results = await stmt.all();
       } else {
         const stmt = context.env.submoacontent_db.prepare(`
-          SELECT s.id, s.user_id, s.topic, s.author, s.article_format, s.optimization_target, s.tone_stance, s.vocal_tone, s.min_word_count,
-            s.product_link, s.product_details_manual, s.target_keywords, s.seo_research, s.human_observation, s.anecdotal_stories,
-            s.email, s.status, s.created_at, s.updated_at, s.content_path, s.article_content,
-            s.revision_notes, s.is_hidden, s.is_deleted, s.seo_report_content,
+          SELECT
+            s.id,
+            s.topic,
+            s.article_format,
+            s.optimization_target,
+            s.status,
+            s.grade_status,
+            s.word_count,
+            s.created_at,
+            s.updated_at,
+            s.zip_url,
+            CASE WHEN s.article_content IS NOT NULL AND s.article_content != '' THEN 1 ELSE 0 END as has_article,
             ap.name as author_display_name,
-            ${scoreCols}
+            g.grammar_score,
+            g.readability_score,
+            g.ai_detection_score,
+            g.plagiarism_score,
+            g.seo_score,
+            g.overall_score,
+            g.rewrite_attempts,
+            g.status as grade_result
           FROM submissions s
           LEFT JOIN author_profiles ap ON s.author = ap.slug
-          WHERE s.user_id = ? AND s.is_deleted = 0
-          ORDER BY s.updated_at DESC
+          LEFT JOIN grades g ON g.id = (
+            SELECT id FROM grades
+            WHERE submission_id = s.id
+            ORDER BY COALESCE(graded_at, created_at) DESC
+            LIMIT 1
+          )
+          WHERE s.account_id = ? AND s.is_deleted = 0
+          ORDER BY s.created_at DESC
         `);
-        results = await stmt.bind(user.id).all();
+        results = await stmt.bind(user.account_id).all();
       }
-      return json({ submissions: results.results || [], role: user.role });
+
+      const submissions = (results.results || []).map(row => ({
+        id:                  row.id,
+        topic:               row.topic,
+        article_format:      row.article_format,
+        optimization_target: row.optimization_target,
+        status:              row.status,
+        grade_status:        row.grade_status,
+        word_count:          row.word_count,
+        created_at:          row.created_at,
+        updated_at:          row.updated_at,
+        zip_url:             row.zip_url || null,
+        article_content:     row.has_article ? true : null,
+        author_display_name: row.author_display_name || null,
+        grade: (row.grammar_score !== null || row.overall_score !== null) ? {
+          grammar_score:      row.grammar_score,
+          readability_score:  row.readability_score,
+          ai_detection_score: row.ai_detection_score,
+          plagiarism_score:   row.plagiarism_score,
+          seo_score:         row.seo_score,
+          overall_score:     row.overall_score,
+          rewrite_attempts:  row.rewrite_attempts,
+        } : null,
+      }));
+
+      return json({ user: { name: user.name }, submissions });
     } catch (e) {
       return json({ error: e.message }, 500);
     }

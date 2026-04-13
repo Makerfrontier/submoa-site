@@ -23,8 +23,8 @@ export async function onRequest(context) {
   // Recent submissions
   try {
     const result = await context.env.submoacontent_db
-      .prepare('SELECT id, topic, status, created_at, author FROM submissions WHERE user_id = ? ORDER BY created_at DESC LIMIT 10')
-      .bind(user.id)
+      .prepare('SELECT id, topic, status, created_at, author FROM submissions WHERE account_id = ? ORDER BY created_at DESC LIMIT 10')
+      .bind(user.account_id)
       .all();
     submissions.recent = result.results || [];
   } catch (e) {
@@ -34,8 +34,8 @@ export async function onRequest(context) {
   // In-progress submissions
   try {
     const result = await context.env.submoacontent_db
-      .prepare("SELECT id, topic, status, created_at, author FROM submissions WHERE user_id = ? AND status = 'generating' ORDER BY created_at DESC")
-      .bind(user.id)
+      .prepare("SELECT id, topic, status, created_at, author FROM submissions WHERE account_id = ? AND status = 'generating' ORDER BY created_at DESC")
+      .bind(user.account_id)
       .all();
     submissions.in_progress = result.results || [];
   } catch (e) {
@@ -45,8 +45,8 @@ export async function onRequest(context) {
   // Failed submissions
   try {
     const result = await context.env.submoacontent_db
-      .prepare("SELECT id, topic, status, created_at, author FROM submissions WHERE user_id = ? AND status = 'generation_failed' ORDER BY created_at DESC")
-      .bind(user.id)
+      .prepare("SELECT id, topic, status, created_at, author FROM submissions WHERE account_id = ? AND status = 'generation_failed' ORDER BY created_at DESC")
+      .bind(user.account_id)
       .all();
     submissions.failed = result.results || [];
   } catch (e) {
@@ -78,8 +78,8 @@ export async function onRequest(context) {
   // Queue counts
   try {
     const pending = await context.env.submoacontent_db
-      .prepare("SELECT COUNT(*) as count FROM submissions WHERE user_id = ? AND status = 'draft'")
-      .bind(user.id)
+      .prepare("SELECT COUNT(*) as count FROM submissions WHERE account_id = ? AND status = 'draft'")
+      .bind(user.account_id)
       .first();
     queue.pending = pending?.count ?? 0;
   } catch (e) {
@@ -88,8 +88,8 @@ export async function onRequest(context) {
 
   try {
     const gen = await context.env.submoacontent_db
-      .prepare("SELECT COUNT(*) as count FROM submissions WHERE user_id = ? AND status = 'generating'")
-      .bind(user.id)
+      .prepare("SELECT COUNT(*) as count FROM submissions WHERE account_id = ? AND status = 'generating'")
+      .bind(user.account_id)
       .first();
     queue.generating = gen?.count ?? 0;
   } catch (e) {
@@ -98,8 +98,8 @@ export async function onRequest(context) {
 
   try {
     const fail = await context.env.submoacontent_db
-      .prepare("SELECT COUNT(*) as count FROM submissions WHERE user_id = ? AND status = 'generation_failed'")
-      .bind(user.id)
+      .prepare("SELECT COUNT(*) as count FROM submissions WHERE account_id = ? AND status = 'generation_failed'")
+      .bind(user.account_id)
       .first();
     queue.failed = fail?.count ?? 0;
   } catch (e) {

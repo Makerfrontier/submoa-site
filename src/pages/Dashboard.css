@@ -1,0 +1,87 @@
+/* Dashboard.css
+   SubMoa Content — User Dashboard
+   Self-contained. All classes prefixed db- to prevent cascade collisions.
+   Do not merge with index.css or App.css. */
+
+.db-page { background: #0a1a0a; min-height: 100vh; padding: 32px 24px; font-family: sans-serif; }
+.db-page * { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Header */
+.db-header { margin-bottom: 24px; }
+.db-header h1 { font-size: 42px; font-weight: 700; color: #fff; font-family: Georgia, serif; margin-bottom: 12px; }
+.db-stats { display: flex; align-items: center; gap: 0.5rem; margin-top: 8px; }
+.db-stat { display: flex; align-items: baseline; gap: 0.3rem; }
+.db-stat-num { font-size: 18px; font-weight: 600; color: var(--gold); }
+.db-stat-label { font-size: 13px; color: #6a8a6a; text-transform: lowercase; }
+.db-stat-sep { color: #3a5a3a; font-size: 14px; }
+.db-divider { border: none; border-top: 1px solid #1a3a1a; margin: 20px 0 16px; }
+
+/* Filter bar */
+.db-filter-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.db-filter-btn { padding: 6px 14px; border-radius: 20px; font-size: 12px; cursor: pointer; border: 0.5px solid #1e3a1e; background: transparent; color: #6a8a6a; white-space: nowrap; font-family: sans-serif; }
+.db-filter-btn:hover { color: #a8c8a8; border-color: #2e5a2e; }
+.db-filter-btn.active { background: #c8973a; color: #000; border-color: #c8973a; font-weight: 500; }
+
+/* Card */
+.db-card { background: #0f200f; border: 0.5px solid #1e3a1e; border-radius: 10px; padding: 18px 22px; margin-bottom: 12px; }
+.db-card.db-card-failed { border-color: #5a1a1a; }
+.db-card.db-card-published { border-color: #1a4a2a; }
+
+/* Card top row */
+.db-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.db-card-meta { font-size: 11px; color: #5a7a5a; letter-spacing: .04em; text-transform: uppercase; }
+.db-badge-brief { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #2a1f00; color: #c8973a; font-weight: 500; }
+.db-badge-analysis { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #0a1a2e; color: #5a9fd4; font-weight: 500; }
+
+/* Card title */
+.db-card-title { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 14px; line-height: 1.35; }
+
+/* Published badge */
+.db-published-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #5ab85a; background: #0a1f0a; padding: 3px 10px; border-radius: 10px; border: 0.5px solid #1a4a2a; margin-bottom: 12px; }
+
+/* Alert bar */
+.db-alert-bar { background: #1f0a0a; border-radius: 5px; padding: 8px 12px; font-size: 12px; color: #d45a5a; margin-bottom: 12px; }
+
+/* Pipeline stepper */
+.db-pipeline { display: flex; align-items: center; margin-bottom: 14px; width: 100%; }
+.db-step { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.db-step-dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #1e3a1e; background: #0f200f; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.db-step-dot.db-done { background: #c8973a; border-color: #c8973a; }
+.db-step-dot.db-active { background: #0f200f; border-color: #c8973a; box-shadow: 0 0 0 3px rgba(200,151,58,0.2); }
+.db-step-label { font-size: 9px; color: #5a7a5a; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.db-step-label.db-active { color: #c8973a; }
+.db-step-line { flex: 1; height: 2px; background: #1e3a1e; margin: 0 4px; margin-bottom: 13px; min-width: 20px; }
+.db-step-line.db-done { background: #c8973a; }
+.db-step-line.db-done { background: #c8973a; }
+
+/* Grade row — always rendered, blank when no data */
+.db-grade-row { display: grid; grid-template-columns: repeat(5, 1fr) auto; gap: 6px; align-items: center; margin-bottom: 14px; }
+.db-grade-pill { text-align: center; padding: 5px 4px; border-radius: 4px; background: #081508; }
+.db-grade-label { font-size: 9px; color: #5a7a5a; margin-bottom: 2px; text-transform: uppercase; }
+.db-grade-num { font-size: 14px; font-weight: 600; min-height: 20px; }
+.db-grade-num.db-pass { color: #5ab85a; }
+.db-grade-num.db-warn { color: #d4a85a; }
+.db-grade-num.db-fail { color: #d45a5a; }
+.db-grade-num.db-blank { color: #1e3a1e; }
+.db-overall-pill { text-align: center; padding: 8px 12px; border-radius: 6px; background: #081508; min-width: 52px; }
+.db-overall-num { font-size: 22px; font-weight: 700; min-height: 28px; }
+.db-overall-label { font-size: 9px; color: #5a7a5a; text-transform: uppercase; }
+
+/* Author row */
+.db-author-row { font-size: 12px; color: #5a7a5a; margin-bottom: 12px; min-height: 18px; }
+.db-author-row span { color: #8aaa8a; }
+
+/* Action row — always rendered */
+.db-action-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 32px; }
+
+/* Buttons — active states */
+.db-btn { padding: 7px 16px; border-radius: 5px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: sans-serif; }
+.db-btn-gold { border: 0.5px solid #c8973a; color: #c8973a; background: transparent; }
+.db-btn-gold:hover { background: rgba(200,151,58,0.1); }
+.db-btn-green { border: 0.5px solid #5ab85a; color: #5ab85a; background: transparent; }
+.db-btn-green:hover { background: rgba(90,184,90,0.1); }
+.db-btn-danger { background: none; border: none; font-size: 12px; color: #d45a5a; cursor: pointer; text-decoration: underline; padding: 0; font-family: sans-serif; }
+
+/* Buttons — disabled/greyed state */
+.db-btn-disabled { border: 0.5px solid #1e3a1e; color: #2a4a2a; background: transparent; cursor: not-allowed; }
+.db-btn-disabled:hover { background: transparent; }
