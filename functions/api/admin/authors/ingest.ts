@@ -1,5 +1,6 @@
 import { json, getSessionUser, generateId } from '../../_utils';
 import type { Env } from '../../_utils';
+import { scoreGrammar, scoreReadability, scoreSeo, calcOverall } from '../../grading';
 
 // DataforSEO keywords for text endpoint
 async function fetchDataforSEO(text: string, login: string, password: string) {
@@ -56,15 +57,30 @@ export async function onRequest(context: { request: Request; env: Env }) {
     return json({ error: 'Method not allowed' }, 405);
   }
 
-  // Require admin session
+  // Require session
   const user = await getSessionUser(request, env);
   if (!user) return json({ error: 'Not authenticated' }, 401);
-  if (user.role !== 'admin') return json({ error: 'Forbidden' }, 403);
 
   try {
+    const body = await request.json().catch(() => ({}));
+    const scope = body.scope || 'admin';
+    const custom_name = body.custom_name || null;
+    const account_id = user.account_id || 'makerfrontier';
+
+    // User scope — enforce 3-author limit
+    if (scope === 'user') {
+      const { results } = await env.submoacontent_db.prepare(
+        `SELECT COUNT(*) as n FROM author_profiles WHERE account_id = ? AND source_type != 'global'`
+      ).bind(account_id).all();
+      if (results[0].n >= 3) {
+        return json({ error: 'Maximum 3 authors per account' }, 400);
+      }
+    }
+
     const contentType = request.headers.get('Content-Type') || '';
     let rssUrl: string | null = null;
     let textBlob: string | null = null;
+    let rssUrlInput: string | null = null;
 
     // Handle multipart form (DOCX upload)
     if (contentType.includes('multipart/form-data')) {
@@ -90,8 +106,8 @@ export async function onRequest(context: { request: Request; env: Env }) {
     }
     // Handle JSON (RSS URL)
     else if (contentType.includes('application/json')) {
-      const body = await request.json();
-      rssUrl = body.rss_url;
+      rssUrlInput = body.rss_url || body.rssUrl;
+      rssUrl = rssUrlInput;
 
       if (!rssUrl) {
         return json({ error: 'rss_url is required' }, 400);
@@ -260,22 +276,41 @@ Topics: ${keywordThemes.slice(0, 10).join(', ')}`;
       }
     }
 
-    // Step 3e: Generate slug
+    // Step 3e: Grade sample text
+    const sampleText = (textBlob || '').slice(0, 5000);
+    let sampleGrade = null;
+    if (sampleText.length > 100) {
+      try {
+        const [grammar, seo] = await Promise.all([
+          scoreGrammar(sampleText, env.LANGUAGETOOL_API_KEY),
+          Promise.resolve(scoreSeo(sampleText, [], '', sampleText.slice(0, 300))),
+        ]);
+        const readability = scoreReadability(sampleText);
+        const overall = calcOverall({ grammar, readability, ai_detection: null, plagiarism: null, seo, overall: null });
+        sampleGrade = { grammar, readability, ai_detection: null, plagiarism: null, seo, overall };
+        console.log('Sample grade:', sampleGrade);
+      } catch (gradeErr) {
+        console.error('Sample grading error:', gradeErr);
+      }
+    }
+
+    // Step 3f: Generate slug
     const uuid = generateId();
     const slug = `author-${uuid.slice(0, 6)}`;
 
-    // Step 3f: Discard raw text - never in response
+    // Step 3g: Discard raw text - never in response
     textBlob = '';
 
-    // Step 3g: Return preview
+    // Step 3h: Return preview
     const preview = {
       slug,
-      name: authorName,
+      name: custom_name || authorName,
       style_guide: styleGuide,
       keyword_themes: keywordThemes,
       semantic_entities: semanticEntities,
       source_type: rssUrl ? 'rss' : 'docx',
       rss_url: rssUrl || null,
+      grade: sampleGrade,
     };
     console.log('Preview being returned:', JSON.stringify(preview));
     return json(preview);

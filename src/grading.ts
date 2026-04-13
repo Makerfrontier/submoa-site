@@ -79,6 +79,41 @@ export function scoreReadability(text: string): number {
   return Math.min(100, Math.max(0, Math.round(fk)));
 }
 
+// Cache Copyleaks access tokens per-worker-instance to avoid re-authenticating on every call
+let _copyleaksToken: string | null = null;
+let _copyleaksTokenExpiry = 0;
+
+async function getCopyleaksToken(apiKey: string): Promise<string> {
+  // apiKey is stored as "email:key" format: "ben@example.com:00000000-0000-..."
+  const colonIdx = apiKey.indexOf(":");
+  if (colonIdx < 0) throw new Error("COPYLEAKS_API_KEY must be in format email:key");
+  const email = apiKey.slice(0, colonIdx);
+  const key = apiKey.slice(colonIdx + 1);
+
+  const res = await fetch("https://id.copyleaks.com/v3/account/login/api", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, key }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("Copyleaks login failed:", res.status, err);
+    throw new Error(`Copyleaks auth failed: ${res.status}`);
+  }
+  const data = (await res.json()) as { access_token: string };
+  return data.access_token;
+}
+
+async function ensureCopyleaksToken(apiKey: string): Promise<string> {
+  // Tokens are valid for ~24h; reuse until near expiry
+  if (_copyleaksToken && Date.now() < _copyleaksTokenExpiry - 60_000) {
+    return _copyleaksToken;
+  }
+  _copyleaksToken = await getCopyleaksToken(apiKey);
+  _copyleaksTokenExpiry = Date.now() + 86_400_000; // 24h
+  return _copyleaksToken;
+}
+
 // ---------------------------------------------------------------------------
 // 3c. AI Detection — Copyleaks
 // ---------------------------------------------------------------------------
@@ -91,6 +126,14 @@ export async function scoreAiDetection(
     return null;
   }
 
+  let accessToken: string;
+  try {
+    accessToken = await ensureCopyleaksToken(apiKey);
+  } catch (err) {
+    console.error("Copyleaks AI detection auth error:", err);
+    return null;
+  }
+
   const scanId = crypto.randomUUID();
 
   const res = await fetch(
@@ -98,7 +141,7 @@ export async function scoreAiDetection(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ text }),
@@ -128,6 +171,14 @@ export async function scorePlagiarism(
     return null;
   }
 
+  let accessToken: string;
+  try {
+    accessToken = await ensureCopyleaksToken(apiKey);
+  } catch (err) {
+    console.error("Copyleaks plagiarism auth error:", err);
+    return null;
+  }
+
   const scanId = crypto.randomUUID();
 
   const res = await fetch(
@@ -135,7 +186,7 @@ export async function scorePlagiarism(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -148,6 +199,7 @@ export async function scorePlagiarism(
       }),
     }
   );
+
 
   if (!res.ok) {
     console.error("Copyleaks plagiarism error:", res.status, await res.text());

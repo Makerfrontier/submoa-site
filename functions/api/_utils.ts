@@ -19,6 +19,7 @@ export interface Env {
   YOUTUBE_API_KEY: string;
   GENERATION_QUEUE: Queue;
   AI: Ai;
+  CRON_SECRET?: string;
   hashPassword(password: string): Promise<string>;
 }
 
@@ -30,6 +31,7 @@ export interface User {
   role: string;
   created_at: number;
   updated_at: number;
+  account_id?: string;
 }
 
 export interface Submission {
@@ -119,7 +121,7 @@ export async function getSessionUser(request: Request, env: Env): Promise<User |
   if (!token) return null;
 
   const sessions = await env.submoacontent_db
-    .prepare('SELECT s.*, u.id as uid, u.email, u.name, u.password_hash, u.role, u.created_at, u.updated_at FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = ? AND s.expires_at > ?')
+    .prepare('SELECT s.*, u.id as uid, u.email, u.name, u.password_hash, u.role, u.created_at, u.updated_at, u.account_id FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = ? AND s.expires_at > ?')
     .bind(token, Date.now())
     .all();
 
@@ -134,6 +136,7 @@ export async function getSessionUser(request: Request, env: Env): Promise<User |
     role: row.role || 'user',
     created_at: row.created_at,
     updated_at: row.updated_at,
+    account_id: row.account_id,
   };
 }
 

@@ -140,17 +140,7 @@ async function runGradingPipeline(
     `INSERT INTO grades (id, submission_id, grammar_score, readability_score,
        ai_detection_score, plagiarism_score, seo_score, overall_score,
        rewrite_attempts, status, graded_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(submission_id) DO UPDATE SET
-       grammar_score = excluded.grammar_score,
-       readability_score = excluded.readability_score,
-       ai_detection_score = excluded.ai_detection_score,
-       plagiarism_score = excluded.plagiarism_score,
-       seo_score = excluded.seo_score,
-       overall_score = excluded.overall_score,
-       rewrite_attempts = excluded.rewrite_attempts,
-       status = excluded.status,
-       graded_at = excluded.graded_at`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       gradeId,
