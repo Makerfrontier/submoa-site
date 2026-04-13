@@ -82,9 +82,14 @@ async function runGradingPipeline(
     .bind(submissionId)
     .run();
 
-  const keywords = submission.target_keywords
-    ? JSON.parse(submission.target_keywords)
-    : [];
+  let keywords: string[] = [];
+  try {
+    keywords = submission.target_keywords
+      ? JSON.parse(submission.target_keywords)
+      : [];
+  } catch (e) {
+    console.error("Failed to parse target_keywords:", e);
+  }
 
   const text = submission.article_content;
   const firstParagraph = text.split(/\n\n/)[0] ?? text.slice(0, 300);
