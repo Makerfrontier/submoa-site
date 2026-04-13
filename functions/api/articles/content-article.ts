@@ -13,26 +13,26 @@ function markdownToText(md) {
     .trim();
 }
 
-export async function onRequest(context) {
-  const { env } = context;
-  const url = new URL(context.request.url);
-
-  const id = url.searchParams.get('id');
-  const format = url.searchParams.get('format') || 'viewer'; // 'viewer' | 'txt'
-
-  const user = await getSessionUser(context.request, env);
-  if (!user) return json({ error: 'Not authenticated' }, 401);
-
-  if (!id) return json({ error: 'Missing article id' }, 400);
-
+export async function onRequestGet(context: any) {
+  const { request, env } = context;
   try {
+    const url = new URL(request.url);
+
+    const id = url.searchParams.get('id');
+    const format = url.searchParams.get('format') || 'viewer'; // 'viewer' | 'txt'
+
+    const user = await getSessionUser(request, env);
+    if (!user) return Response.json({ error: 'Not authenticated' }, { status: 401 });
+
+    if (!id) return Response.json({ error: 'Missing article id' }, { status: 400 });
+
     const stmt = env.submoacontent_db.prepare(`
       SELECT id, author, email, brief, article_content, content_path, status, created_at
       FROM submissions WHERE id = ?
     `);
     const article = await stmt.bind(id).first();
 
-    if (!article) return json({ error: 'Article not found' }, 404);
+    if (!article) return Response.json({ error: 'Article not found' }, { status: 404 });
 
     const content = article.article_content || '';
     const filename = (article.content_path || 'article').replace('/content/', '').replace('.md', '');
@@ -53,7 +53,7 @@ export async function onRequest(context) {
     // viewer format - return the article content as JSON for the client to render
     return json({ article, content });
 
-  } catch (e) {
-    return json({ error: e.message }, 500);
+  } catch (err: any) {
+    return Response.json({ error: err.message ?? 'Unknown error' }, { status: 500 });
   }
 }
