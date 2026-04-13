@@ -189,9 +189,9 @@ export async function scorePlagiarism(
     const scanId = crypto.randomUUID();
     console.log("Calling plagiarism endpoint, scanId:", scanId);
 
-    // Use /v3/businesses/submit/file for plain text content
+    // Try v3 businesses submit text endpoint
     const res = await fetch(
-      `https://api.copyleaks.com/v3/businesses/submit/file/${scanId}`,
+      `https://api.copyleaks.com/v3/businesses/submit/text/${scanId}`,
       {
         method: "POST",
         headers: {
@@ -200,7 +200,7 @@ export async function scorePlagiarism(
         },
         body: JSON.stringify({
           title,
-          content: text,
+          text,
           action: 'checkCredits',
         }),
       }
@@ -208,54 +208,21 @@ export async function scorePlagiarism(
 
     const responseText = await res.text();
     console.log("Plagiarism response status:", res.status);
-    console.log("Plagiarism response body:", responseText);
+    console.log("Plagiarism response body:", responseText.slice(0, 500));
 
     if (!res.ok) {
-      console.error("Plagiarism HTTP error:", res.status, responseText);
+      console.error("Plagiarism HTTP error:", res.status, responseText.slice(0, 200));
       return null;
     }
 
-    try {
-      const data = JSON.parse(responseText);
-      // For async, response contains scanId - need to poll for results
-      const resultScanId = data.scanId || scanId;
-      console.log("Plagiarism scan submitted, polling scanId:", resultScanId);
-
-      // Poll for results (max 30 seconds)
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 1000));
-        const pollRes = await fetch(
-          `https://api.copyleaks.com/v3/scans/${resultScanId}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        const pollText = await pollRes.text();
-        console.log(`Polling attempt ${i+1}, status:`, pollRes.status);
-
-        if (!pollRes.ok) {
-          console.error("Polling error:", pollRes.status, pollText);
-          continue;
-        }
-
-        const pollData = JSON.parse(pollText);
-        console.log("Poll response:", pollText);
-
-        if (pollData.status === 'completed') {
-          const plagiarismScore = pollData.results?.similarity ?? 0;
-          return Math.round((1 - plagiarismScore) * 100);
-        } else if (pollData.status === 'failed') {
-          console.error("Plagiarism scan failed:", pollText);
-          return null;
-        }
-        // Otherwise still processing, continue polling
-      }
-      console.error("Plagiarism polling timed out");
-      return null;
-    } catch (e) {
-      console.error("Plagiarism parse/processing error:", e);
-      return null;
+    const data = JSON.parse(responseText);
+    // If response has plagiarism score directly, return it
+    if (data.plagiarismScore !== undefined) {
+      return Math.round((1 - (data.plagiarismScore ?? 0)) * 100);
     }
+    // Otherwise scan was queued - we can't wait for async results in sync context
+    console.log("Plagiarism scan queued (async), skipping for now");
+    return null;
   } catch (err) {
     console.error("Plagiarism exception:", err);
     return null;

@@ -89,15 +89,26 @@ async function runGradingPipeline(
   const text = submission.article_content;
   const firstParagraph = text.split(/\n\n/)[0] ?? text.slice(0, 300);
 
-  // Run all scoring in parallel
-  const [grammar, readability, ai_detection, plagiarism, seo] =
-    await Promise.all([
-      scoreGrammar(text, env.LANGUAGETOOL_API_KEY),
-      Promise.resolve(scoreReadability(text)),
-      scoreAiDetection(text, env.COPYLEAKS_API_KEY),
-      scorePlagiarism(text, env.COPYLEAKS_API_KEY, submission.topic),
-      Promise.resolve(scoreSeo(text, keywords, submission.topic, firstParagraph)),
-    ]);
+  let grammar: number | null = null;
+  let readability: number | null = null;
+  let ai_detection: number | null = null;
+  let plagiarism: number | null = null;
+  let seo: number | null = null;
+
+  try {
+    // Run all scoring in parallel
+    [grammar, readability, ai_detection, plagiarism, seo] =
+      await Promise.all([
+        scoreGrammar(text, env.LANGUAGETOOL_API_KEY),
+        Promise.resolve(scoreReadability(text)),
+        scoreAiDetection(text, env.COPYLEAKS_API_KEY),
+        scorePlagiarism(text, env.COPYLEAKS_API_KEY, submission.topic),
+        Promise.resolve(scoreSeo(text, keywords, submission.topic, firstParagraph)),
+      ]);
+  } catch (err) {
+    console.error("Scoring error:", err);
+    // Continue with null values — null coalescing will apply defaults below
+  }
 
   // Fallback scores if external APIs fail
   const safeGrammar = grammar ?? 75;
