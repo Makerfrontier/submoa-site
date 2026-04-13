@@ -115,35 +115,42 @@ export async function scoreAiDetection(
   apiKey: string | undefined
 ): Promise<number | null> {
   if (!apiKey) {
-    console.warn("COPYLEAKS_API_KEY missing — AI detection skipped");
+    console.error("COPYLEAKS_API_KEY missing");
     return null;
   }
 
-  const token = await getCopyleaksToken(apiKey);
-  if (!token) return null;
+  try {
+    const token = await getCopyleaksToken(apiKey);
+    console.log("Copyleaks AI token obtained:", !!token);
+    if (!token) return null;
 
-  const scanId = crypto.randomUUID();
+    const scanId = crypto.randomUUID();
+    console.log("Calling AI detection endpoint, scanId:", scanId);
 
-  const res = await fetch(
-    `https://api.copyleaks.com/v2/writer-detector/${scanId}/check`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ text }),
-    }
-  );
+    const res = await fetch(
+      `https://api.copyleaks.com/v2/writer-detector/${scanId}/check`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text }),
+      }
+    );
 
-  if (!res.ok) {
-    console.error("Copyleaks AI detection error:", res.status, await res.text());
+    const responseText = await res.text();
+    console.log("AI detection response status:", res.status);
+    console.log("AI detection response body:", responseText);
+
+    if (!res.ok) return null;
+
+    const data = JSON.parse(responseText);
+    return Math.round((data.human ?? 0) * 100);
+  } catch (err) {
+    console.error("AI detection exception:", err);
     return null;
   }
-
-  const data: { human: number } = await res.json();
-  // human is 0–1, higher = more human-like = better score
-  return Math.round((data.human ?? 0) * 100);
 }
 
 // ---------------------------------------------------------------------------
@@ -155,41 +162,49 @@ export async function scorePlagiarism(
   title: string
 ): Promise<number | null> {
   if (!apiKey) {
-    console.warn("COPYLEAKS_API_KEY missing — plagiarism check skipped");
+    console.error("COPYLEAKS_API_KEY missing");
     return null;
   }
 
-  const token = await getCopyleaksToken(apiKey);
-  if (!token) return null;
+  try {
+    const token = await getCopyleaksToken(apiKey);
+    console.log("Copyleaks Plagiarism token obtained:", !!token);
+    if (!token) return null;
 
-  const scanId = crypto.randomUUID();
+    const scanId = crypto.randomUUID();
+    console.log("Calling plagiarism endpoint, scanId:", scanId);
 
-  const res = await fetch(
-    `https://api.copyleaks.com/v3/businesses/submit/url`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        url: `data:text/plain;base64,${btoa(text)}`,
-        properties: {
-          title,
-          action: 1, // checkCredits
-          scanId,
+    const res = await fetch(
+      `https://api.copyleaks.com/v3/businesses/submit/url`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
-      }),
-    }
-  );
+        body: JSON.stringify({
+          url: `data:text/plain;base64,${btoa(text)}`,
+          properties: {
+            title,
+            action: 1, // checkCredits
+            scanId,
+          },
+        }),
+      }
+    );
 
-  if (!res.ok) {
-    console.error("Copyleaks plagiarism error:", res.status, await res.text());
+    const responseText = await res.text();
+    console.log("Plagiarism response status:", res.status);
+    console.log("Plagiarism response body:", responseText);
+
+    if (!res.ok) return null;
+
+    const data = JSON.parse(responseText);
+    return Math.round((1 - (data.plagiarismScore ?? 0)) * 100);
+  } catch (err) {
+    console.error("Plagiarism exception:", err);
     return null;
   }
-
-  const data: { plagiarismScore: number } = await res.json();
-  return Math.round((1 - (data.plagiarismScore ?? 0)) * 100);
 }
 
 // ---------------------------------------------------------------------------
