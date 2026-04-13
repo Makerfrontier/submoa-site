@@ -89,7 +89,7 @@ export async function onRequest(context) {
       // List all articles
       try {
         const stmt = context.env.submoacontent_db.prepare(`
-          SELECT id, author, email, brief, content_path, status, article_content, created_at, updated_at
+          SELECT id, user_id, author, email, content_path, status, article_content, created_at, updated_at
           FROM submissions
           WHERE status = 'done'
           ORDER BY updated_at DESC

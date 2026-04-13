@@ -27,7 +27,7 @@ export async function onRequestGet(context: any) {
     if (!id) return Response.json({ error: 'Missing article id' }, { status: 400 });
 
     const stmt = env.submoacontent_db.prepare(`
-      SELECT id, author, email, brief, article_content, content_path, status, created_at
+      SELECT id, user_id, author, email, article_content, content_path, status, created_at
       FROM submissions WHERE id = ?
     `);
     const article = await stmt.bind(id).first();
