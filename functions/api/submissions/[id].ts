@@ -140,5 +140,21 @@ export async function onRequest(context) {
     }
   }
 
+  // DELETE /api/submissions/:id — delete a submission
+  if (context.request.method === 'DELETE') {
+    const id = (pathname.split('/').filter(Boolean))[2];
+    if (!id) return json({ error: 'Missing submission id' }, 400);
+
+    try {
+      const check = await context.env.submoacontent_db.prepare('SELECT id FROM submissions WHERE id = ? AND user_id = ?').bind(id, user.id).first();
+      if (!check && user.role !== 'admin') return json({ error: 'Not found' }, 404);
+
+      await context.env.submoacontent_db.prepare('DELETE FROM submissions WHERE id = ?').bind(id).run();
+      return json({ success: true });
+    } catch (e) {
+      return json({ error: e.message }, 500);
+    }
+  }
+
   return json({ error: 'Method not allowed' }, 405);
 }

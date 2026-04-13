@@ -20,7 +20,8 @@ export async function runPhaseB(
   topic: string,
   targetKeywords: string[],
   locationCode = 2840,
-  languageCode = 'en'
+  languageCode = 'en',
+  productPageText?: string
 ): Promise<PhaseBResult> {
   const primary = targetKeywords[0] || topic
   const topRankers: PhaseBResult['topRankers'] = []
@@ -125,6 +126,10 @@ export async function runPhaseB(
     ? contentGaps.map(g => `- **${g}** — ${(gapVolumes[g] || 0).toLocaleString()}/mo search volume`).join('\n')
     : '_No content gap data available_'
 
+  const productBlock = productPageText
+    ? `\n\n### Product Page Intelligence\n\nThe following was scraped from the product page at the submitted URL. Use this for accurate specs, pricing, features, and descriptions — do not invent product details:\n\n${productPageText}\n`
+    : '';
+
   const report = `
 
 ---
@@ -133,7 +138,7 @@ export async function runPhaseB(
 
 **Topic:** ${topic}
 **Primary keyword:** ${primary}
-**Generated:** ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+**Generated:** ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}${productBlock}
 
 ### Top Ranking Pages
 

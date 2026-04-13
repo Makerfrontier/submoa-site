@@ -7,6 +7,13 @@ export interface Env {
   submoacontent_db: D1Database;
   DISCORD_WEBHOOK_URL: string;
   RESEND_API_KEY: string;
+  OPENROUTER_API_KEY: string;
+  OPENROUTER_DEFAULT_MODEL: string;
+  OPENROUTER_VISION_MODEL: string;
+  DATAFORSEO_LOGIN: string;
+  DATAFORSEO_PASSWORD: string;
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
   hashPassword(password: string): Promise<string>;
 }
 
@@ -62,7 +69,7 @@ export async function hashPassword(password: string): Promise<string> {
   const passwordData = encoder.encode(password);
   const baseKey = await crypto.subtle.importKey('raw', passwordData, 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt: salt, iterations: 310000, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: salt, iterations: 100000, hash: 'SHA-256' },
     baseKey, 256
   );
   const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -78,7 +85,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
     const passwordData = encoder.encode(password);
     const baseKey = await crypto.subtle.importKey('raw', passwordData, 'PBKDF2', false, ['deriveBits']);
     const bits = await crypto.subtle.deriveBits(
-      { name: 'PBKDF2', salt, iterations: 310000, hash: 'SHA-256' },
+      { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
       baseKey, 256
     );
     const computedHash = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -148,4 +155,26 @@ export function deleteSessionCookie() {
 
 export function requireAuth(request: Request, env: Env): Promise<User | null> {
   return getSessionUser(request, env);
+}
+
+export async function scrapeProductPage(url: string): Promise<string> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; SubMoaBot/1.0)',
+      },
+      redirect: 'follow'
+    });
+    if (!response.ok) return '';
+    const html = await response.text();
+    return html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 5000);
+  } catch {
+    return '';
+  }
 }

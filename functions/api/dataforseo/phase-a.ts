@@ -43,7 +43,8 @@ export async function runPhaseA(
   topic: string,
   targetKeywords: string[],
   locationCode = 2840,
-  languageCode = 'en'
+  languageCode = 'en',
+  productPageText?: string
 ): Promise<PhaseAResult> {
   // 1. Keyword Suggestions — expand seed keywords into related terms
   const suggested: Array<{ keyword: string; search_volume: number; competition: string; cpc: number }> = []
@@ -100,10 +101,14 @@ export async function runPhaseA(
     .map(k => `- **${k.keyword}** — ${k.search_volume.toLocaleString()}/mo, CPC $${k.cpc.toFixed(2)}, ${k.competition} competition`)
     .join('\n')
 
+const productBlock = productPageText
+    ? `\n\n**Product Page Content:**\nThe following was scraped from the product page. Use this for accurate specs, pricing, features, and descriptions — do not invent product details:\n\n${productPageText}`
+    : '';
+
   const seoContextBlock = `## SEO Context
 
 **Primary keyword:** ${primary}
-**Search intent:** ${intent.toUpperCase()}${explanation}
+**Search intent:** ${intent.toUpperCase()}${explanation}${productBlock}
 
 **Keyword intelligence:**
 ${svList || `- No volume data available for "${primary}" — write naturally and optimize for semantic relevance`}

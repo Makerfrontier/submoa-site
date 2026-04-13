@@ -10,6 +10,6 @@
     }
   ],
   "vars": {
-    "DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/1490758087898959902/GSAcsa_aCYnunu_BcAgaTQfauiw9C_JZ8Gz3gvSEJyWf8"
+    // "DISCORD_WEBHOOK_URL": moved to secret
   }
 }

@@ -1,21 +1,21 @@
 import { json, setSessionCookie, generateId, verifyPassword, Env } from '../_utils';
 
 export async function onRequest(context: { request: Request; env: Env }) {
-  if (context.request.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-    });
-  }
-
-  if (context.request.method !== 'POST') {
-    return json({ error: 'Method not allowed' }, 405);
-  }
-
   try {
+    if (context.request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        },
+      });
+    }
+
+    if (context.request.method !== 'POST') {
+      return json({ error: 'Method not allowed' }, 405);
+    }
+
     const { email, password } = await context.request.json();
 
     if (!email || !password) {
@@ -31,10 +31,8 @@ export async function onRequest(context: { request: Request; env: Env }) {
       return json({ error: 'Invalid email or password' }, 401);
     }
 
-    // Create session
     const role = user.role || 'user'
     const isAdmin = role === 'admin'
-    // Admin sessions expire in 48h, regular users in 7 days
     const expiresAt = Date.now() + (isAdmin ? 48 : 168) * 60 * 60 * 1000;
 
     const sessionId = generateId();
@@ -54,6 +52,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
       user: { id: user.id, email: user.email, name: user.name, role }
     }), { headers });
   } catch (err: any) {
+    console.error('Login error:', err.message, err.stack);
     return json({ error: err.message || 'Server error' }, 500);
   }
 }
