@@ -51,9 +51,10 @@ export async function onRequest(context) {
             ORDER BY COALESCE(graded_at, created_at) DESC
             LIMIT 1
           )
+          WHERE s.account_id = ? AND s.is_deleted = 0
           ORDER BY s.created_at DESC
         `);
-        results = await stmt.all();
+        results = await stmt.bind(user.account_id).all();
       } else {
         const stmt = context.env.submoacontent_db.prepare(`
           SELECT

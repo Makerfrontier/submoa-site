@@ -1870,13 +1870,7 @@ function ContentPage({ navigate }) {
             </button>
           </div>
 
-          {/* Download button */}
-          <a
-            href={`/api/articles/${article.id}/download?format=zip`}
-            style={{ display: 'block', marginTop: '2rem', width: '100%', background: '#1a1a1a', color: '#faf9f7', border: 'none', padding: '0.875rem 1.25rem', borderRadius: '6px', fontSize: '0.9375rem', cursor: 'pointer', fontWeight: 600, textAlign: 'center', textDecoration: 'none' }}
-          >
-            Download article package
-          </a>
+
         </article>
       </div>
     </div>
@@ -1983,11 +1977,11 @@ export default function App() {
         {page === '/login' && <Login navigate={navigate} syncUser={syncUser} />}
         {page === '/request' && <RequestAccess navigate={navigate} />}
         {page === '/register' && <Register navigate={navigate} />}
-        {page === '/author' && (user ? <Author navigate={navigate} syncUser={syncUser} editingDraft={editingDraft} onEditDone={() => setEditingDraft(null)} /> : <Login navigate={navigate} syncUser={syncUser} />)}
-        {page === '/dashboard' && (user ? <Dashboard /> : <Login navigate={navigate} />)}
-        {page === '/account' && (user ? <Account navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
-        {page === '/writer' && (user ? <Writer navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
-        {page.startsWith('/content/') && (user ? <ContentPage navigate={navigate} user={user} /> : <Login navigate={navigate} />)}
+        {page === '/author' && (loading ? null : user ? <Author navigate={navigate} syncUser={syncUser} editingDraft={editingDraft} onEditDone={() => setEditingDraft(null)} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/dashboard' && (loading ? null : user ? <Dashboard /> : <Login navigate={navigate} />)}
+        {page === '/account' && (loading ? null : user ? <Account navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/writer' && (loading ? null : user ? <Writer navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page.startsWith('/content/') && (loading ? null : user ? <ContentPage navigate={navigate} user={user} /> : <Login navigate={navigate} />)}
         {page === '/reset' && <Reset navigate={navigate} />}
         {page === '/' && <Landing navigate={navigate} />}
       </div>

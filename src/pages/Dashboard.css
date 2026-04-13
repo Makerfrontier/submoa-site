@@ -81,6 +81,7 @@
 .db-btn-green { border: 0.5px solid #5ab85a; color: #5ab85a; background: transparent; }
 .db-btn-green:hover { background: rgba(90,184,90,0.1); }
 .db-btn-danger { background: none; border: none; font-size: 12px; color: #d45a5a; cursor: pointer; text-decoration: underline; padding: 0; font-family: sans-serif; }
+.db-btn-danger-solid { background: #d45a5a; color: #fff; border: none; padding: 7px 16px; border-radius: 5px; font-size: 12px; cursor: pointer; }
 
 /* Buttons — disabled/greyed state */
 .db-btn-disabled { border: 0.5px solid #1e3a1e; color: #2a4a2a; background: transparent; cursor: not-allowed; }

@@ -191,7 +191,7 @@ function ActionRow({ submission, onView, onDownload, onPublish, onDelete, onEdit
   const status      = submission.status;
   const gradeStatus = submission.grade_status;
   const hasArticle  = !!submission.article_content;
-  const hasZip      = !!submission.zip_url;       // ← INJECT: zip_url field from DB/API
+  const hasZip      = !!submission.article_content; // zip available whenever article exists
   const isDraft     = status === 'draft' || status === 'brief';
   const isFailed    = gradeStatus === 'needs_review' || status === 'failed';
   const isPassed    = gradeStatus === 'passed';
@@ -376,6 +376,7 @@ export default function Dashboard() {
   const [filter, setFilter]           = useState('all');
   const [loading, setLoading]         = useState(true);
   const [user, setUser]               = useState(null); // ← INJECT: from GET /api/me or session
+  const [confirmModal, setConfirmModal] = useState(null); // { message, onConfirm }
 
   // ── Load submissions ──
   const load = useCallback(async () => {
@@ -426,15 +427,18 @@ export default function Dashboard() {
 
   async function handlePublish(id) {
     // INJECT: mark as published
-    await fetch(`/api/submissions/${id}/publish`, { method: 'POST', credentials: 'include' });
+    await fetch(`/api/submissions/${id}/publish`, { method: 'PATCH', credentials: 'include' });
     await load();
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('Delete this submission?')) return;
-    // INJECT: delete submission
-    await fetch(`/api/submissions/${id}`, { method: 'DELETE', credentials: 'include' });
-    await load();
+    setConfirmModal({
+      message: 'Delete this submission? This cannot be undone.',
+      onConfirm: async () => {
+        await fetch(`/api/submissions/${id}`, { method: 'DELETE', credentials: 'include' });
+        await load();
+      }
+    });
   }
 
   async function handleEdit(id) {
@@ -443,10 +447,13 @@ export default function Dashboard() {
   }
 
   async function handleDiscard(id) {
-    if (!window.confirm('Discard this draft?')) return;
-    // INJECT: discard draft
-    await fetch(`/api/submissions/${id}`, { method: 'DELETE', credentials: 'include' });
-    await load();
+    setConfirmModal({
+      message: 'Discard this draft? This cannot be undone.',
+      onConfirm: async () => {
+        await fetch(`/api/submissions/${id}`, { method: 'DELETE', credentials: 'include' });
+        await load();
+      }
+    });
   }
 
   async function handleRequestRevision(id) {
@@ -518,6 +525,19 @@ export default function Dashboard() {
             onRequestRevision={() => handleRequestRevision(sub.id)}
           />
         ))
+      )}
+
+      {/* Confirmation modal */}
+      {confirmModal && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+          <div style={{background:'#0f200f',border:'0.5px solid #2e5a2e',borderRadius:8,padding:24,width:360,fontFamily:'sans-serif'}}>
+            <div style={{color:'#fff',fontSize:14,marginBottom:20}}>{confirmModal.message}</div>
+            <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+              <button className="db-btn db-btn-disabled" onClick={() => setConfirmModal(null)}>Cancel</button>
+              <button className="db-btn db-btn-danger-solid" onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }}>Confirm</button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
