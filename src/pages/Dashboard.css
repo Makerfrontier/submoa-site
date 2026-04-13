@@ -8,7 +8,7 @@
 
 /* Header */
 .db-header { margin-bottom: 24px; }
-.db-header h1 { font-size: 42px; font-weight: 700; color: #fff; font-family: Georgia, serif; margin-bottom: 12px; }
+.db-header h1 { font-size: 48px; font-weight: 700; color: #D4621A; font-family: Georgia, serif; margin-bottom: 12px; }
 .db-stats { display: flex; align-items: center; gap: 0.5rem; margin-top: 8px; }
 .db-stat { display: flex; align-items: baseline; gap: 0.3rem; }
 .db-stat-num { font-size: 18px; font-weight: 600; color: var(--gold); }

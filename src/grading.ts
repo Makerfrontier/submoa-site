@@ -153,9 +153,9 @@ export async function scoreAiDetection(
     return null;
   }
 
-  const data: { human: number } = await res.json();
+  const data: { summary: { human: number } } = await res.json();
   // human is 0–1, higher = more human-like = better score
-  return Math.round((data.human ?? 0) * 100);
+  return Math.round((data.summary?.human ?? 0) * 100);
 }
 
 // ---------------------------------------------------------------------------

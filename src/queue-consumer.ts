@@ -1,5 +1,26 @@
 // src/queue-consumer.ts
-// Cloudflare Queue consumer — processes generation jobs in submission order.
+// Cloudflare Queue consumer — processes generation jobs
+
+// ----------------------
+// Usage logging
+// ----------------------
+async function logApiUsage(
+  db: D1Database,
+  apiName: string,
+  inputTokens: number,
+  outputTokens: number,
+  costUsd: number,
+  submissionId?: string
+): Promise<void> {
+  try {
+    await db.prepare(`
+      INSERT INTO api_usage_log (api_name, input_tokens, output_tokens, cost_usd, submission_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(apiName, inputTokens, outputTokens, costUsd, submissionId || null, Date.now()).run();
+  } catch (e) {
+    console.error('logApiUsage failed:', e.message);
+  }
+} in submission order.
 // For each job:
 //   1. Fetch submission + author voice from DB
 //   2. Fetch writing skill from DB
@@ -133,6 +154,7 @@ async function processGenerationJob(
       submission.topic
     );
     keywordBlock = formatKeywordIntelligenceForPrompt(intel);
+    await logApiUsage(env.DB, 'DataforSEO', 0, 0, 0.01, submission.id); // approximate cost
   } catch (err) {
     console.error("DataforSEO failed — continuing without keyword intelligence:", err);
     keywordBlock = `=== KEYWORD INTELLIGENCE ===\nUnavailable — write naturally for topic: ${submission.topic}`;
@@ -185,6 +207,7 @@ async function processGenerationJob(
   // Step 6 — Call Claude API
   // -------------------------------------------------------------------------
   const articleContent = await callClaude(prompt, env.OPENROUTER_API_KEY);
+  await logApiUsage(env.DB, 'OpenRouter/Claude', 0, 0, 0.01, submission.id); // TODO: extract actual token usage from OpenRouter response
 
   if (!articleContent) {
     throw new Error(`Claude returned empty content for submission ${submission_id}`);

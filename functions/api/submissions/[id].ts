@@ -1,5 +1,5 @@
 import { json, getSessionUser, generateId } from '../_utils';
-import { emailArticlePublished } from '../notifications';
+import { emailArticlePublished, notifyBriefSubmitted } from '../notifications';
 
 async function createNotification(env, userId, type, message, link) {
   const id = generateId();
@@ -176,7 +176,12 @@ export async function onRequest(context) {
     if (!id) return json({ error: 'Missing submission id' }, 400);
 
     try {
-      const sub = await context.env.submoacontent_db.prepare('SELECT * FROM submissions WHERE id = ?').bind(id).first();
+      const sub = await context.env.submoacontent_db.prepare(`
+        SELECT s.*, ap.name as author_display_name
+        FROM submissions s
+        LEFT JOIN author_profiles ap ON s.author = ap.slug
+        WHERE s.id = ?
+      `).bind(id).first();
       if (!sub) return json({ error: 'Not found' }, 404);
       if (sub.user_id !== user.id && user.role !== 'admin') return json({ error: 'Forbidden' }, 403);
 
@@ -189,6 +194,15 @@ export async function onRequest(context) {
       // Enqueue regeneration
       const { enqueueGenerationJob } = await import('../queue-producer');
       await (enqueueGenerationJob as any)(context.env, id);
+
+      // Notify Discord
+      await notifyBriefSubmitted(context.env, {
+        id: sub.id,
+        title: sub.topic,
+        author_display_name: sub.author_display_name || sub.author,
+        article_format: sub.article_format,
+        optimization_target: sub.optimization_target,
+      });
 
       return json({ success: true });
 

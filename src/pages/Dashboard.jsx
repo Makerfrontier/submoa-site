@@ -377,6 +377,7 @@ export default function Dashboard() {
   const [loading, setLoading]         = useState(true);
   const [user, setUser]               = useState(null); // ← INJECT: from GET /api/me or session
   const [confirmModal, setConfirmModal] = useState(null); // { message, onConfirm }
+  const [toast, setToast] = useState(null);
 
   // ── Load submissions ──
   const load = useCallback(async () => {
@@ -459,6 +460,8 @@ export default function Dashboard() {
   async function handleRequestRevision(id) {
     // INJECT: trigger revision request
     await fetch(`/api/submissions/${id}/revise`, { method: 'POST', credentials: 'include' });
+    setToast('Revision requested — your article has been requeued.');
+    setTimeout(() => setToast(null), 4000);
     await load();
   }
 
@@ -488,6 +491,21 @@ export default function Dashboard() {
       </div>
 
       <hr className="db-divider" />
+
+      {toast && (
+        <div style={{
+          background: '#0a2a0a',
+          border: '0.5px solid #1e3a1e',
+          borderRadius: 6,
+          padding: '10px 16px',
+          marginBottom: 16,
+          fontFamily: 'sans-serif',
+          fontSize: 12,
+          color: '#5ab85a'
+        }}>
+          {toast}
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="db-filter-row">

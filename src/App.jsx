@@ -1,6 +1,7 @@
 import { useState, useEffect, createContext, useContext, useRef } from 'react'
 import { marked } from 'marked'
 import Dashboard from './pages/Dashboard'
+import AdminDashboard from './pages/AdminDashboard'
 
 // Strip the first H1/H2 from article markdown (page title already shows it above the divider)
 function stripFirstHeading(text) {
@@ -1519,6 +1520,7 @@ function ContentPage({ navigate }) {
   }, [])
 
   useEffect(() => {
+    if (loading) return;
     if (!user) {
       navigate('/login')
       return
@@ -1956,6 +1958,15 @@ function Reset({ navigate }) {
   )
 }
 
+// ─── AdminGuard ─────────────────────────────────────────────────────────────
+function AdminGuard({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" />;
+  if (user.role !== 'admin') return <Navigate to="/dashboard" />;
+  return children;
+}
+
 // ─── App ────────────────────────────────────────────────────────────────────
 export default function App() {
   const [user, setUser] = useState(null)
@@ -1997,6 +2008,7 @@ export default function App() {
         {page === '/dashboard' && (loading ? null : user ? <Dashboard /> : <Login navigate={navigate} />)}
         {page === '/account' && (loading ? null : user ? <Account navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/writer' && (loading ? null : user ? <Writer navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/admin' && (loading ? null : user ? <AdminGuard><AdminDashboard /></AdminGuard> : <Login navigate={navigate} />)}
         {page.startsWith('/content/') && (loading ? null : user ? <ContentPage navigate={navigate} user={user} /> : <Login navigate={navigate} />)}
         {page === '/reset' && <Reset navigate={navigate} />}
         {page === '/' && <Landing navigate={navigate} />}
