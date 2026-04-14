@@ -172,64 +172,6 @@ export async function runGradingPipeline(
   return { grade, status: 200 };
 }
 
-<<<<<<< Updated upstream
-// ---------------------------------------------------------------------------
-// Auto-rewrite
-// ---------------------------------------------------------------------------
-async function triggerRewrite(
-  env: Env,
-  submission: {
-    id: string;
-    title: string;
-    article_content: string;
-    human_observation: string;
-    style_guide: string | null;
-  },
-  scores: GradeScores,
-  keywords: string[],
-  attempt: number
-): Promise<void> {
-  const instructions = buildRewriteInstructions(scores, keywords);
-
-  const prompt = `AUTHOR VOICE:
-${submission.style_guide ?? "Write in a clear, natural, engaging style."}
-
-ORIGINAL BRIEF:
-${submission.human_observation ?? ""}
-
-REWRITE INSTRUCTIONS:
-${instructions}
-
-Rewrite the following article addressing all listed issues while preserving the author's voice and all factual content:
-
-${submission.article_content}`;
-
-  // Use Cloudflare Workers AI — swap model as needed
-  const result = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
-    messages: [{ role: "user", content: prompt }],
-    max_tokens: 4096,
-  }) as { response: string };
-
-  const newContent = result?.response?.trim();
-  if (!newContent) {
-    console.error("Rewrite returned empty content for submission", submission.id);
-    return;
-  }
-
-  await env.submoacontent_db.prepare(
-    `UPDATE submissions SET article_content = ? WHERE id = ?`
-  )
-    .bind(newContent, submission.id)
-    .run();
-
-  console.log(
-    `Rewrite attempt ${attempt + 1} complete for submission ${submission.id}`
-  );
-}
-
-// ---------------------------------------------------------------------------
-=======
->>>>>>> Stashed changes
 // Route handlers
 // ---------------------------------------------------------------------------
 
