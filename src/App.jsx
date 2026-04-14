@@ -324,12 +324,63 @@ function Footer() {
 function Landing({ navigate }) {
   return (
     <div className="page">
-      <section className="hero" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#0a1a0a', textAlign: 'center', padding: '80px 24px' }}>
-        <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 'clamp(2.5rem, 6vw, 5rem)', fontWeight: 400, lineHeight: 1.15, margin: 0 }}>
-          <span style={{ color: '#ffffff', display: 'block' }}>Precision Content at</span>
-          <span style={{ color: '#c8973a', display: 'block' }}>Sub-MOA Accuracy</span>
-        </h1>
-      </section>
+      <div style={{
+        backgroundImage: 'url(/hero-bg.jpg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        position: 'relative',
+      }}>
+        {/* Dark overlay so text is readable */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'rgba(10, 26, 10, 0.65)',
+        }} />
+
+        {/* Hero content sits above overlay */}
+        <div style={{
+          position: 'relative',
+          zIndex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 'clamp(1.5rem, 3vw, 3rem)',
+          flexWrap: 'wrap',
+          padding: 'clamp(4rem, 10vw, 8rem) 24px',
+        }}>
+          <img
+            src="/logo.png"
+            alt="SubMoa Content"
+            style={{
+              height: 'clamp(80px, 12vw, 160px)',
+              width: 'auto',
+              objectFit: 'contain',
+              imageRendering: '-webkit-optimize-contrast',
+            }}
+          />
+          <div>
+            <div style={{
+              fontFamily: 'Georgia, serif',
+              fontSize: 'clamp(2.5rem, 6vw, 5rem)',
+              lineHeight: 1.1,
+              color: '#ffffff',
+              whiteSpace: 'nowrap',
+            }}>
+              Precision Content at
+            </div>
+            <div style={{
+              fontFamily: 'Georgia, serif',
+              fontSize: 'clamp(2.5rem, 6vw, 5rem)',
+              lineHeight: 1.1,
+              color: '#c8973a',
+              whiteSpace: 'nowrap',
+            }}>
+              Sub-MOA Accuracy
+            </div>
+          </div>
+        </div>
+      </div>
       <Footer />
     </div>
   )
