@@ -250,6 +250,13 @@ function ActionRow({ submission, onView, onDownload, onPublish, onDelete, onEdit
         </button>
       )}
 
+      {/* Request revision — shown on graded articles that aren't published */}
+      {isGraded && !isPublished && (
+        <button className="db-btn db-btn-gold" onClick={onRequestRevision}>
+          Request revision
+        </button>
+      )}
+
       {/* Delete — always available */}
       <button className="db-btn-danger" onClick={onDelete}>
         Delete
