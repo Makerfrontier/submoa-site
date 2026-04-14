@@ -1811,11 +1811,11 @@ function ContentPage({ navigate }) {
               onClick={() => {
                 const notes = document.getElementById('revision-notes').value
                 if (!notes.trim()) return
-                fetch(`/api/articles/${article.id}`, {
+                fetch(`/api/submissions/${article.id}/revision`, {
                   method: 'PUT',
                   credentials: 'include',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ revision_notes: notes, status: 'revision_requested' })
+                  body: JSON.stringify({ revision_notes: notes })
                 }).then(res => res.json()).then(data => {
                   if (data.error) throw new Error(data.error)
                   alert('Revision request submitted.')

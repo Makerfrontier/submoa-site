@@ -310,5 +310,8 @@ export async function generateDocx(
     ],
   });
 
-  return await Packer.toBuffer(doc);
+  // Use toBlob instead of toBuffer for Cloudflare Workers compatibility
+  const blob = await Packer.toBlob(doc);
+  const arrayBuffer = await blob.arrayBuffer();
+  return new Uint8Array(arrayBuffer);
 }

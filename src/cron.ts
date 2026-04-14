@@ -8,8 +8,7 @@
 import { runGradingPipeline } from './routes/grade';
 import { packageArticle, findUnpackagedArticles } from './packager';
 import {
-  notifyGradingPassed,
-  notifyNeedsReview,
+  notifyGradingComplete,
   emailArticleReady,
 } from './notifications';
 
@@ -52,6 +51,9 @@ async function processUngradedArticles(env: Env): Promise<void> {
      LEFT JOIN users u ON ap.account_id = u.account_id
      WHERE s.status = 'article_done'
      AND s.grade_status = 'ungraded'
+     AND s.id NOT IN (
+       SELECT id FROM submissions WHERE status = 'article_done' AND grade_status = 'grading'
+     )
      ORDER BY s.created_at ASC`
   ).all<any>().catch(() => ({ results: [] }));
 
@@ -61,44 +63,30 @@ async function processUngradedArticles(env: Env): Promise<void> {
   for (const sub of results) {
     try {
       const { grade } = await runGradingPipeline(env, sub.id);
-      const status = (grade as any).status;
-      const overallScore = (grade as any).overall_score;
       const authorName = sub.author_display_name ?? sub.author;
 
-      if (status === 'passed') {
-        await notifyGradingPassed(env, {
+      // Every article gets graded — no status-based branching
+      const gradeRecord = await env.DB.prepare(
+        `SELECT grammar_score, readability_score, ai_detection_score,
+                plagiarism_score, seo_score, overall_score
+         FROM grades WHERE submission_id = ? ORDER BY graded_at DESC LIMIT 1`
+      ).bind(sub.id).first<any>().catch(() => null);
+
+      if (gradeRecord?.overall_score != null) {
+        await notifyGradingComplete(env, {
           id: sub.id,
           title: sub.topic,
           author_display_name: authorName,
-          overall_score: overallScore,
+          overall_score: gradeRecord.overall_score,
         });
 
         if (sub.author_email) {
           await emailArticleReady(env, sub.author_email, {
             id: sub.id,
             title: sub.topic,
-            overall_score: overallScore,
+            overall_score: gradeRecord.overall_score,
           });
         }
-      } else if (status === 'needs_review') {
-        const gradeRecord = await env.DB.prepare(
-          `SELECT grammar_score, readability_score, ai_detection_score,
-                  plagiarism_score, seo_score, overall_score
-           FROM grades WHERE submission_id = ? ORDER BY graded_at DESC LIMIT 1`
-        ).bind(sub.id).first<any>().catch(() => null);
-
-        await notifyNeedsReview(
-          env,
-          { id: sub.id, title: sub.topic, author_display_name: authorName },
-          {
-            grammar:      gradeRecord?.grammar_score ?? null,
-            readability:  gradeRecord?.readability_score ?? null,
-            ai_detection: gradeRecord?.ai_detection_score ?? null,
-            plagiarism:   gradeRecord?.plagiarism_score ?? null,
-            seo:          gradeRecord?.seo_score ?? null,
-            overall:      gradeRecord?.overall_score ?? null,
-          }
-        );
       }
     } catch (err) {
       console.error(`Grading error for ${sub.id}:`, err);

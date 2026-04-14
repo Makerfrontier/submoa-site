@@ -3,6 +3,8 @@
 // Streams pre-packaged zip from R2.
 // If package isn't ready yet, returns 202 with status.
 
+import JSZip from 'jszip';
+
 export async function onRequestGet({ request, env, params }) {
   // Auth
   const session = getCookieValue(request, 'submoa_session');
@@ -53,7 +55,6 @@ export async function onRequestGet({ request, env, params }) {
   }
 
   // Build zip from R2 objects
-  const JSZip = (await import('jszip')).default;
   const zip = new JSZip();
 
   zip.file('article.html', await htmlObj.arrayBuffer());

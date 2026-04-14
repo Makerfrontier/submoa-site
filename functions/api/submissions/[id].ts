@@ -187,7 +187,7 @@ export async function onRequest(context) {
 
       await context.env.submoacontent_db.prepare(`
         UPDATE submissions
-        SET status = 'queued', grade_status = 'ungraded', article_content = NULL, word_count = NULL, updated_at = ?
+        SET status = 'queued', grade_status = 'ungraded', article_content = NULL, word_count = NULL, package_status = NULL, updated_at = ?
         WHERE id = ?
       `).bind(Date.now(), id).run();
 
@@ -195,14 +195,14 @@ export async function onRequest(context) {
       const { enqueueGenerationJob } = await import('../queue-producer');
       await (enqueueGenerationJob as any)(context.env, id);
 
-      // Notify Discord
-      await notifyBriefSubmitted(context.env, {
+      // Notify Discord — fire and forget (don't let Discord failures break the revise response)
+      notifyBriefSubmitted(context.env, {
         id: sub.id,
         title: sub.topic,
         author_display_name: sub.author_display_name || sub.author,
         article_format: sub.article_format,
         optimization_target: sub.optimization_target,
-      });
+      }).catch(err => console.error('Discord notification failed on revise:', err));
 
       return json({ success: true });
 

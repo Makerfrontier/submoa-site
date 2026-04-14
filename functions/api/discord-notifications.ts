@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
-const DISCORD_CHANNEL_ID = "1493283525795905557";
+const DISCORD_CHANNEL_ID = "1492560955119505458";
 
 interface Env {
   DISCORD_BOT_TOKEN: string;
@@ -83,7 +83,31 @@ export async function notifyGradingPassed(
   }
 ): Promise<void> {
   const message = [
-    `✅ **ARTICLE READY** — grading passed`,
+    `✅ **ARTICLE READY** — graded`,
+    ``,
+    `**Title:** ${submission.title}`,
+    `**Author:** ${submission.author_display_name}`,
+    `**Overall Score:** ${submission.overall_score}/100`,
+    ``,
+    `Submission ID: \`${submission.id}\``,
+    `Dashboard: ${env.APP_URL ?? "https://www.submoacontent.com"}/dashboard`,
+  ].join("\n");
+
+  await postToDiscord(env.DISCORD_BOT_TOKEN, message);
+}
+
+// Every article gets graded — no pass/fail gate
+export async function notifyGradingComplete(
+  env: Env,
+  submission: {
+    id: string;
+    title: string;
+    author_display_name: string;
+    overall_score: number;
+  }
+): Promise<void> {
+  const message = [
+    `✅ **ARTICLE READY** — grading complete`,
     ``,
     `**Title:** ${submission.title}`,
     `**Author:** ${submission.author_display_name}`,

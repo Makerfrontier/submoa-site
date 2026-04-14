@@ -12,9 +12,7 @@ import {
   scorePlagiarism,
   scoreSeo,
   calcOverall,
-  buildRewriteInstructions,
   THRESHOLDS,
-  MAX_REWRITE_ATTEMPTS,
   type GradeScores,
 } from "../grading";
 import {
@@ -121,20 +119,9 @@ export async function runGradingPipeline(
   const now = Date.now();
   const gradeId = newId();
 
-  // Determine pass/fail/rewrite
-  let gradeStatus: string;
-  let submissionGradeStatus: string;
-
-  if (scores.overall >= THRESHOLDS.overall) {
-    gradeStatus = "passed";
-    submissionGradeStatus = "passed";
-  } else if (attempt < MAX_REWRITE_ATTEMPTS) {
-    gradeStatus = "rewriting";
-    submissionGradeStatus = "rewriting";
-  } else {
-    gradeStatus = "needs_review";
-    submissionGradeStatus = "needs_review";
-  }
+  // All articles are simply graded — scores are informational, no pass/fail gate
+  let gradeStatus = "graded";
+  let submissionGradeStatus = "graded";
 
   // Upsert grade row
   await env.submoacontent_db.prepare(
@@ -180,43 +167,12 @@ export async function runGradingPipeline(
     graded_at: now,
   };
 
-  // Handle rewrite
-  if (gradeStatus === "rewriting") {
-    await triggerRewrite(env, submission, scores, keywords, attempt);
-    return runGradingPipeline(env, submissionId, attempt + 1);
-  }
-
-  // PASSED — notify Discord + email author
-  if (gradeStatus === "passed") {
-    const authorName = (submission as any).author_display_name ?? submission.author;
-    await notifyGradingPassed(env, {
-      id: submissionId,
-      title: submission.title,
-      author_display_name: authorName,
-      overall_score: scores.overall,
-    });
-    if (submission.author_email) {
-      await emailArticleReady(env, submission.author_email, {
-        id: submissionId,
-        title: submission.title,
-        overall_score: scores.overall,
-      });
-    }
-  }
-
-  // NEEDS REVIEW — Discord alert
-  if (gradeStatus === "needs_review") {
-    const authorName = (submission as any).author_display_name ?? submission.author;
-    await notifyNeedsReview(env, {
-      id: submissionId,
-      title: submission.title,
-      author_display_name: authorName,
-    }, scores);
-  }
+  // No rewrite trigger — every article is graded and moves forward
 
   return { grade, status: 200 };
 }
 
+<<<<<<< Updated upstream
 // ---------------------------------------------------------------------------
 // Auto-rewrite
 // ---------------------------------------------------------------------------
@@ -272,6 +228,8 @@ ${submission.article_content}`;
 }
 
 // ---------------------------------------------------------------------------
+=======
+>>>>>>> Stashed changes
 // Route handlers
 // ---------------------------------------------------------------------------
 
@@ -317,20 +275,15 @@ export async function handleGradeAll(
 
   const summary = {
     total: results.length,
-    passed: 0,
-    needs_review: 0,
-    rewriting: 0,
+    graded: 0,
     errors: 0,
   };
 
   // Run sequentially to avoid rate-limiting external APIs
   for (const sub of results) {
     try {
-      const { grade } = await runGradingPipeline(env, sub.id);
-      const s = (grade as { status: string }).status;
-      if (s === "passed") summary.passed++;
-      else if (s === "needs_review") summary.needs_review++;
-      else if (s === "rewriting") summary.rewriting++;
+      await runGradingPipeline(env, sub.id);
+      summary.graded++;
     } catch (err) {
       console.error(`Error grading ${sub.id}:`, err);
       summary.errors++;

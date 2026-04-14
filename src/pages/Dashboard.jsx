@@ -19,8 +19,7 @@ const FILTERS = [
   { id: 'all',        label: 'All' },
   { id: 'queued',     label: 'Queued' },
   { id: 'progress',   label: 'In Progress' },
-  { id: 'done',       label: 'Done' },
-  { id: 'failed',     label: 'Failed' },
+  { id: 'done',  label: 'Done' },
   { id: 'published',  label: 'Published' },
 ];
 
@@ -56,9 +55,9 @@ function formatDate(ts) {
 // 0 = Brief, 1 = Generating, 2 = Grading, 3 = Done
 function getStepIndex(status, gradeStatus) {
   if (status === 'published')                           return 4; // all complete
-  if (status === 'article_done' && gradeStatus === 'passed') return 4; // all complete
+  if (status === 'article_done' && (gradeStatus === 'passed' || gradeStatus === 'graded')) return 4; // all complete
   if (status === 'article_done')                        return 3; // done step active
-  if (status === 'grading' || gradeStatus === 'grading' || gradeStatus === 'rewriting') return 2;
+  if (status === 'grading' || gradeStatus === 'grading') return 2;
   if (status === 'generating' || status === 'queued')   return 1;
   return 0; // draft / brief
 }
@@ -66,13 +65,10 @@ function getStepIndex(status, gradeStatus) {
 // Maps step index → status message shown next to stepper
 function getStatusText(status, gradeStatus) {
   if (status === 'published')                                return null;
-  if (gradeStatus === 'passed')                              return null;
-  if (gradeStatus === 'needs_review')                        return 'Needs review';
-  if (gradeStatus === 'rewriting')                           return 'Rewriting...';
+  if (gradeStatus === 'graded' || gradeStatus === 'passed') return 'Graded';
   if (status === 'grading' || gradeStatus === 'grading')     return 'Grading in progress...';
   if (status === 'generating')                               return 'Generating your article...';
   if (status === 'queued')                                   return 'Queued for generation...';
-  if (status === 'failed')                                   return null;
   return null;
 }
 
@@ -192,8 +188,7 @@ function ActionRow({ submission, onView, onDownload, onPublish, onDelete, onEdit
   const gradeStatus = submission.grade_status;
   const hasArticle  = !!submission.article_content;
   const isDraft     = status === 'draft' || status === 'brief';
-  const isFailed    = gradeStatus === 'needs_review' || status === 'failed';
-  const isPassed    = gradeStatus === 'passed';
+  const isGraded    = gradeStatus === 'graded' || gradeStatus === 'passed';
   const isPublished = status === 'published';
 
   // View rendered article — active when article exists
@@ -203,7 +198,7 @@ function ActionRow({ submission, onView, onDownload, onPublish, onDelete, onEdit
   const downloadActive  = packageStatus === 'ready';
   const downloadLabel   = packageStatus === 'packaging' ? 'Preparing...' : 'Download zip package';
   // Mark as published — active when grading passed and not already published
-  const publishActive  = isPassed && !isPublished;
+  const publishActive  = isGraded && !isPublished;
 
   return (
     <div className="db-action-row">
@@ -248,13 +243,6 @@ function ActionRow({ submission, onView, onDownload, onPublish, onDelete, onEdit
         </button>
       )}
 
-      {/* Request revision — only shown on failed/needs_review */}
-      {isFailed && (
-        <button className="db-btn db-btn-gold" onClick={onRequestRevision}>
-          Request revision
-        </button>
-      )}
-
       {/* Discard draft — only shown on draft cards */}
       {isDraft && (
         <button className="db-btn-danger" onClick={onDiscard}>
@@ -291,10 +279,8 @@ function SubmissionCard({ submission, onView, onDownload, onPublish, onDelete, o
   const stepIndex  = getStepIndex(status, grade_status);
   const statusText = getStatusText(status, grade_status);
   const isPublished = status === 'published';
-  const isFailed    = grade_status === 'needs_review' || status === 'failed';
-
   // Card border variant
-  const cardClass = `db-card${isFailed ? ' db-card-failed' : isPublished ? ' db-card-published' : ''}`;
+  const cardClass = `db-card${isPublished ? ' db-card-published' : ''}`;
 
   // Badge type — 'Brief' for most, 'Analysis' for published
   const badge = isPublished
@@ -325,13 +311,6 @@ function SubmissionCard({ submission, onView, onDownload, onPublish, onDelete, o
             <circle cx="4" cy="4" r="3" fill="#5ab85a"/>
           </svg>
           Published
-        </div>
-      )}
-
-      {/* ── Alert bar (only when failed/needs_review) ── */}
-      {isFailed && grade?.overall_score !== null && grade?.overall_score !== undefined && (
-        <div className="db-alert-bar">
-          Generation failed after 2 attempts. Overall score {grade.overall_score} — review required.
         </div>
       )}
 
@@ -409,9 +388,8 @@ export default function Dashboard() {
   const filtered = submissions.filter(s => {
     if (filter === 'all')       return true;
     if (filter === 'queued')    return s.status === 'queued';
-    if (filter === 'progress')  return ['generating', 'grading', 'rewriting'].includes(s.status) || ['grading', 'rewriting'].includes(s.grade_status);
-    if (filter === 'done')      return s.grade_status === 'passed';
-    if (filter === 'failed')    return s.grade_status === 'needs_review' || s.status === 'failed';
+    if (filter === 'progress')  return ['generating', 'grading'].includes(s.status) || s.grade_status === 'grading';
+    if (filter === 'done')      return s.grade_status === 'passed' || s.grade_status === 'graded';
     if (filter === 'published') return s.status === 'published';
     return true;
   });

@@ -185,7 +185,7 @@ function escapeHtml(str: string): string {
 export async function findUnpackagedArticles(env: Env): Promise<string[]> {
   const { results } = await env.DB.prepare(
     `SELECT id FROM submissions
-     WHERE grade_status = 'passed'
+     WHERE grade_status IN ('passed', 'graded')
      AND (package_status IS NULL OR package_status = 'failed')
      ORDER BY created_at ASC`
   ).all<{ id: string }>();

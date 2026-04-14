@@ -12,14 +12,11 @@ import {
   scorePlagiarism,
   scoreSeo,
   calcOverall,
-  buildRewriteInstructions,
   THRESHOLDS,
-  MAX_REWRITE_ATTEMPTS,
   type GradeScores,
 } from "../grading";
 import {
-  notifyGradingPassed,
-  notifyNeedsReview,
+  notifyGradingComplete,
   emailArticleReady,
 } from "../discord-notifications";
 
@@ -136,20 +133,9 @@ async function runGradingPipeline(
   const now = Date.now();
   const gradeId = newId();
 
-  // Determine pass/fail/rewrite
-  let gradeStatus: string;
-  let submissionGradeStatus: string;
-
-  if (scores.overall >= THRESHOLDS.overall) {
-    gradeStatus = "passed";
-    submissionGradeStatus = "passed";
-  } else if (attempt < MAX_REWRITE_ATTEMPTS) {
-    gradeStatus = "rewriting";
-    submissionGradeStatus = "rewriting";
-  } else {
-    gradeStatus = "needs_review";
-    submissionGradeStatus = "needs_review";
-  }
+  // Every article gets graded — no pass/fail gate, no rewrites
+  const gradeStatus = "graded";
+  const submissionGradeStatus = "graded";
 
   // Upsert grade row
   await env.submoacontent_db.prepare(
@@ -195,108 +181,25 @@ async function runGradingPipeline(
     graded_at: now,
   };
 
-  // Handle rewrite
-  if (gradeStatus === "rewriting") {
-    await triggerRewrite(env, submission, scores, keywords, attempt);
-    return runGradingPipeline(env, submissionId, attempt + 1);
-  }
-
-  // PASSED — notify Discord + email author
-  if (gradeStatus === "passed") {
-    const authorName = (submission as any).author_display_name ?? submission.author;
-    await notifyGradingPassed(env as any, {
+  // Notify — every article graded, user sees their score on the dashboard
+  const authorName = (submission as any).author_display_name ?? submission.author;
+  await notifyGradingComplete(env as any, {
+    id: submissionId,
+    title: submission.topic,
+    author_display_name: authorName,
+    overall_score: scores.overall,
+  });
+  if (submission.author_email) {
+    await emailArticleReady(env as any, submission.author_email, {
       id: submissionId,
       title: submission.topic,
-      author_display_name: authorName,
       overall_score: scores.overall,
     });
-    if (submission.author_email) {
-      await emailArticleReady(env as any, submission.author_email, {
-        id: submissionId,
-        title: submission.topic,
-        overall_score: scores.overall,
-      });
-    }
-  }
-
-  // NEEDS REVIEW — Discord alert
-  if (gradeStatus === "needs_review") {
-    const authorName = (submission as any).author_display_name ?? submission.author;
-    await notifyNeedsReview(env as any, {
-      id: submissionId,
-      title: submission.topic,
-      author_display_name: authorName,
-    }, scores);
   }
 
   return { grade, status: 200 };
 }
 
-// ---------------------------------------------------------------------------
-// Auto-rewrite
-// ---------------------------------------------------------------------------
-async function triggerRewrite(
-  env: Env,
-  submission: {
-    id: string;
-    title: string;
-    article_content: string;
-    human_observation: string;
-    style_guide: string | null;
-  },
-  scores: GradeScores,
-  keywords: string[],
-  attempt: number
-): Promise<void> {
-  const instructions = buildRewriteInstructions(scores, keywords);
-
-  const prompt = `AUTHOR VOICE:
-${submission.style_guide ?? "Write in a clear, natural, engaging style."}
-
-ORIGINAL BRIEF:
-${submission.human_observation ?? ""}
-
-REWRITE INSTRUCTIONS:
-${instructions}
-
-Rewrite the following article addressing all listed issues while preserving the author's voice and all factual content:
-
-${submission.article_content}`;
-
-  // Use OpenRouter for rewrites
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${env.OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://www.submoacontent.com",
-      "X-Title": "SubMoa Content",
-    },
-    body: JSON.stringify({
-      model: "anthropic/claude-3.5-sonnet",
-      max_tokens: 4096,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-  const data = await res.json() as { choices: Array<{ message: { content: string } }> };
-  const newContent = data.choices?.[0]?.message?.content?.trim();
-  if (!newContent) {
-    console.error("Rewrite returned empty content for submission", submission.id);
-    return;
-  }
-
-  await env.submoacontent_db.prepare(
-    `UPDATE submissions SET article_content = ? WHERE id = ?`
-  )
-    .bind(newContent, submission.id)
-    .run();
-
-  console.log(
-    `Rewrite attempt ${attempt + 1} complete for submission ${submission.id}`
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Route handlers
 // ---------------------------------------------------------------------------
 
@@ -342,20 +245,15 @@ export async function handleGradeAll(
 
   const summary = {
     total: results.length,
-    passed: 0,
-    needs_review: 0,
-    rewriting: 0,
+    graded: 0,
     errors: 0,
   };
 
   // Run sequentially to avoid rate-limiting external APIs
   for (const sub of results) {
     try {
-      const { grade } = await runGradingPipeline(env, sub.id);
-      const s = (grade as { status: string }).status;
-      if (s === "passed") summary.passed++;
-      else if (s === "needs_review") summary.needs_review++;
-      else if (s === "rewriting") summary.rewriting++;
+      await runGradingPipeline(env, sub.id);
+      summary.graded++;
     } catch (err) {
       console.error(`Error grading ${sub.id}:`, err);
       summary.errors++;

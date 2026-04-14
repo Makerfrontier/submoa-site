@@ -24,7 +24,6 @@
 
 /* Card */
 .db-card { background: #0f200f; border: 0.5px solid #1e3a1e; border-radius: 10px; padding: 18px 22px; margin-bottom: 12px; }
-.db-card.db-card-failed { border-color: #5a1a1a; }
 .db-card.db-card-published { border-color: #1a4a2a; }
 
 /* Card top row */

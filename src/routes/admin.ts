@@ -86,17 +86,13 @@ export async function handleGetStats(_request: Request, env: Env): Promise<Respo
   const rows = await Promise.all([
     env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions`).first<{ n: number }>(),
     env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status IN ('queued','generating')`).first<{ n: number }>(),
-    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'article_done' AND grade_status = 'passed'`).first<{ n: number }>(),
-    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE grade_status = 'needs_review'`).first<{ n: number }>(),
-    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'failed'`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'article_done' AND grade_status IN ('graded', 'passed')`).first<{ n: number }>(),
   ]);
 
   return json({
     total: rows[0]?.n ?? 0,
     in_progress: rows[1]?.n ?? 0,
     done: rows[2]?.n ?? 0,
-    needs_review: rows[3]?.n ?? 0,
-    failed: rows[4]?.n ?? 0,
   });
 }
 

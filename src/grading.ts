@@ -10,8 +10,6 @@ export const THRESHOLDS = {
   overall: 80,
 } as const;
 
-export const MAX_REWRITE_ATTEMPTS = 2;
-
 export interface GradeScores {
   grammar: number | null;
   readability: number | null;
@@ -115,8 +113,28 @@ async function ensureCopyleaksToken(apiKey: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// 3c. AI Detection — Copyleaks
+// 3c. AI Detection — Copyleaks Writer Detector (may be async)
 // ---------------------------------------------------------------------------
+async function pollWriterDetector(
+  accessToken: string,
+  scanId: string,
+  maxWaitMs = 30000
+): Promise<number | null> {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    await new Promise(r => setTimeout(r, 3000));
+    const res = await fetch(
+      `https://api.copyleaks.com/v2/writer-detector/${scanId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!res.ok) continue;
+    const data = await res.json() as { summary?: { human: number }; result?: { human: number } };
+    const human = data.summary?.human ?? data.result?.human ?? null;
+    if (human !== null) return Math.round(human * 100);
+  }
+  return null;
+}
+
 export async function scoreAiDetection(
   text: string,
   apiKey: string | undefined
@@ -153,14 +171,82 @@ export async function scoreAiDetection(
     return null;
   }
 
-  const data: { summary: { human: number } } = await res.json();
-  // human is 0–1, higher = more human-like = better score
-  return Math.round((data.summary?.human ?? 0) * 100);
+  // Try immediate response first
+  const data = await res.json() as {
+    summary?: { human: number };
+    result?: { human: number };
+    status?: string;
+  };
+
+  if (data.summary?.human !== undefined) {
+    return Math.round(data.summary.human * 100);
+  }
+  if (data.result?.human !== undefined) {
+    return Math.round(data.result.human * 100);
+  }
+
+  // If status indicates async, poll for results
+  if (data.status === 'in_progress' || data.status === 'pending' || data.status === undefined) {
+    return await pollWriterDetector(accessToken, scanId);
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
 // 3d. Plagiarism — Copyleaks
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// 3d. Plagiarism — Copyleaks (async, requires polling)
+// ---------------------------------------------------------------------------
+function utf8ToBase64(str: string): string {
+  // btoa doesn't handle Unicode — use TextEncoder via Uint8Array
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  let binary = '';
+  for (let i = 0; i < data.length; i++) {
+    binary += String.fromCharCode(data[i]);
+  }
+  return btoa(binary);
+}
+
+async function pollCopyleaksScan(
+  accessToken: string,
+  scanId: string,
+  maxWaitMs = 30000
+): Promise<{ completed: boolean; plagiarismScore?: number }> {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    const res = await fetch(
+      `https://api.copyleaks.com/v3/businesses/${scanId}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    if (!res.ok) {
+      // Not ready yet or error — wait and retry
+      await new Promise(r => setTimeout(r, 2000));
+      continue;
+    }
+    const data = await res.json() as {
+      status: string;
+      results?: { score: number }[];
+      plagiarismScore?: number;
+    };
+    if (data.status === 'completed') {
+      // Extract max plagiarism score from results
+      const score = data.plagiarismScore ??
+        (data.results && data.results.length > 0
+          ? Math.max(...data.results.map(r => r.score))
+          : 0);
+      return { completed: true, plagiarismScore: score };
+    }
+    // In progress — wait 3s before polling again
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  return { completed: false };
+}
+
 export async function scorePlagiarism(
   text: string,
   apiKey: string | undefined,
@@ -181,8 +267,11 @@ export async function scorePlagiarism(
 
   const scanId = crypto.randomUUID();
 
+  // Use proper UTF-8 base64 encoding to avoid btoa URIError on Unicode chars
+  const base64Text = utf8ToBase64(text);
+
   const res = await fetch(
-    `https://api.copyleaks.com/v3/businesses/submit/url`,
+    `https://api.copyleaks.com/v3/businesses/submit/text`,
     {
       method: "POST",
       headers: {
@@ -190,24 +279,45 @@ export async function scorePlagiarism(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        url: `data:text/plain;base64,${btoa(text)}`,
+        text: base64Text,
+        base64: true,
         properties: {
           title,
-          action: 1, // checkCredits
-          scanId,
+          action: 0, // full scan, returns results directly in newer API versions
         },
       }),
     }
   );
 
-
   if (!res.ok) {
-    console.error("Copyleaks plagiarism error:", res.status, await res.text());
+    const errText = await res.text();
+    console.error("Copyleaks plagiarism submit error:", res.status, errText);
     return null;
   }
 
-  const data: { plagiarismScore: number } = await res.json();
-  return Math.round((1 - (data.plagiarismScore ?? 0)) * 100);
+  // Try to parse as immediate result first (newer API versions)
+  const data = await res.json() as {
+    plagiarismScore?: number;
+    status?: string;
+    scanId?: string;
+  };
+
+  // If API returns score directly, use it
+  if (data.plagiarismScore !== undefined) {
+    return Math.round((1 - data.plagiarismScore) * 100);
+  }
+
+  // Otherwise if it returns a scanId and 'completed' status, poll for results
+  if (data.scanId || data.status === 'completed') {
+    const result = await pollCopyleaksScan(accessToken, data.scanId ?? scanId);
+    if (result.completed && result.plagiarismScore !== undefined) {
+      return Math.round((1 - result.plagiarismScore) * 100);
+    }
+  }
+
+  // Fallback — return a neutral score rather than blocking pipeline
+  console.warn("Copyleaks plagiarism: could not retrieve score, returning null");
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -279,38 +389,6 @@ export function calcOverall(scores: GradeScores): number {
   return Math.round(scoreSum / weightSum);
 }
 
-// ---------------------------------------------------------------------------
-// Rewrite instruction builder
-// ---------------------------------------------------------------------------
-export function buildRewriteInstructions(scores: GradeScores, targetKeywords: string[]): string {
-  const instructions: string[] = [];
-
-  if (scores.grammar !== null && scores.grammar < THRESHOLDS.grammar) {
-    instructions.push("Fix all grammar, punctuation, and sentence structure issues.");
-  }
-  if (scores.readability !== null && scores.readability < THRESHOLDS.readability) {
-    instructions.push("Shorten sentences, simplify vocabulary, improve paragraph flow.");
-  }
-  if (scores.ai_detection !== null && scores.ai_detection < THRESHOLDS.ai_detection) {
-    instructions.push(
-      "Rewrite to sound more natural and human. Add specific observations, vary sentence rhythm, use contractions, include concrete details."
-    );
-  }
-  if (scores.plagiarism !== null && scores.plagiarism < THRESHOLDS.plagiarism) {
-    instructions.push(
-      "Rephrase any sections that closely mirror common sources. Use original framing throughout."
-    );
-  }
-  if (scores.seo !== null && scores.seo < THRESHOLDS.seo) {
-    instructions.push(
-      `Naturally incorporate these keywords more thoroughly: ${targetKeywords.join(", ")}.`
-    );
-  }
-
-  return instructions.join("\n");
-}
-
-// ---------------------------------------------------------------------------
 // Score color helper (for UI)
 // ---------------------------------------------------------------------------
 export function scoreColor(score: number | null, threshold: number): "pass" | "warn" | "fail" {

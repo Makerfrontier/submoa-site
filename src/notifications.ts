@@ -83,7 +83,31 @@ export async function notifyGradingPassed(
   }
 ): Promise<void> {
   const message = [
-    `✅ **ARTICLE READY** — grading passed`,
+    `✅ **ARTICLE READY** — graded`,
+    ``,
+    `**Title:** ${submission.title}`,
+    `**Author:** ${submission.author_display_name}`,
+    `**Overall Score:** ${submission.overall_score}/100`,
+    ``,
+    `Submission ID: \`${submission.id}\``,
+    `Dashboard: ${env.APP_URL ?? "https://www.submoacontent.com"}/dashboard`,
+  ].join("\n");
+
+  await postToDiscord(env.DISCORD_BOT_TOKEN, message);
+}
+
+// Called when every article completes grading — no pass/fail gate
+export async function notifyGradingComplete(
+  env: Env,
+  submission: {
+    id: string;
+    title: string;
+    author_display_name: string;
+    overall_score: number;
+  }
+): Promise<void> {
+  const message = [
+    `✅ **ARTICLE READY** — grading complete`,
     ``,
     `**Title:** ${submission.title}`,
     `**Author:** ${submission.author_display_name}`,
@@ -226,7 +250,7 @@ export async function emailArticleReady(
     to,
     `Your article is ready — ${submission.title}`,
     `
-    <p>Your article has been generated and passed quality grading.</p>
+    <p>Your article has been generated and graded.</p>
     <p><strong>${submission.title}</strong></p>
     <p>Overall Score: <strong>${submission.overall_score}/100</strong></p>
     <p><a href="https://www.submoacontent.com/dashboard">Download your article</a></p>
