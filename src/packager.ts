@@ -5,7 +5,7 @@
 import { generateDocx } from './docx_generator';
 
 interface Env {
-  submoacontent_db: D1Database;
+  DB: D1Database;
   SUBMOA_IMAGES: R2Bucket;
   OPENROUTER_API_KEY: string;
 }
@@ -15,13 +15,13 @@ interface Env {
 // ---------------------------------------------------------------------------
 export async function packageArticle(env: Env, submissionId: string): Promise<void> {
   // Mark as packaging
-  await env.submoacontent_db.prepare(
+  await env.DB.prepare(
     `UPDATE submissions SET package_status = 'packaging', updated_at = ? WHERE id = ?`
   ).bind(Date.now(), submissionId).run();
 
   try {
     // Fetch submission + author + grade
-    const sub = await env.submoacontent_db.prepare(
+    const sub = await env.DB.prepare(
       `SELECT s.*,
               ap.name as author_display_name,
               g.grammar_score, g.readability_score, g.ai_detection_score,
@@ -103,7 +103,7 @@ export async function packageArticle(env: Env, submissionId: string): Promise<vo
     );
 
     // ── 5. Store manifest path and mark ready ────────────────────────────
-    await env.submoacontent_db.prepare(
+    await env.DB.prepare(
       `UPDATE submissions
        SET package_status = 'ready',
            zip_url = ?,
@@ -123,7 +123,7 @@ export async function packageArticle(env: Env, submissionId: string): Promise<vo
 
   } catch (err) {
     console.error(`Packaging failed for submission ${submissionId}:`, err);
-    await env.submoacontent_db.prepare(
+    await env.DB.prepare(
       `UPDATE submissions SET package_status = 'failed', updated_at = ? WHERE id = ?`
     ).bind(Date.now(), submissionId).run();
   }
@@ -183,7 +183,7 @@ function escapeHtml(str: string): string {
 // Find all passed articles that haven't been packaged yet
 // ---------------------------------------------------------------------------
 export async function findUnpackagedArticles(env: Env): Promise<string[]> {
-  const { results } = await env.submoacontent_db.prepare(
+  const { results } = await env.DB.prepare(
     `SELECT id FROM submissions
      WHERE grade_status = 'passed'
      AND (package_status IS NULL OR package_status = 'failed')
