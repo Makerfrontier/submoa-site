@@ -25,7 +25,7 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; overflow-x: hidden; -webkit-text-size-adjust: 100%; touch-action: pan-y; }
 
 body {
   font-family: 'Inter Variable', 'Inter', -apple-system, sans-serif;
@@ -34,6 +34,8 @@ body {
   min-height: 100vh;
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
 }
 
 a { color: var(--gold); text-decoration: none; }

@@ -23,8 +23,15 @@ async function requireAdmin(request: Request, env: Env): Promise<{ id: string; r
     )`
   ).bind(session, Date.now()).first<{ id: string; role: string }>();
 
-  if (!user || user.role !== 'admin') return new Response('Forbidden', { status: 403 });
+  if (!user || !['admin', 'super_admin'].includes(user.role)) return new Response('Forbidden', { status: 403 });
   return user;
+}
+
+async function requireSuperAdmin(request: Request, env: Env): Promise<{ id: string; role: string } | Response> {
+  const auth = await requireAdmin(request, env);
+  if (auth instanceof Response) return auth;
+  if ((auth as any).role !== 'super_admin') return new Response('Forbidden — super admin required', { status: 403 });
+  return auth;
 }
 
 function json(data: unknown, status = 200) {
@@ -51,14 +58,19 @@ export async function handleGetSubmissions(request: Request, env: Env): Promise<
   if (auth instanceof Response) return auth;
 
   const { results } = await env.submoacontent_db.prepare(
-    `SELECT s.*,
+    `SELECT s.*, s.topic as title,
             ap.name as author_display_name,
             g.grammar_score, g.readability_score, g.ai_detection_score,
             g.plagiarism_score, g.seo_score, g.overall_score,
             g.rewrite_attempts, g.status as grade_result_status
      FROM submissions s
      LEFT JOIN author_profiles ap ON s.author = ap.slug
-     LEFT JOIN grades g ON g.submission_id = s.id
+     LEFT JOIN grades g ON g.id = (
+       SELECT id FROM grades
+       WHERE submission_id = s.id
+       ORDER BY COALESCE(graded_at, created_at) DESC
+       LIMIT 1
+     )
      ORDER BY s.created_at DESC`
   ).all();
 
@@ -82,7 +94,10 @@ export async function handleGetSubmissions(request: Request, env: Env): Promise<
 // ---------------------------------------------------------------------------
 // GET /api/admin/stats
 // ---------------------------------------------------------------------------
-export async function handleGetStats(_request: Request, env: Env): Promise<Response> {
+export async function handleGetStats(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+  if (auth instanceof Response) return auth;
+
   const rows = await Promise.all([
     env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions`).first<{ n: number }>(),
     env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status IN ('queued','generating')`).first<{ n: number }>(),
@@ -104,7 +119,7 @@ export async function handleGetStats(_request: Request, env: Env): Promise<Respo
 // POST /api/admin/articles/:id/approve (needs_review → passed)
 // ---------------------------------------------------------------------------
 export async function handleApproveArticle(request: Request, env: Env, id: string): Promise<Response> {
-  const auth = await requireAdmin(request, env);
+  const auth = await requireSuperAdmin(request, env);
   if (auth instanceof Response) return auth;
 
   await env.submoacontent_db.prepare(
@@ -122,7 +137,7 @@ export async function handleApproveArticle(request: Request, env: Env, id: strin
 // POST /api/admin/articles/upload-for-grading
 // ---------------------------------------------------------------------------
 export async function handleUploadForGrading(request: Request, env: Env): Promise<Response> {
-  const auth = await requireAdmin(request, env);
+  const auth = await requireSuperAdmin(request, env);
   if (auth instanceof Response) return auth;
 
   const body = await request.json() as { content: string; filename: string };
@@ -140,26 +155,29 @@ export async function handleUploadForGrading(request: Request, env: Env): Promis
 // ---------------------------------------------------------------------------
 // GET /api/admin/queue
 // ---------------------------------------------------------------------------
-export async function handleGetQueue(_request: Request, env: Env): Promise<Response> {
+export async function handleGetQueue(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+  if (auth instanceof Response) return auth;
+
   const STALE_MS = 30 * 60 * 1000;
   const cutoff = Date.now() - STALE_MS;
 
   const [generating, queued, stuck] = await Promise.all([
     env.submoacontent_db.prepare(
-      `SELECT s.id, s.title, s.updated_at, ap.name as author_display_name, s.article_format
+      `SELECT s.id, s.topic as title, s.updated_at, ap.name as author_display_name, s.article_format
        FROM submissions s
        LEFT JOIN author_profiles ap ON s.author = ap.slug
        WHERE s.status = 'generating'`
     ).all<any>(),
     env.submoacontent_db.prepare(
-      `SELECT s.id, s.title, s.created_at, ap.name as author_display_name, s.article_format
+      `SELECT s.id, s.topic as title, s.created_at, ap.name as author_display_name, s.article_format
        FROM submissions s
        LEFT JOIN author_profiles ap ON s.author = ap.slug
        WHERE s.status = 'queued'
        ORDER BY s.created_at ASC`
     ).all<any>(),
     env.submoacontent_db.prepare(
-      `SELECT s.id, s.title, s.updated_at, ap.name as author_display_name
+      `SELECT s.id, s.topic as title, s.updated_at, ap.name as author_display_name
        FROM submissions s
        LEFT JOIN author_profiles ap ON s.author = ap.slug
        WHERE s.status = 'generating' AND s.updated_at < ?`,
@@ -191,7 +209,7 @@ export async function handleGetQueue(_request: Request, env: Env): Promise<Respo
 // POST /api/admin/queue/requeue/:id
 // ---------------------------------------------------------------------------
 export async function handleRequeue(request: Request, env: Env, id: string): Promise<Response> {
-  const auth = await requireAdmin(request, env);
+  const auth = await requireSuperAdmin(request, env);
   if (auth instanceof Response) return auth;
 
   await env.submoacontent_db.prepare(
@@ -207,7 +225,7 @@ export async function handleRequeue(request: Request, env: Env, id: string): Pro
 // POST /api/admin/queue/cancel/:id
 // ---------------------------------------------------------------------------
 export async function handleCancelQueue(request: Request, env: Env, id: string): Promise<Response> {
-  const auth = await requireAdmin(request, env);
+  const auth = await requireSuperAdmin(request, env);
   if (auth instanceof Response) return auth;
 
   await env.submoacontent_db.prepare(
@@ -220,7 +238,10 @@ export async function handleCancelQueue(request: Request, env: Env, id: string):
 // ---------------------------------------------------------------------------
 // GET /api/admin/health
 // ---------------------------------------------------------------------------
-export async function handleGetHealth(_request: Request, env: Env): Promise<Response> {
+export async function handleGetHealth(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+  if (auth instanceof Response) return auth;
+
   const STALE_MS = 30 * 60 * 1000;
   const cutoff = Date.now() - STALE_MS;
 
@@ -235,16 +256,16 @@ export async function handleGetHealth(_request: Request, env: Env): Promise<Resp
 
   const [stuck, lastGen, stats] = await Promise.all([
     env.submoacontent_db.prepare(
-      `SELECT s.id, s.title, s.updated_at, s.status, ap.name as author_display_name
+      `SELECT s.id, s.topic as title, s.updated_at, s.status, ap.name as author_display_name
        FROM submissions s
        LEFT JOIN author_profiles ap ON s.author = ap.slug
        WHERE s.status = 'generating' AND s.updated_at < ?`
     ).bind(cutoff).all<any>(),
     env.submoacontent_db.prepare(
-      `SELECT s.id, s.title, s.word_count, s.updated_at, g.overall_score,
+      `SELECT s.id, s.topic as title, s.word_count, s.updated_at, g.overall_score,
               CASE WHEN g.status = 'passed' THEN 1 ELSE 0 END as grade_passed
        FROM submissions s
-       LEFT JOIN grades g ON g.submission_id = s.id
+       LEFT JOIN grades g ON g.id = (SELECT id FROM grades WHERE submission_id = s.id ORDER BY COALESCE(graded_at, created_at) DESC LIMIT 1)
        WHERE s.status = 'article_done'
        ORDER BY s.updated_at DESC LIMIT 1`
     ).first<any>(),
@@ -352,7 +373,10 @@ export async function handleGetUsage(request: Request, env: Env): Promise<Respon
 // ---------------------------------------------------------------------------
 // GET /api/admin/authors
 // ---------------------------------------------------------------------------
-export async function handleGetAuthors(_request: Request, env: Env): Promise<Response> {
+export async function handleGetAuthors(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+  if (auth instanceof Response) return auth;
+
   const { results } = await env.submoacontent_db.prepare(
     `SELECT ap.*,
        COUNT(s.id) as article_count,
@@ -371,13 +395,13 @@ export async function handleGetAuthors(_request: Request, env: Env): Promise<Res
 // PUT /api/admin/authors/:slug
 // ---------------------------------------------------------------------------
 export async function handleUpdateAuthor(request: Request, env: Env, slug: string): Promise<Response> {
-  const auth = await requireAdmin(request, env);
+  const auth = await requireSuperAdmin(request, env);
   if (auth instanceof Response) return auth;
 
-  const body = await request.json() as { name: string };
+  const body = await request.json() as { name: string; style_guide?: string };
   await env.submoacontent_db.prepare(
-    `UPDATE author_profiles SET name = ?, updated_at = ? WHERE slug = ?`
-  ).bind(body.name, Date.now(), slug).run();
+    `UPDATE author_profiles SET name = ?, style_guide = ?, updated_at = ? WHERE slug = ?`
+  ).bind(body.name, body.style_guide ?? null, Date.now(), slug).run();
 
   return json({ ok: true });
 }
@@ -386,7 +410,7 @@ export async function handleUpdateAuthor(request: Request, env: Env, slug: strin
 // POST /api/admin/authors/:slug/toggle
 // ---------------------------------------------------------------------------
 export async function handleToggleAuthor(request: Request, env: Env, slug: string): Promise<Response> {
-  const auth = await requireAdmin(request, env);
+  const auth = await requireSuperAdmin(request, env);
   if (auth instanceof Response) return auth;
 
   const body = await request.json() as { is_active: boolean };
@@ -400,7 +424,10 @@ export async function handleToggleAuthor(request: Request, env: Env, slug: strin
 // ---------------------------------------------------------------------------
 // GET /api/admin/skills
 // ---------------------------------------------------------------------------
-export async function handleGetSkills(_request: Request, env: Env): Promise<Response> {
+export async function handleGetSkills(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+  if (auth instanceof Response) return auth;
+
   const { results } = await env.submoacontent_db.prepare(
     `SELECT id, name, version, active, updated_at,
             SUBSTR(content, 1, 100) as preview
@@ -424,7 +451,10 @@ export async function handleGetSkills(_request: Request, env: Env): Promise<Resp
 // ---------------------------------------------------------------------------
 // GET /api/admin/users
 // ---------------------------------------------------------------------------
-export async function handleGetUsers(_request: Request, env: Env): Promise<Response> {
+export async function handleGetUsers(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+  if (auth instanceof Response) return auth;
+
   const { results } = await env.submoacontent_db.prepare(
     `SELECT id, name, email, role, account_id, created_at FROM users ORDER BY created_at DESC`
   ).all();
@@ -436,12 +466,28 @@ export async function handleGetUsers(_request: Request, env: Env): Promise<Respo
 // PUT /api/admin/users/:id/role
 // ---------------------------------------------------------------------------
 export async function handleUpdateUserRole(request: Request, env: Env, id: string): Promise<Response> {
-  const auth = await requireAdmin(request, env);
+  const auth = await requireSuperAdmin(request, env);
   if (auth instanceof Response) return auth;
 
   const body = await request.json() as { role: string };
-  if (!['admin', 'user'].includes(body.role)) {
+  if (!['user', 'admin', 'super_admin'].includes(body.role)) {
     return json({ error: 'Invalid role' }, 400);
+  }
+
+  // Enforce: max 1 super_admin
+  if (body.role === 'super_admin') {
+    const existing = await env.submoacontent_db.prepare(
+      `SELECT COUNT(*) as n FROM users WHERE role = 'super_admin' AND id != ?`
+    ).bind(id).first<{ n: number }>();
+    if ((existing?.n ?? 0) >= 1) return json({ error: 'Only one super admin allowed' }, 400);
+  }
+
+  // Enforce: max 3 total admins (admin + super_admin)
+  if (body.role === 'admin' || body.role === 'super_admin') {
+    const existing = await env.submoacontent_db.prepare(
+      `SELECT COUNT(*) as n FROM users WHERE role IN ('admin', 'super_admin') AND id != ?`
+    ).bind(id).first<{ n: number }>();
+    if ((existing?.n ?? 0) >= 3) return json({ error: 'Maximum 3 admins allowed' }, 400);
   }
 
   await env.submoacontent_db.prepare(
@@ -452,9 +498,60 @@ export async function handleUpdateUserRole(request: Request, env: Env, id: strin
 }
 
 // ---------------------------------------------------------------------------
+// DELETE /api/admin/users/:id — delete user, reassign content
+// ---------------------------------------------------------------------------
+export async function handleDeleteUser(request: Request, env: Env, id: string): Promise<Response> {
+  const auth = await requireSuperAdmin(request, env);
+  if (auth instanceof Response) return auth;
+
+  if (id === (auth as any).id) {
+    return json({ error: 'Cannot delete your own account' }, 400);
+  }
+
+  const target = await env.submoacontent_db.prepare(
+    `SELECT role, account_id, name FROM users WHERE id = ?`
+  ).bind(id).first<{ role: string; account_id: string; name: string }>();
+
+  if (!target) return json({ error: 'User not found' }, 404);
+  if (target.role === 'super_admin') return json({ error: 'Cannot delete a super admin' }, 403);
+
+  const deletedLabel = `deleted-user-${id.slice(0, 8)}`;
+
+  // Reassign submissions by user_id — never touch other users' submissions
+  await env.submoacontent_db.prepare(
+    `UPDATE submissions SET account_id = ?, updated_at = ? WHERE user_id = ?`
+  ).bind(deletedLabel, Date.now(), id).run();
+
+  // Reassign only author profiles that are exclusively used by this user's submissions
+  // (i.e. not referenced by any other user's submissions) — never rename them
+  await env.submoacontent_db.prepare(
+    `UPDATE author_profiles SET account_id = ?, updated_at = ?
+     WHERE slug IN (
+       SELECT DISTINCT author FROM submissions WHERE user_id = ?
+     )
+     AND slug NOT IN (
+       SELECT DISTINCT author FROM submissions WHERE user_id != ? AND account_id != ?
+     )`
+  ).bind(deletedLabel, Date.now(), id, id, deletedLabel).run();
+
+  await env.submoacontent_db.prepare(
+    `DELETE FROM sessions WHERE user_id = ?`
+  ).bind(id).run();
+
+  await env.submoacontent_db.prepare(
+    `DELETE FROM users WHERE id = ?`
+  ).bind(id).run();
+
+  return json({ ok: true, reassigned_to: deletedLabel });
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/admin/badge-counts
 // ---------------------------------------------------------------------------
-export async function handleGetBadgeCounts(_request: Request, env: Env): Promise<Response> {
+export async function handleGetBadgeCounts(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+  if (auth instanceof Response) return auth;
+
   const STALE_MS = 30 * 60 * 1000;
   const cutoff = Date.now() - STALE_MS;
 

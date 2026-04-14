@@ -7,6 +7,8 @@ import Platform from './pages/Platform'
 import Documentation from './pages/Documentation'
 import AuthorFrameworks from './pages/AuthorFrameworks'
 import SeoMethodology from './pages/SeoMethodology'
+import InfographicBrief from './pages/InfographicBrief'
+import PromptBuilder from './pages/PromptBuilder'
 
 // Strip the first H1/H2 from article markdown (page title already shows it above the divider)
 function stripFirstHeading(text) {
@@ -203,6 +205,12 @@ function Nav({ navigate, syncUser }) {
     return () => window.removeEventListener('popstate', handleNav)
   }, [])
 
+  // navTo updates both page state and active path atomically
+  const navTo = (path) => {
+    navigate(path)
+    setActivePath(path)
+  }
+
   const isActive = (path) => activePath === path ? ' active' : ''
 
   return (
@@ -218,23 +226,23 @@ function Nav({ navigate, syncUser }) {
       <div className={`nav-mobile-overlay${menuOpen ? ' nav-mobile-overlay--open' : ''}`} onClick={closeMenu}>
         <div className="nav-mobile-menu" onClick={e => e.stopPropagation()}>
           <button className="nav-mobile-close" onClick={closeMenu}>×</button>
-          <img src="/logo.png" alt="SubMoa Content" className="nav-mobile-logo" onClick={() => { closeMenu(); navigate('/') }} />
           <div className="nav-mobile-links">
             {!loading && !user && (
               <>
-                <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/platform') }}>Platform</a>
-                <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/login') }}>Login</a>
-                <a href="#" className="nav-mobile-cta" onClick={e => { e.preventDefault(); closeMenu(); navigate('/request') }}>Request access</a>
+                <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navTo('/login') }}>Login</a>
+                <a href="#" className="nav-mobile-cta" onClick={e => { e.preventDefault(); closeMenu(); navTo('/request') }}>Request access</a>
               </>
             )}
             {!loading && user && (
               <>
-                <a href="#" className={isActive('/') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/') }}>Home</a>
-                <a href="#" className={isActive('/author') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/author') }}>Submit brief</a>
-                <a href="#" className={isActive('/dashboard') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/dashboard') }}>Dashboard</a>
-                <a href="#" className={isActive('/account') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/account') }}>Account</a>
-                {user.role === 'admin' && (
-                  <a href="#" className={isActive('/admin') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/admin') }}>Admin</a>
+                <a href="#" className={isActive('/') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navTo('/') }}>Home</a>
+                <a href="#" className={isActive('/author') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navTo('/author') }}>Submit brief</a>
+                <a href="#" className={isActive('/brief/infographic') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navTo('/brief/infographic') }}>Infographic Brief</a>
+                <a href="#" className={isActive('/prompt-builder') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navTo('/prompt-builder') }}>Prompt Builder</a>
+                <a href="#" className={isActive('/dashboard') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navTo('/dashboard') }}>Dashboard</a>
+                <a href="#" className={isActive('/account') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navTo('/account') }}>Account</a>
+                {(user.role === 'admin' || user.role === 'super_admin') && (
+                  <a href="#" className={isActive('/admin') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navTo('/admin') }}>Admin</a>
                 )}
               </>
             )}
@@ -246,29 +254,37 @@ function Nav({ navigate, syncUser }) {
       <nav className="nav">
         <div className="container">
           <div className="nav-inner">
-            <img
-              src="/logo.png"
-              alt="SubMoa Content"
-              className="nav-logo"
-              onClick={() => navigate('/')}
-              style={{ cursor: 'pointer' }}
-            />
             <div className="nav-links">
               {!loading && !user && (
                 <>
-                  <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/platform') }}>Platform</a>
-                  <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/login') }}>Login</a>
-                  <a href="#" className="nav-cta" onClick={e => { e.preventDefault(); navigate('/request') }}>Request access</a>
+                  <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navTo('/login') }}>Login</a>
+                  <a href="#" className="nav-cta" onClick={e => { e.preventDefault(); navTo('/request') }}>Request access</a>
                 </>
               )}
               {!loading && user && (
                 <>
-                  <a href="#" className={`nav-link${isActive('/')}`} onClick={e => { e.preventDefault(); navigate('/') }}>Home</a>
-                  <a href="#" className={`nav-link${isActive('/author')}`} onClick={e => { e.preventDefault(); navigate('/author') }}>Submit brief</a>
-                  <a href="#" className={`nav-link${isActive('/dashboard')}`} onClick={e => { e.preventDefault(); navigate('/dashboard') }}>Dashboard</a>
-                  <a href="#" className={`nav-link${isActive('/account')}`} onClick={e => { e.preventDefault(); navigate('/account') }}>Account</a>
-                  {user.role === 'admin' && (
-                    <a href="#" className={`nav-link${isActive('/admin')}`} onClick={e => { e.preventDefault(); navigate('/admin') }}>Admin</a>
+                  <a href="#" className={`nav-link${isActive('/')}`} onClick={e => { e.preventDefault(); navTo('/') }}>Home</a>
+                  <a href="#" className={`nav-link${isActive('/author')}`} onClick={e => { e.preventDefault(); navTo('/author') }}>Submit brief</a>
+                  <a href="#" className={`nav-link${isActive('/brief/infographic')}`} onClick={e => { e.preventDefault(); navTo('/brief/infographic') }}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ marginRight: 4, verticalAlign: 'middle' }}>
+                      <rect x="1" y="7" width="3" height="6" fill="currentColor" opacity="0.5"/>
+                      <rect x="5.5" y="4" width="3" height="9" fill="currentColor" opacity="0.75"/>
+                      <rect x="10" y="1" width="3" height="12" fill="currentColor"/>
+                    </svg>
+                    Infographic Brief
+                  </a>
+                  <a href="#" className={`nav-link${isActive('/prompt-builder')}`} onClick={e => { e.preventDefault(); navTo('/prompt-builder') }}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ marginRight: 4, verticalAlign: 'middle' }}>
+                      <rect x="1" y="1" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1" fill="none"/>
+                      <path d="M4 5h6M4 7h4" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+                      <path d="M5 10l-2 3h8l-2-3" stroke="currentColor" strokeWidth="1" fill="none"/>
+                    </svg>
+                    Prompt Builder
+                  </a>
+                  <a href="#" className={`nav-link${isActive('/dashboard')}`} onClick={e => { e.preventDefault(); navTo('/dashboard') }}>Dashboard</a>
+                  <a href="#" className={`nav-link${isActive('/account')}`} onClick={e => { e.preventDefault(); navTo('/account') }}>Account</a>
+                  {(user.role === 'admin' || user.role === 'super_admin') && (
+                    <a href="#" className={`nav-link${isActive('/admin')}`} onClick={e => { e.preventDefault(); navTo('/admin') }}>Admin</a>
                   )}
                   <NotificationBell syncUser={syncUser} />
                 </>
@@ -330,12 +346,17 @@ function Landing({ navigate }) {
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
         position: 'relative',
+        height: 'calc(100vh - 45px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
       }}>
         {/* Dark overlay so text is readable */}
         <div style={{
           position: 'absolute',
           inset: 0,
-          background: 'rgba(10, 26, 10, 0.65)',
+          background: 'rgba(10, 26, 10, 0.55)',
         }} />
 
         {/* Hero content sits above overlay */}
@@ -347,16 +368,17 @@ function Landing({ navigate }) {
           justifyContent: 'center',
           gap: 'clamp(1.5rem, 3vw, 3rem)',
           flexWrap: 'wrap',
-          padding: 'clamp(4rem, 10vw, 8rem) 24px',
+          padding: '0 24px',
         }}>
           <img
             src="/logo.png"
             alt="SubMoa Content"
             style={{
-              height: 'clamp(80px, 12vw, 160px)',
-              width: 'auto',
+              width: 'min(300px, 80vw)',
+              height: 'auto',
               objectFit: 'contain',
               imageRendering: '-webkit-optimize-contrast',
+              flexShrink: 0,
             }}
           />
           <div>
@@ -381,6 +403,94 @@ function Landing({ navigate }) {
           </div>
         </div>
       </div>
+      <section className="trust-strip">
+        <div className="container">
+          <p className="trust-copy">Not another AI writing tool. This is a content production system modeled after real editorial workflows from high-volume media networks.</p>
+          <div className="trust-bullets">
+            <span>Author-profile driven content generation</span>
+            <span className="sep">·</span>
+            <span>SEO-first structure baked into every output</span>
+            <span className="sep">·</span>
+            <span>Scalable across multi-site publishing networks</span>
+            <span className="sep">·</span>
+            <span>Built from real-world media production systems</span>
+          </div>
+        </div>
+      </section>
+      <section className="core-value">
+        <div className="container">
+          <h2 className="section-title">Built Like a Media Company.<br />Scaled Like Software.</h2>
+          <p className="section-body">Sub MOA Content replicates how high-performing editorial teams actually work. Instead of generic prompts, our system uses structured inputs, author voices, and ranking frameworks to produce content that performs in search and reads like it belongs.</p>
+          <div className="value-grid">
+            <div className="value-card"><div className="value-num">01 — Author</div><h3>Author-Driven Content</h3><p>Your AI doesn't guess tone. It writes through defined author profiles with consistent voice, expertise, and positioning.</p></div>
+            <div className="value-card"><div className="value-num">02 — SEO</div><h3>SEO Engineered Output</h3><p>Every piece is structured for discoverability. Headers, entities, topical depth, and internal linking are not optional. They are built in.</p></div>
+            <div className="value-card"><div className="value-num">03 — Scale</div><h3>Production at Scale</h3><p>From 1 article to 500 per week, the system holds quality while increasing output.</p></div>
+          </div>
+        </div>
+      </section>
+      <section className="how-section" id="how-it-works">
+        <div className="container">
+          <h2 className="section-title">From Idea to Indexed Content in Minutes</h2>
+          <div className="steps-grid">
+            <div className="step" data-step="01"><div className="step-num">Step 01</div><h3>Define the Author</h3><p>Create or select an author profile with voice, expertise, and positioning.</p></div>
+            <div className="step" data-step="02"><div className="step-num">Step 02</div><h3>Input the Topic</h3><p>Drop in your target keyword, angle, or article concept.</p></div>
+            <div className="step" data-step="03"><div className="step-num">Step 03</div><h3>Apply the Framework</h3><p>Our system builds the structure using proven editorial + SEO templates.</p></div>
+            <div className="step" data-step="04"><div className="step-num">Step 04</div><h3>Generate &amp; Publish</h3><p>Export ready-to-publish content optimized for ranking and engagement.</p></div>
+          </div>
+          <div className="cta-center"><button className="btn-primary" onClick={() => navigate('/request')}>Request Access</button></div>
+        </div>
+      </section>
+      <section className="features-section" id="features">
+        <div className="container">
+          <h2 className="section-title centered">Everything You Need to Scale Content That Ranks</h2>
+          <div className="features-grid">
+            <div className="feature-card"><h3>Author Profiles</h3><p>Persistent voices that create consistency across hundreds of articles.</p></div>
+            <div className="feature-card"><h3>SEO Structuring Engine</h3><p>Automatic heading hierarchy, keyword placement, and topical coverage.</p></div>
+            <div className="feature-card"><h3>Editorial Frameworks</h3><p>Pre-built structures for reviews, comparisons, news, and long-form guides.</p></div>
+            <div className="feature-card"><h3>Multi-Site Scaling</h3><p>Built for operators managing multiple publications or content verticals.</p></div>
+            <div className="feature-card"><h3>Export-Ready Output</h3><p>Clean, formatted content ready for CMS upload.</p></div>
+          </div>
+        </div>
+      </section>
+      <section className="diff-section">
+        <div className="container">
+          <div className="diff-inner">
+            <h2 className="section-title">Why Most AI Content Fails</h2>
+            <p className="section-body">Most AI content is obvious, thin, and disposable. It lacks structure, authority, and intent.</p>
+            <p className="section-body">Sub MOA Content fixes that by combining:</p>
+            <ul className="diff-list">
+              <li>Real editorial workflows</li>
+              <li>Defined author identity</li>
+              <li>SEO-first construction</li>
+              <li>Consistent production standards</li>
+            </ul>
+            <p className="diff-closing">This is not AI guessing. This is AI executing.</p>
+          </div>
+        </div>
+      </section>
+      <section className="use-section">
+        <div className="container">
+          <h2 className="section-title centered">Built for Operators Who Need Results</h2>
+          <div className="use-grid">
+            <div className="use-card"><h3>Media Companies</h3><p>Scale editorial output across multiple sites without increasing headcount.</p></div>
+            <div className="use-card"><h3>Affiliate Publishers</h3><p>Generate high-converting product content with consistent structure.</p></div>
+            <div className="use-card"><h3>Niche Site Builders</h3><p>Dominate verticals with volume + topical authority.</p></div>
+            <div className="use-card"><h3>Agencies</h3><p>Deliver SEO content at scale without sacrificing quality.</p></div>
+          </div>
+        </div>
+      </section>
+      <section className="proof-section">
+        <div className="container">
+          <h2 className="section-title centered">What the Output Looks Like</h2>
+          <p className="section-body centered">Structured. Readable. Rankable.</p>
+          <div className="cta-center"><button className="btn-secondary">View Sample Articles</button></div>
+        </div>
+      </section>
+      <section className="philosophy-section">
+        <div className="container">
+          <p className="philosophy-quote">"In shooting, Sub MOA means precision. Consistency. Repeatability. That's exactly what this platform delivers. Not one good article. Not ten. But a system that produces high-quality content over and over again, without drift. We don't chase viral hits. <span>We build content that performs.</span>"</p>
+        </div>
+      </section>
       <Footer />
     </div>
   )
@@ -448,7 +558,7 @@ function Login({ navigate, syncUser }) {
 
 // ─── Register (via invite only) ────────────────────────────────────────
 function Register({ navigate }) {
-  const { fetchUser } = useAuth()
+  const { fetchUser, syncUser } = useAuth()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -456,11 +566,7 @@ function Register({ navigate }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // Read invite code from URL params on mount
-  const [inviteCode] = useState(() => {
-    const params = new URLSearchParams(window.location.search)
-    return params.get('code') || ''
-  })
+  const [inviteCode, setInviteCode] = useState('')
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -485,7 +591,7 @@ function Register({ navigate }) {
     <div className="page">
       <div className="container"><div className="form-card">
         <h1 className="form-title">Create account.</h1>
-        <p className="form-sub">Accepted invite only. Your account will be linked to your Google account.</p>
+        <p className="form-sub">An invite code is required to register.</p>
 
         {/* Google SSO button */}
         <button
@@ -503,12 +609,6 @@ function Register({ navigate }) {
           Continue with Google
         </button>
 
-        {inviteCode && (
-          <p style={{ fontSize: '0.8125rem', color: 'var(--gold)', textAlign: 'center', marginBottom: '1rem' }}>
-            Invite code applied: <code style={{ fontFamily: 'monospace', background: 'var(--hunter-mid)', padding: '0.1em 0.4em', borderRadius: '2px' }}>{inviteCode}</code>
-          </p>
-        )}
-
         <form onSubmit={handleSubmit}>
           {error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}
           <div className="form-group"><label className="form-label">Name</label><input type="text" className="form-input" placeholder="Your name" value={name} onChange={e => setName(e.target.value)} required /></div>
@@ -520,7 +620,19 @@ function Register({ navigate }) {
               <button type="button" onClick={() => setShowPw(v => !v)} style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1rem', lineHeight: 1, padding: '0.25rem' }}>{showPw ? '👁' : '👁‍🗨'}</button>
             </div>
           </div>
-          <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading || !inviteCode}>{loading ? 'Creating account...' : 'Create account'}</button>
+          <div className="form-group">
+            <label className="form-label">Invite Code</label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Enter your invite code"
+              value={inviteCode}
+              onChange={e => setInviteCode(e.target.value.toUpperCase())}
+              required
+              style={{ fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase' }}
+            />
+          </div>
+          <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading}>{loading ? 'Creating account...' : 'Create account'}</button>
           <p className="form-link">Already have an account? <a href="#" onClick={e => { e.preventDefault(); navigate('/login') }}>login</a></p>
         </form>
       </div></div></div>
@@ -689,6 +801,8 @@ const WORD_COUNTS = [
 function Author({ navigate, syncUser, editingDraft, onEditDone }) {
   const { user } = useAuth()
   const [authors, setAuthors] = useState([])
+  const [authorProfile, setAuthorProfile] = useState(null)
+  const [authorProfileExpanded, setAuthorProfileExpanded] = useState(false)
   const [form, setForm] = useState({ author: '', topic: '', productLink: '', productDetailsManual: '', humanObservation: '', anecdotalStories: '', includeFaq: false, generateAudio: false, productImages: [], minWordCount: '', targetKeywords: '', articleFormat: 'blog-general', optimizationTarget: 'seo-search', tone_stance: 'neutral', vocalTone: '', youtube_url: '', use_youtube: false })
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -704,10 +818,13 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
       .then(data => {
         if (data.authors && data.authors.length > 0) {
           setAuthors(data.authors)
+          const initialSlug = editingDraft
+            ? (editingDraft.author || data.authors[0].slug)
+            : data.authors[0].slug
           if (editingDraft) {
             // Pre-fill form from saved draft
             setForm({
-              author: editingDraft.author || data.authors[0].slug,
+              author: initialSlug,
               topic: editingDraft.topic || '',
               productLink: editingDraft.product_link || '',
               productDetailsManual: editingDraft.product_details_manual || '',
@@ -727,8 +844,13 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
               use_youtube: !!editingDraft.use_youtube,
             })
           } else {
-            setForm(f => ({ ...f, author: data.authors[0].slug }))
+            setForm(f => ({ ...f, author: initialSlug }))
           }
+          // Fetch initial author profile
+          fetch(`/api/authors/${initialSlug}`, { credentials: 'include' })
+            .then(r => r.json())
+            .then(d => setAuthorProfile(d.author || null))
+            .catch(() => setAuthorProfile(null))
         }
       })
       .catch(() => setAuthors([]))
@@ -738,6 +860,18 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
     const { name, value, type, checked } = e.target
     setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
   }
+
+  async function handleAuthorChange(slug) {
+    setForm(f => ({ ...f, author: slug }))
+    setAuthorProfileExpanded(false)
+    if (!slug) { setAuthorProfile(null); return; }
+    try {
+      const res = await fetch(`/api/authors/${slug}`, { credentials: 'include' })
+      const data = await res.json()
+      setAuthorProfile(data.author || null)
+    } catch { setAuthorProfile(null) }
+  }
+
 
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files).slice(0, 10)
@@ -796,7 +930,24 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
       })
       if (editingDraft) onEditDone()
       setSubmitted(true)
-      if (result.submission?.id) setSubmissionId(result.submission.id)
+      const newId = result.submission?.id
+      if (newId) {
+        setSubmissionId(newId)
+        // Upload product images to the new endpoint
+        if (form.productImages.length > 0) {
+          try {
+            const fd = new FormData()
+            for (const file of form.productImages) fd.append('images', file)
+            await fetch(`/api/submissions/${newId}/images`, {
+              method: 'POST',
+              credentials: 'include',
+              body: fd,
+            })
+          } catch (imgErr) {
+            console.error('Image upload failed:', imgErr)
+          }
+        }
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -804,35 +955,6 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
     }
   }
 
-  const handlePostSubmitImageUpload = async (e) => {
-    const files = Array.from(e.target.files)
-    if (!files.length || !submissionId) return
-    setUploadingImages(true)
-    setUploadError('')
-    try {
-      const newUrls = []
-      for (const file of files) {
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('submission_id', submissionId)
-        const res = await fetch('/api/images/upload', { method: 'POST', credentials: 'include', body: fd })
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || 'Upload failed')
-        newUrls.push(data.url)
-      }
-      const allUrls = [...uploadedImages, ...newUrls]
-      setUploadedImages(allUrls)
-      // Store back in submission record
-      await api(`/api/submissions/${submissionId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ article_images: JSON.stringify(allUrls) }),
-      })
-    } catch (err) {
-      setUploadError(err.message)
-    } finally {
-      setUploadingImages(false)
-    }
-  }
 
   if (submitted) return (
     <div className="page"><div className="container"><div className="form-card"><div className="confirm-icon">✓</div><h1 className="confirm-title">Brief received.</h1><p className="confirm-sub">We'll have your content ready same-day. You'll receive a notification when it's available in your dashboard.</p>
@@ -846,7 +968,48 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
         {error && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</p>}
         <form onSubmit={handleSubmit}>
           <div className="form-group"><label className="form-label">Topic</label><input type="text" name="topic" className="form-input" placeholder="What are we writing about?" value={form.topic} onChange={handleChange} required /></div>
-          <div className="form-group"><label className="form-label">Author Voice</label><select name="author" className="form-input" value={form.author} onChange={handleChange}>{authors.length === 0 ? <option value="">No author profiles available — contact admin</option> : authors.map(a => <option key={a.slug} value={a.slug}>{a.name}</option>)}</select></div>
+          <div className="form-group"><label className="form-label">Author Voice</label><select name="author" className="form-input" value={form.author} onChange={e => handleAuthorChange(e.target.value)}>{authors.length === 0 ? <option value="">No author profiles available — contact admin</option> : authors.map(a => <option key={a.slug} value={a.slug}>{a.name}</option>)}</select></div>
+          {authorProfile && (
+            <div style={{ background: '#081508', border: '0.5px solid #1e3a1e', borderRadius: 6, padding: '12px 16px', marginTop: -8, marginBottom: 16 }}>
+              {/* Header — always visible, click to toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }} onClick={() => setAuthorProfileExpanded(e => !e)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <span style={{ fontFamily: 'sans-serif', fontSize: 14, color: '#fff', fontWeight: 600, flexShrink: 0 }}>{authorProfile.name}</span>
+                  {!authorProfileExpanded && authorProfile.description && (
+                    <span style={{ fontFamily: 'sans-serif', fontSize: 13, color: '#5a7a5a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      — {authorProfile.description.slice(0, 80)}{authorProfile.description.length > 80 ? '...' : ''}
+                    </span>
+                  )}
+                </div>
+                <span style={{ fontFamily: 'sans-serif', fontSize: 12, color: '#c8973a', flexShrink: 0, marginLeft: 12 }}>
+                  {authorProfileExpanded ? '▲ Collapse' : '▼ Expand'}
+                </span>
+              </div>
+
+              {/* Expanded content */}
+              {authorProfileExpanded && (
+                <div style={{ marginTop: 12 }}>
+                  {authorProfile.description && (
+                    <div style={{ fontFamily: 'sans-serif', fontSize: 14, color: '#8aaa8a', lineHeight: 1.6, marginBottom: 12 }}>
+                      {authorProfile.description}
+                    </div>
+                  )}
+                  {authorProfile.style_guide && (
+                    <div style={{ background: '#0a1a0a', border: '0.5px solid #1a2e1a', borderRadius: 4, padding: '10px 12px' }}>
+                      <div style={{ fontSize: 11, color: '#3a5a3a', textTransform: 'uppercase', letterSpacing: '.06em', fontFamily: 'sans-serif', marginBottom: 8 }}>Voice Guide</div>
+                      <pre style={{ fontFamily: 'sans-serif', fontSize: 13, color: '#6a8a6a', lineHeight: 1.6, whiteSpace: 'pre-wrap', margin: 0 }}>{authorProfile.style_guide}</pre>
+                    </div>
+                  )}
+                  {authorProfile.keyword_themes && (
+                    <div style={{ marginTop: 10, fontFamily: 'sans-serif', fontSize: 13, color: '#5a7a5a' }}>
+                      <span style={{ color: '#3a5a3a', textTransform: 'uppercase', letterSpacing: '.06em', fontSize: 11 }}>Keyword themes: </span>
+                      {authorProfile.keyword_themes}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <div className="form-group"><label className="form-label">Article Format</label><select name="articleFormat" className="form-input" value={form.articleFormat} onChange={handleChange}>{FORMATS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
           <div className="form-group"><label className="form-label">Optimization Target</label><select name="optimizationTarget" className="form-input" value={form.optimizationTarget} onChange={handleChange}>{OPTIMIZATION_TARGETS.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></div>
           <div className="form-group"><label className="form-label">Tone / Stance (relationship to the subject)</label><select name="tone_stance" className="form-input" value={form.tone_stance} onChange={handleChange}>{TONE_STANCES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
@@ -1075,62 +1238,7 @@ function Account({ navigate, syncUser }) {
           </div>
         </div>
 
-        {user?.role === 'admin' && (
-        <div style={{ marginTop: '3rem', padding: '2rem', border: '1px solid var(--hunter-border)', background: 'var(--hunter-mid)' }}>
-          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '1.125rem', fontWeight: 600, color: 'var(--cream)', marginBottom: '0.5rem' }}>Generate Invite Link</div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>Create a single-use invite link valid for 30 days. Share this with your team.</p>
-          {inviteError && <p style={{ color: '#b05050', fontSize: '0.875rem', marginBottom: '1rem' }}>{inviteError}</p>}
-          {!inviteLink ? (
-            <button className="btn-primary" onClick={generateInvite} disabled={inviteLoading}>{inviteLoading ? 'Generating...' : 'Generate Invite Link'}</button>
-          ) : (
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <input type="text" readOnly value={inviteLink} style={{ flex: 1, minWidth: '240px', padding: '0.75rem 1rem', background: 'var(--hunter)', border: '1px solid var(--hunter-border)', borderRadius: '2px', color: 'var(--cream)', fontFamily: 'inherit', fontSize: '0.875rem' }} />
-              <button className="btn-secondary" onClick={() => navigator.clipboard.writeText(inviteLink)} style={{ whiteSpace: 'nowrap' }}>Copy Link</button>
-            </div>
-          )}
-        </div>
-        )}
 
-        {user?.role === 'admin' && (
-        <div style={{ marginTop: '3rem', padding: '2rem', border: '1px solid var(--hunter-border)', background: 'var(--hunter-mid)' }}>
-          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '1.125rem', fontWeight: 600, color: 'var(--cream)', marginBottom: '0.5rem' }}>Author Voices</div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>Ingest an author profile from an RSS feed or DOCX file. The AI will analyze writing style and generate a profile.</p>
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-            <input type="text" id="rss-url-input" placeholder="https://example.com/rss/feed" style={{ flex: 1, minWidth: '200px', padding: '0.75rem 1rem', background: 'var(--hunter)', border: '1px solid var(--hunter-border)', borderRadius: '2px', color: 'var(--cream)', fontFamily: 'inherit', fontSize: '0.875rem' }} />
-            <button className="btn-primary" onClick={handleIngestRss} disabled={ingestLoading}>{ingestLoading ? 'Analyzing...' : 'Ingest via RSS'}</button>
-          </div>
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <input type="file" id="docx-file-input" accept=".docx" style={{ flex: 1, color: 'var(--text-muted)', fontSize: '0.875rem' }} />
-            <button className="btn-secondary" onClick={handleIngestDocx} disabled={ingestLoading}>{ingestLoading ? 'Analyzing...' : 'Ingest via DOCX'}</button>
-          </div>
-          {ingestError && <p style={{ color: '#b05050', fontSize: '0.875rem', marginTop: '1rem' }}>{ingestError}</p>}
-          {ingestPreview && (
-            <div style={{ marginTop: '1.5rem', padding: '1.25rem', background: 'var(--hunter)', border: '1px solid var(--hunter-border)', borderRadius: '6px' }}>
-              <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>Preview</div>
-              <div style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--cream)' }}>Slug:</strong> <span style={{ color: '#a3a3a3', fontFamily: 'monospace', fontSize: '0.8125rem' }}>{ingestPreview.slug}</span></div>
-              <div style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--cream)' }}>Name:</strong> <span style={{ color: '#a3a3a3' }}>{ingestPreview.name}</span></div>
-              <div style={{ marginBottom: '0.75rem' }}>
-                <strong style={{ color: 'var(--cream)', display: 'block', marginBottom: '0.25rem' }}>Style Guide:</strong>
-                <pre style={{ color: '#a3a3a3', fontSize: '0.75rem', whiteSpace: 'pre-wrap', maxHeight: '150px', overflow: 'auto', margin: 0 }}>{ingestPreview.style_guide?.slice(0, 500)}</pre>
-              </div>
-              {ingestPreview.keyword_themes?.length > 0 && (
-                <div style={{ marginBottom: '0.5rem' }}>
-                  <strong style={{ color: 'var(--cream)', fontSize: '0.8125rem' }}>Top Keywords:</strong>
-                  <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginTop: '0.375rem' }}>
-                    {ingestPreview.keyword_themes.slice(0, 8).map((kw, i) => (
-                      <span key={i} style={{ background: 'var(--hunter-border)', color: '#a3a3a3', padding: '0.125rem 0.5rem', borderRadius: '3px', fontSize: '0.6875rem' }}>{kw}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <button className="btn-primary" onClick={handleSaveProfile} disabled={saveLoading}>{saveLoading ? 'Saving...' : 'Save Profile'}</button>
-                <button className="btn-secondary" onClick={() => setIngestPreview(null)}>Discard</button>
-              </div>
-            </div>
-          )}
-        </div>
-        )}
 
         {/* Sign out */}
         <div style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '1px solid var(--hunter-border)' }}>
@@ -1140,7 +1248,7 @@ function Account({ navigate, syncUser }) {
               if (syncUser) syncUser(null);
               navigate('/');
             }}
-            style={{ background: 'none', border: '0.5px solid #5a3a2a', color: '#a06050', padding: '7px 16px', borderRadius: '5px', fontSize: '12px', cursor: 'pointer', fontFamily: 'sans-serif' }}
+            style={{ background: 'none', border: '0.5px solid #5a3a2a', color: '#a06050', padding: '14px 32px', borderRadius: '6px', fontSize: '16px', cursor: 'pointer', fontFamily: 'sans-serif' }}
           >
             Sign out
           </button>
@@ -1458,11 +1566,12 @@ function ContentPage({ navigate }) {
   const [article, setArticle] = useState(null)
   const [articleContent, setArticleContent] = useState('')
   const [authorProfiles, setAuthorProfiles] = useState([])
-  const [rating, setRating] = useState(0)
-  const [whatWorked, setWhatWorked] = useState('')
-  const [whatNeedsWork, setWhatNeedsWork] = useState('')
-  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
   const [showTranscript, setShowTranscript] = useState(false)
+  // Admin feedback panel state
+  const [fbRating, setFbRating] = useState(0)
+  const [fbNotes, setFbNotes] = useState('')
+  const [fbAnswers, setFbAnswers] = useState({ q1: null, q2: null, q3: null, q4: null, q5: null })
+  const [fbSubmitted, setFbSubmitted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const audioRef = useRef(null)
@@ -1516,8 +1625,10 @@ function ContentPage({ navigate }) {
       .then(data => {
         if (!data) return
         if (data.error) throw new Error(data.error)
-        // Ownership check on data.article.user_id
-        if (data.article.user_id !== user.id && user.role !== 'admin') {
+        // Ownership check — admins and super admins can view any article
+        const isOwner = data.article.user_id === user.id;
+        const isAdmin = user.role === 'admin' || user.role === 'super_admin';
+        if (!isOwner && !isAdmin) {
           navigate('/dashboard')
           return
         }
@@ -1759,98 +1870,130 @@ function ContentPage({ navigate }) {
             )
           })()}
 
-          {/* Revision request */}
-          <div style={{ marginTop: '2rem' }}>
-            <textarea
-              id="revision-notes"
-              placeholder="Describe what you would like changed..."
-              style={{ width: '100%', minHeight: '120px', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.9375rem', fontFamily: 'Inter, sans-serif', resize: 'vertical', boxSizing: 'border-box' }}
-            />
-            <button
-              onClick={() => {
-                const notes = document.getElementById('revision-notes').value
-                if (!notes.trim()) return
-                fetch(`/api/submissions/${article.id}/revision`, {
-                  method: 'PUT',
-                  credentials: 'include',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ revision_notes: notes })
-                }).then(res => res.json()).then(data => {
-                  if (data.error) throw new Error(data.error)
-                  alert('Revision request submitted.')
-                }).catch(err => alert('Error: ' + err.message))
-              }}
-              style={{ marginTop: '0.75rem', background: '#1a1a1a', color: '#faf9f7', border: 'none', padding: '0.625rem 1.25rem', borderRadius: '6px', fontSize: '0.875rem', cursor: 'pointer', fontWeight: 500 }}
-            >
-              Submit revision request
-            </button>
-          </div>
-
-          {/* Feedback block */}
-          <div style={{ marginTop: '2rem', padding: '1.5rem', background: '#f9fafb', border: '1px solid #e5e5e5', borderRadius: '8px' }}>
-            <div style={{ fontWeight: 600, color: '#1a1a1a', marginBottom: '1rem' }}>How was this article?</div>
-
-            {/* Star rating */}
-            <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '1.25rem' }}>
-              {[1, 2, 3, 4, 5].map(star => (
-                <button
-                  key={star}
-                  type="button"
-                  className="star-btn"
-                  onClick={() => !feedbackSubmitted && setRating(star)}
-                  disabled={feedbackSubmitted}
-                  style={{ cursor: feedbackSubmitted ? 'default' : 'pointer', fontSize: '1.5rem', lineHeight: 1, color: star <= rating ? '#d97706' : '#d1d5db' }}
-                >
-                  ★
-                </button>
-              ))}
-            </div>
-
-            {/* Side-by-side textareas on desktop, stacked on mobile */}
-            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-              <div style={{ flex: '1 1 45%', minWidth: '240px' }}>
-                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: '0.375rem' }}>What did we get right?</label>
-                <textarea
-                  value={whatWorked}
-                  onChange={e => !feedbackSubmitted && setWhatWorked(e.target.value)}
-                  disabled={feedbackSubmitted}
-                  placeholder="The tone was perfect..."
-                  style={{ width: '100%', minHeight: '96px', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'Inter, sans-serif', resize: 'vertical', boxSizing: 'border-box', background: feedbackSubmitted ? '#f3f4f6' : '#fff' }}
-                />
+          {/* Admin-only feedback panel */}
+          {(user?.role === 'admin' || user?.role === 'super_admin') && (
+            <div style={{ marginTop: '2.5rem', padding: '1.5rem', background: '#0a1a0a', border: '0.5px solid #1e3a1e', borderRadius: '8px' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#c8973a', marginBottom: '1.25rem' }}>
+                Article Feedback
               </div>
-              <div style={{ flex: '1 1 45%', minWidth: '240px' }}>
-                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: '0.375rem' }}>What needs work?</label>
-                <textarea
-                  value={whatNeedsWork}
-                  onChange={e => !feedbackSubmitted && setWhatNeedsWork(e.target.value)}
-                  disabled={feedbackSubmitted}
-                  placeholder="The conclusion felt rushed..."
-                  style={{ width: '100%', minHeight: '96px', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'Inter, sans-serif', resize: 'vertical', boxSizing: 'border-box', background: feedbackSubmitted ? '#f3f4f6' : '#fff' }}
-                />
-              </div>
-            </div>
 
-            {/* Submit */}
-            <button
-              onClick={() => {
-                if (!rating) return
-                fetch(`/api/articles/${article.id}/feedback`, {
-                  method: 'POST',
-                  credentials: 'include',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ rating, what_worked: whatWorked, what_needs_work: whatNeedsWork })
-                }).then(res => res.json()).then(data => {
-                  if (data.error) throw new Error(data.error)
-                  setFeedbackSubmitted(true)
-                  alert('Feedback submitted. Thank you!')
-                }).catch(err => alert('Error: ' + err.message))
-              }}
-              disabled={feedbackSubmitted || !rating}
-              style={{ marginTop: '1rem', background: feedbackSubmitted ? '#9ca3af' : '#1a1a1a', color: '#faf9f7', border: 'none', padding: '0.625rem 1.25rem', borderRadius: '6px', fontSize: '0.875rem', cursor: feedbackSubmitted || !rating ? 'default' : 'pointer', fontWeight: 500 }}
-            >
-              {feedbackSubmitted ? 'Feedback submitted' : 'Submit Feedback'}
-            </button>
-          </div>
+              {fbSubmitted ? (
+                <div style={{ color: '#5ab85a', fontSize: '0.875rem', fontFamily: 'Inter, sans-serif' }}>Feedback submitted.</div>
+              ) : (
+                <>
+                  {/* 10-star rating */}
+                  <div style={{ marginBottom: '1.25rem' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#5a7a5a', marginBottom: '0.5rem', fontFamily: 'Inter, sans-serif' }}>Overall rating</div>
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                      {[1,2,3,4,5,6,7,8,9,10].map(star => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setFbRating(star)}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            fontSize: '1.375rem', lineHeight: 1, padding: '0 1px',
+                            color: star <= fbRating ? '#c8973a' : '#2a3a2a',
+                            transition: 'color 0.1s',
+                          }}
+                        >★</button>
+                      ))}
+                      {fbRating > 0 && (
+                        <span style={{ fontSize: '0.75rem', color: '#5a7a5a', marginLeft: 6, alignSelf: 'center', fontFamily: 'Inter, sans-serif' }}>
+                          {fbRating}/10
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 5 yes/no questions */}
+                  {[
+                    { key: 'q1', label: 'Does the article sound like the selected author voice?' },
+                    { key: 'q2', label: 'Is the content factually accurate?' },
+                    { key: 'q3', label: 'Does the article meet the optimization target?' },
+                    { key: 'q4', label: 'Is the writing free of AI patterns and tells?' },
+                    { key: 'q5', label: 'Would you publish this article without major edits?' },
+                  ].map(({ key, label }) => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', gap: '1rem' }}>
+                      <span style={{ fontSize: '0.8125rem', color: '#c8d8c8', fontFamily: 'Inter, sans-serif', flex: 1 }}>{label}</span>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                        {[{ val: true, label: 'Yes' }, { val: false, label: 'No' }].map(({ val, label: btnLabel }) => (
+                          <button
+                            key={btnLabel}
+                            type="button"
+                            onClick={() => setFbAnswers(a => ({ ...a, [key]: val }))}
+                            style={{
+                              padding: '0.25rem 0.75rem',
+                              borderRadius: 4,
+                              border: '0.5px solid',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              transition: 'all 0.1s',
+                              borderColor: fbAnswers[key] === val ? '#c8973a' : '#2a3a2a',
+                              background: fbAnswers[key] === val ? '#c8973a' : 'transparent',
+                              color: fbAnswers[key] === val ? '#000' : '#5a7a5a',
+                            }}
+                          >{btnLabel}</button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Notes */}
+                  <div style={{ marginTop: '1rem', marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#5a7a5a', marginBottom: '0.375rem', fontFamily: 'Inter, sans-serif' }}>Notes (optional)</label>
+                    <textarea
+                      value={fbNotes}
+                      onChange={e => setFbNotes(e.target.value)}
+                      placeholder="Specific observations..."
+                      style={{ width: '100%', minHeight: '80px', padding: '10px', background: '#0f200f', border: '0.5px solid #2e5a2e', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'Inter, sans-serif', resize: 'vertical', boxSizing: 'border-box', color: '#d4e8d4' }}
+                    />
+                  </div>
+
+                  {/* Submit */}
+                  <button
+                    onClick={() => {
+                      if (!fbRating) return
+                      fetch(`/api/articles/${article.id}/feedback`, {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          star_rating: fbRating,
+                          notes: fbNotes,
+                          answers: {
+                            q1: fbAnswers.q1,
+                            q2: fbAnswers.q2,
+                            q3: fbAnswers.q3,
+                            q4: fbAnswers.q4,
+                            q5: fbAnswers.q5,
+                          },
+                        })
+                      }).then(res => res.json()).then(data => {
+                        if (data.error) throw new Error(data.error)
+                        setFbSubmitted(true)
+                      }).catch(err => alert('Error: ' + err.message))
+                    }}
+                    disabled={!fbRating}
+                    style={{
+                      background: fbRating ? '#c8973a' : '#2a3a2a',
+                      color: fbRating ? '#000' : '#5a7a5a',
+                      border: 'none',
+                      padding: '0.625rem 1.5rem',
+                      borderRadius: '6px',
+                      fontSize: '0.875rem',
+                      cursor: fbRating ? 'pointer' : 'default',
+                      fontWeight: 600,
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    Submit Feedback
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
 
         </article>
@@ -1927,7 +2070,7 @@ function AdminGuard({ children }) {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user) return <Navigate to="/login" />;
-  if (user.role !== 'admin') return <Navigate to="/dashboard" />;
+  if (user.role !== 'admin' && user.role !== 'super_admin') return <Navigate to="/dashboard" />;
   return children;
 }
 
@@ -1980,6 +2123,8 @@ export default function App() {
         {page === '/documentation' && <Documentation navigate={navigate} />}
         {page === '/author-frameworks' && <AuthorFrameworks navigate={navigate} />}
         {page === '/seo-methodology' && <SeoMethodology navigate={navigate} />}
+        {page === '/brief/infographic' && (loading ? null : user ? <InfographicBrief /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/prompt-builder' && (loading ? null : user ? <PromptBuilder /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/' && <Landing navigate={navigate} />}
       </div>
     </AuthContext.Provider>
