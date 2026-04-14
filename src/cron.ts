@@ -13,7 +13,7 @@ import {
 } from './notifications';
 
 interface Env {
-  DB: D1Database;
+  submoacontent_db: D1Database;
   SUBMOA_IMAGES: R2Bucket;
   DISCORD_BOT_TOKEN: string;
   RESEND_API_KEY: string;
@@ -42,7 +42,7 @@ export default {
 // 1. Grading sweep
 // ---------------------------------------------------------------------------
 async function processUngradedArticles(env: Env): Promise<void> {
-  const { results } = await env.DB.prepare(
+  const { results } = await env.submoacontent_db.prepare(
     `SELECT s.id, s.topic, s.author,
             ap.name as author_display_name,
             u.email as author_email
@@ -66,7 +66,7 @@ async function processUngradedArticles(env: Env): Promise<void> {
       const authorName = sub.author_display_name ?? sub.author;
 
       // Every article gets graded — no status-based branching
-      const gradeRecord = await env.DB.prepare(
+      const gradeRecord = await env.submoacontent_db.prepare(
         `SELECT grammar_score, readability_score, ai_detection_score,
                 plagiarism_score, seo_score, overall_score
          FROM grades WHERE submission_id = ? ORDER BY graded_at DESC LIMIT 1`
@@ -120,7 +120,7 @@ async function processUnpackagedArticles(env: Env): Promise<void> {
 async function detectStaleGenerations(env: Env): Promise<void> {
   const cutoff = Date.now() - STALE_GENERATION_MS;
 
-  const { results } = await env.DB.prepare(
+  const { results } = await env.submoacontent_db.prepare(
     `SELECT id, topic, updated_at
      FROM submissions
      WHERE status = 'generating'

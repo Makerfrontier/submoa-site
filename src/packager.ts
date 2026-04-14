@@ -3,9 +3,10 @@
 // Generates HTML, DOCX, and meta.json, stores in R2, updates package_status
 
 import { generateDocx } from './docx_generator';
+import { writeProjectFile } from './project-template';
 
 interface Env {
-  DB: D1Database;
+  submoacontent_db: D1Database;
   SUBMOA_IMAGES: R2Bucket;
   OPENROUTER_API_KEY: string;
 }
@@ -15,13 +16,13 @@ interface Env {
 // ---------------------------------------------------------------------------
 export async function packageArticle(env: Env, submissionId: string): Promise<void> {
   // Mark as packaging
-  await env.DB.prepare(
+  await env.submoacontent_db.prepare(
     `UPDATE submissions SET package_status = 'packaging', updated_at = ? WHERE id = ?`
   ).bind(Date.now(), submissionId).run();
 
   try {
     // Fetch submission + author + grade
-    const sub = await env.DB.prepare(
+    const sub = await env.submoacontent_db.prepare(
       `SELECT s.*,
               ap.name as author_display_name,
               g.grammar_score, g.readability_score, g.ai_detection_score,
@@ -39,8 +40,23 @@ export async function packageArticle(env: Env, submissionId: string): Promise<vo
     const basePath = `packages/${submissionId}`;
     const files: { key: string; content: string | Uint8Array; contentType: string }[] = [];
 
+    // ── 0. Fetch and copy product images ────────────────────────────────
+    const imageKeys: string[] = sub.image_urls ? JSON.parse(sub.image_urls) : [];
+    const imageFilenames: string[] = []; // relative names for HTML: images/1.jpg
+
+    for (const srcKey of imageKeys) {
+      const obj = await env.SUBMOA_IMAGES.get(srcKey);
+      if (!obj) continue;
+      const basename = srcKey.split('/').pop()!; // e.g. "1.jpg"
+      const destKey = `${basePath}/images/${basename}`;
+      const buf = await obj.arrayBuffer();
+      const contentType = obj.httpMetadata?.contentType ?? 'image/jpeg';
+      files.push({ key: destKey, content: new Uint8Array(buf), contentType });
+      imageFilenames.push(basename);
+    }
+
     // ── 1. HTML ──────────────────────────────────────────────────────────
-    const html = buildArticleHtml(sub);
+    const html = buildArticleHtml(sub, imageFilenames);
     files.push({
       key: `${basePath}/article.html`,
       content: html,
@@ -74,6 +90,7 @@ export async function packageArticle(env: Env, submissionId: string): Promise<vo
     });
 
     // ── 3. Meta JSON ─────────────────────────────────────────────────────
+    const imageFileList = imageFilenames.map(f => `images/${f}`);
     const meta = {
       id:                  sub.id,
       topic:               sub.topic,
@@ -84,7 +101,7 @@ export async function packageArticle(env: Env, submissionId: string): Promise<vo
       created_at:          sub.created_at,
       grade: grade ?? null,
       packaged_at:         Date.now(),
-      files: ['article.html', 'article.docx', 'meta.json'],
+      files: ['article.html', 'article.docx', 'meta.json', ...imageFileList],
     };
 
     files.push({
@@ -92,6 +109,53 @@ export async function packageArticle(env: Env, submissionId: string): Promise<vo
       content: JSON.stringify(meta, null, 2),
       contentType: 'application/json',
     });
+
+    // ── 3b. TTS audio — generate if requested and not already in R2 ─────
+    if (sub.generate_audio && env.OPENROUTER_API_KEY) {
+      const audioKey = `${basePath}/audio.mp3`;
+      const existingAudio = await env.SUBMOA_IMAGES.head(audioKey);
+      if (!existingAudio) {
+        try {
+          const ALLOWED_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+          const rawVoice = sub.tts_voice_id ?? 'alloy';
+          const voice = ALLOWED_VOICES.includes(rawVoice) ? rawVoice : 'alloy';
+
+          const stripped = sub.article_content
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          const input = stripped.length > 4096 ? stripped.slice(0, 4096) : stripped;
+          if (!input) throw new Error('stripped content is empty');
+
+          const ttsRes = await fetch('https://openrouter.ai/api/v1/audio/speech', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ model: 'openai/tts-1', input, voice }),
+          });
+
+          if (ttsRes.ok) {
+            const audioBuffer = await ttsRes.arrayBuffer();
+            await env.SUBMOA_IMAGES.put(audioKey, audioBuffer, {
+              httpMetadata: { contentType: 'audio/mpeg' },
+            });
+            console.log(`[Packager] TTS audio generated for submission ${submissionId}`);
+          } else {
+            const errBody = await ttsRes.text().catch(() => '');
+            console.error(`[Packager] TTS API error ${ttsRes.status} for ${submissionId}: ${errBody}`);
+          }
+        } catch (ttsErr) {
+          console.error(`[Packager] TTS failed for ${submissionId}:`, ttsErr);
+        }
+      }
+    }
 
     // ── 4. Upload all files to R2 ────────────────────────────────────────
     await Promise.all(
@@ -102,8 +166,25 @@ export async function packageArticle(env: Env, submissionId: string): Promise<vo
       )
     );
 
+    // ── 4b. Mirror files to unified project folder ───────────────────────
+    try {
+      await Promise.all([
+        writeProjectFile(env as any, submissionId, 'article', 'article.html', html, 'text/html'),
+        writeProjectFile(env as any, submissionId, 'article', 'article.docx',
+          docxBuffer,
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        ),
+        writeProjectFile(env as any, submissionId, 'seo', 'meta.json',
+          JSON.stringify(meta, null, 2), 'application/json'
+        ),
+      ]);
+    } catch (pfErr) {
+      console.error(`[Packager] Project folder write failed for ${submissionId}:`, pfErr);
+      // Non-fatal — package is still ready via legacy packages/ path
+    }
+
     // ── 5. Store manifest path and mark ready ────────────────────────────
-    await env.DB.prepare(
+    await env.submoacontent_db.prepare(
       `UPDATE submissions
        SET package_status = 'ready',
            zip_url = ?,
@@ -123,7 +204,7 @@ export async function packageArticle(env: Env, submissionId: string): Promise<vo
 
   } catch (err) {
     console.error(`Packaging failed for submission ${submissionId}:`, err);
-    await env.DB.prepare(
+    await env.submoacontent_db.prepare(
       `UPDATE submissions SET package_status = 'failed', updated_at = ? WHERE id = ?`
     ).bind(Date.now(), submissionId).run();
   }
@@ -132,10 +213,31 @@ export async function packageArticle(env: Env, submissionId: string): Promise<vo
 // ---------------------------------------------------------------------------
 // Build clean HTML for the article
 // ---------------------------------------------------------------------------
-function buildArticleHtml(sub: any): string {
+function buildArticleHtml(sub: any, imageFilenames: string[] = []): string {
   const date = new Date(sub.created_at).toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric'
   });
+
+  // Replace [IMAGE_N] placeholders with actual img tags
+  let articleBody = sub.article_content as string;
+  let anyPlaceholderReplaced = false;
+  if (imageFilenames.length > 0) {
+    articleBody = articleBody.replace(/\[IMAGE_(\d+)\]/g, (_, n) => {
+      const idx = parseInt(n, 10) - 1;
+      const filename = imageFilenames[idx];
+      if (!filename) return '';
+      anyPlaceholderReplaced = true;
+      return `<figure><img src="images/${escapeHtml(filename)}" alt="Product image ${n}" loading="lazy"></figure>`;
+    });
+
+    // No placeholders found — append images as a gallery after article body
+    if (!anyPlaceholderReplaced) {
+      const gallery = imageFilenames
+        .map((f, i) => `<figure><img src="images/${escapeHtml(f)}" alt="Product image ${i + 1}" loading="lazy"></figure>`)
+        .join('\n    ');
+      articleBody += `\n  <section class="product-images">\n    <h2>Product Images</h2>\n    ${gallery}\n  </section>`;
+    }
+  }
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -152,6 +254,8 @@ function buildArticleHtml(sub: any): string {
     .grade-bar { background: #f5f5f5; border-radius: 6px; padding: 12px 16px; margin-bottom: 2rem; font-size: 0.85rem; color: #555; }
     p { margin-bottom: 1rem; }
     img { max-width: 100%; height: auto; border-radius: 4px; margin: 1rem 0; }
+    figure { margin: 1.5rem 0; }
+    .product-images { border-top: 1px solid #eee; margin-top: 2rem; padding-top: 1rem; }
   </style>
 </head>
 <body>
@@ -169,7 +273,7 @@ function buildArticleHtml(sub: any): string {
     &nbsp;·&nbsp; SEO: ${sub.seo_score ?? '—'}
   </div>` : ''}
   <div class="article-body">
-    ${sub.article_content}
+    ${articleBody}
   </div>
 </body>
 </html>`;
@@ -183,7 +287,7 @@ function escapeHtml(str: string): string {
 // Find all passed articles that haven't been packaged yet
 // ---------------------------------------------------------------------------
 export async function findUnpackagedArticles(env: Env): Promise<string[]> {
-  const { results } = await env.DB.prepare(
+  const { results } = await env.submoacontent_db.prepare(
     `SELECT id FROM submissions
      WHERE grade_status IN ('passed', 'graded')
      AND (package_status IS NULL OR package_status = 'failed')
