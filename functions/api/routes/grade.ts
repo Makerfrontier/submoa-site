@@ -21,7 +21,7 @@ import {
   notifyGradingPassed,
   notifyNeedsReview,
   emailArticleReady,
-} from "../notifications";
+} from "../discord-notifications";
 
 // ---------------------------------------------------------------------------
 // Types — adjust to match your Env binding names

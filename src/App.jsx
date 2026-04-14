@@ -1520,12 +1520,12 @@ function ContentPage({ navigate }) {
   }, [])
 
   useEffect(() => {
-    if (loading) return;
     if (!user) {
       navigate('/login')
       return
     }
 
+    const controller = new AbortController()
     const id = window.location.pathname.split('/content/')[1]
     if (!id) {
       setError('No article ID provided')
@@ -1533,8 +1533,9 @@ function ContentPage({ navigate }) {
       return
     }
 
+    setLoading(true)
     // Use fetch directly to get status code for proper redirects
-    fetch(`/api/articles/content?id=${encodeURIComponent(id)}`, { credentials: 'include' })
+    fetch(`/api/articles/content?id=${encodeURIComponent(id)}`, { credentials: 'include', signal: controller.signal })
       .then(res => {
         console.log('[/api/articles/content] status:', res.status)
         return res.text().then(text => {
@@ -1566,10 +1567,14 @@ function ContentPage({ navigate }) {
         setArticleContent(data.content || '')
       })
       .catch(err => {
-        console.error('[/api/articles/content] fetch error:', err)
-        setError(err.message)
+        if (err.name !== 'AbortError') {
+          console.error('[/api/articles/content] fetch error:', err)
+          setError(err.message)
+        }
       })
       .finally(() => setLoading(false))
+
+    return () => controller.abort()
   }, [user])
 
   if (loading) {

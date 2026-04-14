@@ -2,7 +2,7 @@
 // Called from the brief submission endpoint.
 // Saves submission to DB, enqueues generation job, fires notifications.
 
-import { notifyBriefSubmitted, emailBriefReceived } from "./notifications";
+import { notifyBriefSubmitted, emailBriefReceived } from "./discord-notifications";
 
 interface Env {
   submoacontent_db: D1Database;

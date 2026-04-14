@@ -1,5 +1,5 @@
 import { json, getSessionUser, generateId } from '../_utils';
-import { emailArticlePublished, notifyBriefSubmitted } from '../notifications';
+import { emailArticlePublished, notifyBriefSubmitted } from '../discord-notifications';
 
 async function createNotification(env, userId, type, message, link) {
   const id = generateId();
