@@ -20,6 +20,7 @@ export interface Env {
   GENERATION_QUEUE: Queue;
   AI: Ai;
   CRON_SECRET?: string;
+  STAGING_BYPASS_TOKEN?: string;
   hashPassword(password: string): Promise<string>;
 }
 
@@ -117,6 +118,20 @@ export function getAuthToken(request: Request): string | null {
 }
 
 export async function getSessionUser(request: Request, env: Env): Promise<User | null> {
+  // Staging bypass — if STAGING_BYPASS_TOKEN is set in env (preview only), treat all requests as admin
+  if (env.STAGING_BYPASS_TOKEN) {
+    return {
+      id: 'staging-admin',
+      email: 'staging@submoacontent.com',
+      name: 'Staging Admin',
+      password_hash: '',
+      role: 'admin',
+      created_at: 0,
+      updated_at: 0,
+      account_id: 'staging',
+    };
+  }
+
   const token = getAuthToken(request);
   if (!token) return null;
 
