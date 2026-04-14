@@ -7,6 +7,10 @@ binding = "DB"
 database_name = "submoacontent-db"
 database_id = "f7d72bbc-3ec6-4b50-b22f-9700811939e1"
 
+[[r2_buckets]]
+binding = "SUBMOA_IMAGES"
+bucket_name = "submoa-images"
+
 [ai]
 binding = "AI"
 

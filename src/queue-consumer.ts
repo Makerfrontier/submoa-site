@@ -20,7 +20,8 @@ async function logApiUsage(
   } catch (e) {
     console.error('logApiUsage failed:', e.message);
   }
-} in submission order.
+}
+
 // For each job:
 //   1. Fetch submission + author voice from DB
 //   2. Fetch writing skill from DB
@@ -34,6 +35,7 @@ async function logApiUsage(
 
 import { getKeywordIntelligence, formatKeywordIntelligenceForPrompt } from "./dataforseo";
 import { notifyGenerationComplete } from "./notifications";
+import { runEnforcementAgent } from "./enforcement-agent";
 import type { GenerationJob } from "./queue-producer";
 
 interface Env {
@@ -206,11 +208,28 @@ async function processGenerationJob(
   // -------------------------------------------------------------------------
   // Step 6 — Call Claude API
   // -------------------------------------------------------------------------
-  const articleContent = await callClaude(prompt, env.OPENROUTER_API_KEY);
+  const rawArticle = await callClaude(prompt, env.OPENROUTER_API_KEY);
   await logApiUsage(env.DB, 'OpenRouter/Claude', 0, 0, 0.01, submission.id); // TODO: extract actual token usage from OpenRouter response
 
-  if (!articleContent) {
+  if (!rawArticle) {
     throw new Error(`Claude returned empty content for submission ${submission_id}`);
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 6b — Enforcement agent (scan + fix banned patterns)
+  // -------------------------------------------------------------------------
+  const { article: articleContent, violations, fixed, error: enfError } = await runEnforcementAgent(
+    rawArticle,
+    env.OPENROUTER_API_KEY
+  );
+
+  if (fixed) {
+    console.log(`[enforcement] Fixed ${violations.length} violation(s): ${violations.join(", ")}`);
+    await logApiUsage(env.DB, 'OpenRouter/Enforcement', 0, 0, 0.01, submission.id); // TODO: real token tracking
+  } else if (enfError) {
+    console.warn(`[enforcement] Pass-through (fixer failed: ${enfError})`);
+  } else {
+    console.log(`[enforcement] Clean — ${violations.length} violations detected but no fix needed`);
   }
 
   // -------------------------------------------------------------------------

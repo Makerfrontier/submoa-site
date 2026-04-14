@@ -191,7 +191,6 @@ function ActionRow({ submission, onView, onDownload, onPublish, onDelete, onEdit
   const status      = submission.status;
   const gradeStatus = submission.grade_status;
   const hasArticle  = !!submission.article_content;
-  const hasZip      = !!submission.article_content; // zip available whenever article exists
   const isDraft     = status === 'draft' || status === 'brief';
   const isFailed    = gradeStatus === 'needs_review' || status === 'failed';
   const isPassed    = gradeStatus === 'passed';
@@ -199,8 +198,10 @@ function ActionRow({ submission, onView, onDownload, onPublish, onDelete, onEdit
 
   // View rendered article — active when article exists
   const viewActive     = hasArticle;
-  // Download zip — active when zip has been packaged
-  const downloadActive = hasZip;
+  // Download zip — active when package is ready in R2
+  const packageStatus  = submission.package_status; // null | 'packaging' | 'ready' | 'failed'
+  const downloadActive  = packageStatus === 'ready';
+  const downloadLabel   = packageStatus === 'packaging' ? 'Preparing...' : 'Download zip package';
   // Mark as published — active when grading passed and not already published
   const publishActive  = isPassed && !isPublished;
 
@@ -221,9 +222,13 @@ function ActionRow({ submission, onView, onDownload, onPublish, onDelete, onEdit
         className={`db-btn ${downloadActive ? 'db-btn-gold' : 'db-btn-disabled'}`}
         onClick={downloadActive ? onDownload : undefined}
         disabled={!downloadActive}
-        title={downloadActive ? 'Download zip package' : 'Package not yet available'}
+        title={
+          downloadActive ? 'Download zip package' :
+          packageStatus === 'packaging' ? 'Package is being prepared...' :
+          'Article must pass grading before download is available'
+        }
       >
-        Download zip package
+        {downloadLabel}
       </button>
 
       {/* Mark as published */}
