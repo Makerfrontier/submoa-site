@@ -40,6 +40,7 @@ import type { GenerationJob } from "./queue-producer";
 
 interface Env {
   DB: D1Database;
+  SUBMOA_IMAGES: R2Bucket;
   DATAFORSEO_LOGIN: string;
   DATAFORSEO_PASSWORD: string;
   DISCORD_BOT_TOKEN: string;
@@ -267,6 +268,40 @@ async function processGenerationJob(
   );
 
   // -------------------------------------------------------------------------
+  // Step 8b — TTS audio generation (if requested)
+  // -------------------------------------------------------------------------
+  if (submission.generate_audio) {
+    try {
+      const ttsRes = await fetch('https://openrouter.ai/api/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'openai/tts-1',
+          input: stripHtmlForAudio(articleContent),
+          voice: (submission as any).tts_voice_id ?? 'alloy',
+        }),
+      });
+      if (ttsRes.ok) {
+        const audioBuffer = await ttsRes.arrayBuffer();
+        await env.SUBMOA_IMAGES.put(
+          `packages/${submission_id}/audio.mp3`,
+          audioBuffer,
+          { httpMetadata: { contentType: 'audio/mpeg' } }
+        );
+        console.log(`Audio generated for submission ${submission_id}`);
+      } else {
+        console.error(`TTS API returned ${ttsRes.status} for submission ${submission_id}`);
+      }
+    } catch (err) {
+      console.error('TTS generation failed:', err);
+      // Never block the pipeline on audio failure
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Step 9 — Discord notification (generation complete, grading starting soon)
   // -------------------------------------------------------------------------
   await notifyGenerationComplete(env, {
@@ -275,6 +310,21 @@ async function processGenerationJob(
     author_display_name: submission.author_display_name ?? submission.author,
     word_count: wordCount,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Strip HTML for TTS input
+// ---------------------------------------------------------------------------
+function stripHtmlForAudio(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 4096);
 }
 
 // ---------------------------------------------------------------------------

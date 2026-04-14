@@ -2,6 +2,11 @@ import { useState, useEffect, createContext, useContext, useRef } from 'react'
 import { marked } from 'marked'
 import Dashboard from './pages/Dashboard'
 import AdminDashboard from './pages/AdminDashboard'
+import About from './pages/About'
+import Platform from './pages/Platform'
+import Documentation from './pages/Documentation'
+import AuthorFrameworks from './pages/AuthorFrameworks'
+import SeoMethodology from './pages/SeoMethodology'
 
 // Strip the first H1/H2 from article markdown (page title already shows it above the divider)
 function stripFirstHeading(text) {
@@ -217,8 +222,7 @@ function Nav({ navigate, syncUser }) {
           <div className="nav-mobile-links">
             {!loading && !user && (
               <>
-                <a href="#how-it-works" onClick={e => { e.preventDefault(); closeMenu(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>How it works</a>
-                <a href="#features" onClick={e => { e.preventDefault(); closeMenu(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>Features</a>
+                <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/platform') }}>Platform</a>
                 <a href="#" onClick={e => { e.preventDefault(); closeMenu(); navigate('/login') }}>Login</a>
                 <a href="#" className="nav-mobile-cta" onClick={e => { e.preventDefault(); closeMenu(); navigate('/request') }}>Request access</a>
               </>
@@ -229,6 +233,9 @@ function Nav({ navigate, syncUser }) {
                 <a href="#" className={isActive('/author') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/author') }}>Submit brief</a>
                 <a href="#" className={isActive('/dashboard') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/dashboard') }}>Dashboard</a>
                 <a href="#" className={isActive('/account') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/account') }}>Account</a>
+                {user.role === 'admin' && (
+                  <a href="#" className={isActive('/admin') ? 'active' : ''} onClick={e => { e.preventDefault(); closeMenu(); navigate('/admin') }}>Admin</a>
+                )}
               </>
             )}
           </div>
@@ -249,8 +256,7 @@ function Nav({ navigate, syncUser }) {
             <div className="nav-links">
               {!loading && !user && (
                 <>
-                  <a href="#how-it-works" className="nav-link" onClick={e => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>How it works</a>
-                  <a href="#features" className="nav-link" onClick={e => { e.preventDefault(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); navigate('/') }}>Features</a>
+                  <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/platform') }}>Platform</a>
                   <a href="#" className="nav-link" onClick={e => { e.preventDefault(); navigate('/login') }}>Login</a>
                   <a href="#" className="nav-cta" onClick={e => { e.preventDefault(); navigate('/request') }}>Request access</a>
                 </>
@@ -261,6 +267,9 @@ function Nav({ navigate, syncUser }) {
                   <a href="#" className={`nav-link${isActive('/author')}`} onClick={e => { e.preventDefault(); navigate('/author') }}>Submit brief</a>
                   <a href="#" className={`nav-link${isActive('/dashboard')}`} onClick={e => { e.preventDefault(); navigate('/dashboard') }}>Dashboard</a>
                   <a href="#" className={`nav-link${isActive('/account')}`} onClick={e => { e.preventDefault(); navigate('/account') }}>Account</a>
+                  {user.role === 'admin' && (
+                    <a href="#" className={`nav-link${isActive('/admin')}`} onClick={e => { e.preventDefault(); navigate('/admin') }}>Admin</a>
+                  )}
                   <NotificationBell syncUser={syncUser} />
                 </>
               )}
@@ -315,112 +324,11 @@ function Footer() {
 function Landing({ navigate }) {
   return (
     <div className="page">
-      <section className="hero">
-        <div className="hero-map" style={{ backgroundImage: "url('/hero-bg.jpg')" }} />
-        <div className="hero-overlay" />
-        <div className="hero-bg-line" />
-        <div className="container">
-          <div className="hero-content">
-            <img src="/logo.jpg" alt="SubMoa Content" className="hero-logo-overlay" />
-            <h1 className="hero-title">
-              Precision Content at{' '}
-              <span className="accent">Sub-MOA Accuracy</span>
-            </h1>
-            <p className="hero-sub">AI-generated editorial built on proven field-tested workflows, real author frameworks, and SEO systems designed to dominate rankings at scale.</p>
-            <div className="hero-actions">
-              <button className="btn-primary" onClick={() => navigate('/request')}>Request Access</button>
-            </div>
-            <p className="hero-support">Built for publishers, operators, and media brands that need volume without sacrificing authority.</p>
-          </div>
-        </div>
-      </section>
-      <section className="trust-strip">
-        <div className="container">
-          <p className="trust-copy">Not another AI writing tool. This is a content production system modeled after real editorial workflows from high-volume media networks.</p>
-          <div className="trust-bullets">
-            <span>Author-profile driven content generation</span>
-            <span className="sep">·</span>
-            <span>SEO-first structure baked into every output</span>
-            <span className="sep">·</span>
-            <span>Scalable across multi-site publishing networks</span>
-            <span className="sep">·</span>
-            <span>Built from real-world media production systems</span>
-          </div>
-        </div>
-      </section>
-      <section className="core-value">
-        <div className="container">
-          <h2 className="section-title">Built Like a Media Company.<br />Scaled Like Software.</h2>
-          <p className="section-body">Sub MOA Content replicates how high-performing editorial teams actually work. Instead of generic prompts, our system uses structured inputs, author voices, and ranking frameworks to produce content that performs in search and reads like it belongs.</p>
-          <div className="value-grid">
-            <div className="value-card"><div className="value-num">01 — Author</div><h3>Author-Driven Content</h3><p>Your AI doesn't guess tone. It writes through defined author profiles with consistent voice, expertise, and positioning.</p></div>
-            <div className="value-card"><div className="value-num">02 — SEO</div><h3>SEO Engineered Output</h3><p>Every piece is structured for discoverability. Headers, entities, topical depth, and internal linking are not optional. They are built in.</p></div>
-            <div className="value-card"><div className="value-num">03 — Scale</div><h3>Production at Scale</h3><p>From 1 article to 500 per week, the system holds quality while increasing output.</p></div>
-          </div>
-        </div>
-      </section>
-      <section className="how-section" id="how-it-works">
-        <div className="container">
-          <h2 className="section-title">From Idea to Indexed Content in Minutes</h2>
-          <div className="steps-grid">
-            <div className="step" data-step="01"><div className="step-num">Step 01</div><h3>Define the Author</h3><p>Create or select an author profile with voice, expertise, and positioning.</p></div>
-            <div className="step" data-step="02"><div className="step-num">Step 02</div><h3>Input the Topic</h3><p>Drop in your target keyword, angle, or article concept.</p></div>
-            <div className="step" data-step="03"><div className="step-num">Step 03</div><h3>Apply the Framework</h3><p>Our system builds the structure using proven editorial + SEO templates.</p></div>
-            <div className="step" data-step="04"><div className="step-num">Step 04</div><h3>Generate &amp; Publish</h3><p>Export ready-to-publish content optimized for ranking and engagement.</p></div>
-          </div>
-          <div className="cta-center"><button className="btn-primary" onClick={() => navigate('/request')}>Request Access</button></div>
-        </div>
-      </section>
-      <section className="features-section" id="features">
-        <div className="container">
-          <h2 className="section-title centered">Everything You Need to Scale Content That Ranks</h2>
-          <div className="features-grid">
-            <div className="feature-card"><h3>Author Profiles</h3><p>Persistent voices that create consistency across hundreds of articles.</p></div>
-            <div className="feature-card"><h3>SEO Structuring Engine</h3><p>Automatic heading hierarchy, keyword placement, and topical coverage.</p></div>
-            <div className="feature-card"><h3>Editorial Frameworks</h3><p>Pre-built structures for reviews, comparisons, news, and long-form guides.</p></div>
-            <div className="feature-card"><h3>Multi-Site Scaling</h3><p>Built for operators managing multiple publications or content verticals.</p></div>
-            <div className="feature-card"><h3>Export-Ready Output</h3><p>Clean, formatted content ready for CMS upload.</p></div>
-          </div>
-        </div>
-      </section>
-      <section className="diff-section">
-        <div className="container">
-          <div className="diff-inner">
-            <h2 className="section-title">Why Most AI Content Fails</h2>
-            <p className="section-body">Most AI content is obvious, thin, and disposable. It lacks structure, authority, and intent.</p>
-            <p className="section-body">Sub MOA Content fixes that by combining:</p>
-            <ul className="diff-list">
-              <li>Real editorial workflows</li>
-              <li>Defined author identity</li>
-              <li>SEO-first construction</li>
-              <li>Consistent production standards</li>
-            </ul>
-            <p className="diff-closing">This is not AI guessing. This is AI executing.</p>
-          </div>
-        </div>
-      </section>
-      <section className="use-section">
-        <div className="container">
-          <h2 className="section-title centered">Built for Operators Who Need Results</h2>
-          <div className="use-grid">
-            <div className="use-card"><h3>Media Companies</h3><p>Scale editorial output across multiple sites without increasing headcount.</p></div>
-            <div className="use-card"><h3>Affiliate Publishers</h3><p>Generate high-converting product content with consistent structure.</p></div>
-            <div className="use-card"><h3>Niche Site Builders</h3><p>Dominate verticals with volume + topical authority.</p></div>
-            <div className="use-card"><h3>Agencies</h3><p>Deliver SEO content at scale without sacrificing quality.</p></div>
-          </div>
-        </div>
-      </section>
-      <section className="proof-section">
-        <div className="container">
-          <h2 className="section-title centered">What the Output Looks Like</h2>
-          <p className="section-body centered">Structured. Readable. Rankable.</p>
-          <div className="cta-center"><button className="btn-secondary">View Sample Articles</button></div>
-        </div>
-      </section>
-      <section className="philosophy-section">
-        <div className="container">
-          <p className="philosophy-quote">"In shooting, Sub MOA means precision. Consistency. Repeatability. That's exactly what this platform delivers. Not one good article. Not ten. But a system that produces high-quality content over and over again, without drift. We don't chase viral hits. <span>We build content that performs.</span>"</p>
-        </div>
+      <section className="hero" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#0a1a0a', textAlign: 'center', padding: '80px 24px' }}>
+        <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 'clamp(2.5rem, 6vw, 5rem)', fontWeight: 400, lineHeight: 1.15, margin: 0 }}>
+          <span style={{ color: '#ffffff', display: 'block' }}>Precision Content at</span>
+          <span style={{ color: '#c8973a', display: 'block' }}>Sub-MOA Accuracy</span>
+        </h1>
       </section>
       <Footer />
     </div>
@@ -2016,6 +1924,11 @@ export default function App() {
         {page === '/admin' && (loading ? null : user ? <AdminGuard><AdminDashboard /></AdminGuard> : <Login navigate={navigate} />)}
         {page.startsWith('/content/') && (loading ? null : user ? <ContentPage navigate={navigate} user={user} /> : <Login navigate={navigate} />)}
         {page === '/reset' && <Reset navigate={navigate} />}
+        {page === '/about' && <About navigate={navigate} />}
+        {page === '/platform' && <Platform navigate={navigate} />}
+        {page === '/documentation' && <Documentation navigate={navigate} />}
+        {page === '/author-frameworks' && <AuthorFrameworks navigate={navigate} />}
+        {page === '/seo-methodology' && <SeoMethodology navigate={navigate} />}
         {page === '/' && <Landing navigate={navigate} />}
       </div>
     </AuthContext.Provider>

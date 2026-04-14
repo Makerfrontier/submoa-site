@@ -44,10 +44,11 @@ export async function onRequestGet({ request, env, params }) {
   // (zip is small — HTML + DOCX + JSON, typically <500KB)
   const basePath = `packages/${id}`;
 
-  const [htmlObj, docxObj, metaObj] = await Promise.all([
+  const [htmlObj, docxObj, metaObj, audioObj] = await Promise.all([
     env.SUBMOA_IMAGES.get(`${basePath}/article.html`),
     env.SUBMOA_IMAGES.get(`${basePath}/article.docx`),
     env.SUBMOA_IMAGES.get(`${basePath}/meta.json`),
+    env.SUBMOA_IMAGES.get(`${basePath}/audio.mp3`),
   ]);
 
   if (!htmlObj) {
@@ -60,6 +61,7 @@ export async function onRequestGet({ request, env, params }) {
   zip.file('article.html', await htmlObj.arrayBuffer());
   if (docxObj) zip.file('article.docx', await docxObj.arrayBuffer());
   if (metaObj) zip.file('meta.json', await metaObj.text());
+  if (audioObj) zip.file('audio.mp3', await audioObj.arrayBuffer());
 
   const zipBuffer = await zip.generateAsync({ type: 'arraybuffer' });
 

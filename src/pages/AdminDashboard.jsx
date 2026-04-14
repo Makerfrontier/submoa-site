@@ -164,11 +164,6 @@ function SectionSubmissions() {
         <div className="adm-stat"><div className="adm-stat-num amber">{stats.needs_review ?? '—'}</div><div className="adm-stat-label">Needs Review</div></div>
       </div>
 
-      <label className="adm-upload">
-        + Upload article for grading (drag & drop or click)
-        <input type="file" accept=".txt,.md,.html" style={{ display:'none' }} onChange={handleUpload} />
-      </label>
-
       <div className="adm-filters">
         {filters.map(f => (
           <button key={f} className={`adm-fpill ${filter === f ? 'active' : ''}`} onClick={() => { setFilter(f); setPage(1); }}>
@@ -183,6 +178,11 @@ function SectionSubmissions() {
           {gradingAll ? 'Grading...' : 'Grade All Ungraded'}
         </button>
       </div>
+
+      <label className="adm-upload">
+        + Upload article for grading (drag & drop or click)
+        <input type="file" accept=".txt,.md,.html" style={{ display:'none' }} onChange={handleUpload} />
+      </label>
 
       {loading ? (
         <div className="adm-loading">Loading submissions…</div>

@@ -183,13 +183,14 @@ function GradeRow({ grade }) {
 // ---------------------------------------------------------------------------
 // Action buttons — always rendered, greyed when unavailable
 // ---------------------------------------------------------------------------
-function ActionRow({ submission, onView, onDownload, onPublish, onDelete, onEdit, onDiscard, onRequestRevision }) {
+function ActionRow({ submission, onView, onDownload, onPublishClick, onDelete, onEdit, onDiscard, onRequestRevision, publishingId }) {
   const status      = submission.status;
   const gradeStatus = submission.grade_status;
   const hasArticle  = !!submission.article_content;
   const isDraft     = status === 'draft' || status === 'brief';
   const isGraded    = gradeStatus === 'graded' || gradeStatus === 'passed';
   const isPublished = status === 'published';
+  const isPublishing = publishingId === submission.id;
 
   // View rendered article — active when article exists
   const viewActive     = hasArticle;
@@ -226,14 +227,14 @@ function ActionRow({ submission, onView, onDownload, onPublish, onDelete, onEdit
         {downloadLabel}
       </button>
 
-      {/* Mark as published */}
+      {/* Mark as published — toggles URL input */}
       <button
-        className={`db-btn ${publishActive ? 'db-btn-green' : 'db-btn-disabled'}`}
-        onClick={publishActive ? onPublish : undefined}
+        className={`db-btn ${isPublishing ? 'db-btn-disabled' : publishActive ? 'db-btn-green' : 'db-btn-disabled'}`}
+        onClick={publishActive ? onPublishClick : undefined}
         disabled={!publishActive}
         title={publishActive ? 'Mark as published' : isPublished ? 'Already published' : 'Not ready to publish'}
       >
-        Mark as published
+        {isPublishing ? 'Cancel' : 'Mark as published'}
       </button>
 
       {/* Edit — only shown on draft cards */}
@@ -251,7 +252,7 @@ function ActionRow({ submission, onView, onDownload, onPublish, onDelete, onEdit
       )}
 
       {/* Request revision — shown on graded articles that aren't published */}
-      {isGraded && !isPublished && (
+      {gradeStatus === 'graded' && status !== 'published' && (
         <button className="db-btn db-btn-gold" onClick={onRequestRevision}>
           Request revision
         </button>
@@ -268,7 +269,7 @@ function ActionRow({ submission, onView, onDownload, onPublish, onDelete, onEdit
 // ---------------------------------------------------------------------------
 // Single card — one structure, always identical
 // ---------------------------------------------------------------------------
-function SubmissionCard({ submission, onView, onDownload, onPublish, onDelete, onEdit, onDiscard, onRequestRevision }) {
+function SubmissionCard({ submission, onView, onDownload, onPublishClick, onPublish, onDelete, onEdit, onDiscard, onRequestRevision, publishingId, publishUrl, setPublishUrl }) {
   const {
     topic,               // ← INJECT: topic field
     article_format,      // ← INJECT: article_format field
@@ -348,12 +349,49 @@ function SubmissionCard({ submission, onView, onDownload, onPublish, onDelete, o
         submission={submission}
         onView={onView}
         onDownload={onDownload}
-        onPublish={onPublish}
+        onPublishClick={onPublishClick}
         onDelete={onDelete}
         onEdit={onEdit}
         onDiscard={onDiscard}
         onRequestRevision={onRequestRevision}
+        publishingId={publishingId}
       />
+
+      {/* ── Publish URL input — shown when Mark as published is clicked ── */}
+      {publishingId === submission.id && (
+        <div style={{
+          marginTop: 12,
+          padding: '12px 0',
+          borderTop: '0.5px solid #1e3a1e',
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}>
+          <input
+            className="db-input"
+            type="url"
+            placeholder="https://yoursite.com/article-slug"
+            value={publishUrl}
+            onChange={e => setPublishUrl(e.target.value)}
+            style={{ flex: 1, minWidth: 200 }}
+            autoFocus
+          />
+          <button
+            className="db-btn db-btn-green"
+            onClick={() => onPublish(submission.id, publishUrl)}
+            disabled={!publishUrl.trim()}
+          >
+            Confirm publish
+          </button>
+          <button
+            className="db-btn db-btn-disabled"
+            onClick={onPublishClick}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
     </div>
   );
@@ -369,6 +407,8 @@ export default function Dashboard() {
   const [user, setUser]               = useState(null); // ← INJECT: from GET /api/me or session
   const [confirmModal, setConfirmModal] = useState(null); // { message, onConfirm }
   const [toast, setToast] = useState(null);
+  const [publishingId, setPublishingId] = useState(null);
+  const [publishUrl, setPublishUrl] = useState('');
 
   // ── Load submissions ──
   const load = useCallback(async () => {
@@ -416,9 +456,26 @@ export default function Dashboard() {
     window.location.href = `/api/submissions/${id}/download`;
   }
 
-  async function handlePublish(id) {
-    // INJECT: mark as published
-    await fetch(`/api/submissions/${id}/publish`, { method: 'PATCH', credentials: 'include' });
+  function handlePublishClick(id) {
+    // Toggle URL input on the card
+    if (publishingId === id) {
+      setPublishingId(null);
+      setPublishUrl('');
+    } else {
+      setPublishingId(id);
+      setPublishUrl('');
+    }
+  }
+
+  async function handlePublish(id, liveUrl) {
+    await fetch(`/api/submissions/${id}/publish`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ live_url: liveUrl }),
+    });
+    setPublishingId(null);
+    setPublishUrl('');
     await load();
   }
 
@@ -448,10 +505,23 @@ export default function Dashboard() {
   }
 
   async function handleRequestRevision(id) {
-    // INJECT: trigger revision request
+    // Optimistic update — reset card immediately so UI reflects new state
+    setSubmissions(prev => prev.map(s => s.id === id ? {
+      ...s,
+      status: 'queued',
+      grade_status: 'ungraded',
+      article_content: null,
+      word_count: null,
+      package_status: null,
+      grade: null,
+    } : s));
+
     await fetch(`/api/submissions/${id}/revise`, { method: 'POST', credentials: 'include' });
+
     setToast('Revision requested — your article has been requeued.');
     setTimeout(() => setToast(null), 4000);
+
+    // Background refresh to sync with server
     await load();
   }
 
@@ -526,11 +596,15 @@ export default function Dashboard() {
             submission={sub}
             onView={() => handleView(sub.id)}
             onDownload={() => handleDownload(sub.id)}
-            onPublish={() => handlePublish(sub.id)}
+            onPublishClick={() => handlePublishClick(sub.id)}
+            onPublish={handlePublish}
             onDelete={() => handleDelete(sub.id)}
             onEdit={() => handleEdit(sub.id)}
             onDiscard={() => handleDiscard(sub.id)}
             onRequestRevision={() => handleRequestRevision(sub.id)}
+            publishingId={publishingId}
+            publishUrl={publishUrl}
+            setPublishUrl={setPublishUrl}
           />
         ))
       )}

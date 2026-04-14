@@ -156,7 +156,15 @@ export async function onRequest(context) {
       if (!sub) return json({ error: 'Not found' }, 404);
       if (sub.user_id !== user.id && user.role !== 'admin') return json({ error: 'Forbidden' }, 403);
 
-      await context.env.submoacontent_db.prepare('UPDATE submissions SET status = ?, updated_at = ? WHERE id = ?').bind('published', Date.now(), id).run();
+      let live_url: string | null = null;
+      try {
+        const body = await context.request.json();
+        live_url = body.live_url || null;
+      } catch { /* no body is fine */ }
+
+      await context.env.submoacontent_db.prepare(
+        'UPDATE submissions SET status = ?, live_url = ?, updated_at = ? WHERE id = ?'
+      ).bind('published', live_url, Date.now(), id).run();
 
       // Fire published notification email
       if (sub.email) {
@@ -190,6 +198,11 @@ export async function onRequest(context) {
         SET status = 'queued', grade_status = 'ungraded', article_content = NULL, word_count = NULL, package_status = NULL, updated_at = ?
         WHERE id = ?
       `).bind(Date.now(), id).run();
+
+      // Delete grade record so scores disappear immediately
+      await context.env.submoacontent_db.prepare(
+        `DELETE FROM grades WHERE submission_id = ?`
+      ).bind(id).run();
 
       // Enqueue regeneration
       const { enqueueGenerationJob } = await import('../queue-producer');

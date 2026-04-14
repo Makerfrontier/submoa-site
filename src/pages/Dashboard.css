@@ -85,3 +85,7 @@
 /* Buttons — disabled/greyed state */
 .db-btn-disabled { border: 0.5px solid #1e3a1e; color: #2a4a2a; background: transparent; cursor: not-allowed; }
 .db-btn-disabled:hover { background: transparent; }
+
+/* Publish URL input */
+.db-input { background: #0a1a0a; border: 0.5px solid #2e5a2e; color: #fff; font-family: sans-serif; font-size: 12px; padding: 6px 12px; border-radius: 4px; outline: none; }
+.db-input:focus { border-color: #c8973a; }

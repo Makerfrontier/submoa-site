@@ -13,13 +13,13 @@ interface Env {
 // Auth guard — call at top of every admin route
 // ---------------------------------------------------------------------------
 async function requireAdmin(request: Request, env: Env): Promise<{ id: string; role: string } | Response> {
-  // Adjust to match your existing auth mechanism (session cookie, JWT, etc.)
-  const session = request.headers.get('Cookie')?.match(/session=([^;]+)/)?.[1];
+  const cookie = request.headers.get('Cookie') ?? '';
+  const session = cookie.match(/submoa_session=([^;]+)/)?.[1];
   if (!session) return new Response('Unauthorized', { status: 401 });
 
   const user = await env.submoacontent_db.prepare(
     `SELECT id, role FROM users WHERE id = (
-      SELECT user_id FROM sessions WHERE token = ? AND expires_at > ?
+      SELECT user_id FROM sessions WHERE id = ? AND expires_at > ?
     )`
   ).bind(session, Date.now()).first<{ id: string; role: string }>();
 
@@ -87,12 +87,16 @@ export async function handleGetStats(_request: Request, env: Env): Promise<Respo
     env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions`).first<{ n: number }>(),
     env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status IN ('queued','generating')`).first<{ n: number }>(),
     env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'article_done' AND grade_status IN ('graded', 'passed')`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE grade_status = 'needs_review'`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'failed'`).first<{ n: number }>(),
   ]);
 
   return json({
     total: rows[0]?.n ?? 0,
     in_progress: rows[1]?.n ?? 0,
     done: rows[2]?.n ?? 0,
+    needs_review: rows[3]?.n ?? 0,
+    failed: rows[4]?.n ?? 0,
   });
 }
 
