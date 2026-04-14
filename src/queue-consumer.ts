@@ -218,18 +218,28 @@ async function processGenerationJob(
   // -------------------------------------------------------------------------
   // Step 6b — Enforcement agent (scan + fix banned patterns)
   // -------------------------------------------------------------------------
-  const { article: articleContent, violations, fixed, error: enfError } = await runEnforcementAgent(
-    rawArticle,
-    env.OPENROUTER_API_KEY
-  );
+  // ── Enforce writing guidelines ────────────────────────────────────────
+  const enforcement = await runEnforcementAgent(rawArticle, {
+    OPENROUTER_API_KEY: env.OPENROUTER_API_KEY,
+  }).catch((err) => {
+    console.error('Enforcement agent failed, using raw article:', err);
+    return {
+      content: rawArticle,
+      violations_found: [],
+      violations_fixed: [],
+      enforcement_calls: 0,
+      was_clean: true,
+    };
+  });
 
-  if (fixed) {
-    console.log(`[enforcement] Fixed ${violations.length} violation(s): ${violations.join(", ")}`);
-    await logApiUsage(env.DB, 'OpenRouter/Enforcement', 0, 0, 0.01, submission.id); // TODO: real token tracking
-  } else if (enfError) {
-    console.warn(`[enforcement] Pass-through (fixer failed: ${enfError})`);
-  } else {
-    console.log(`[enforcement] Clean — ${violations.length} violations detected but no fix needed`);
+
+  const articleContent = enforcement.content;
+
+  if (!enforcement.was_clean) {
+    console.log(
+      `Enforcement: found ${enforcement.violations_found.length} violation type(s), ` +
+      `fixed ${enforcement.violations_fixed.length}`
+    );
   }
 
   // -------------------------------------------------------------------------
