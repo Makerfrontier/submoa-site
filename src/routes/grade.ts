@@ -27,7 +27,7 @@ import {
 // Types — adjust to match your Env binding names
 // ---------------------------------------------------------------------------
 interface Env {
-  submoacontent_db: D1Database;
+  DB: D1Database;
   COPYLEAKS_API_KEY?: string;
   LANGUAGETOOL_API_KEY?: string;
   DISCORD_BOT_TOKEN?: string;
@@ -61,7 +61,7 @@ export async function runGradingPipeline(
   };
 }> {
   // Fetch submission
-  const submission = await env.submoacontent_db.prepare(
+  const submission = await env.DB.prepare(
     `SELECT s.*, ap.name as author_display_name, ap.style_guide, u.email as author_email
      FROM submissions s
      LEFT JOIN author_profiles ap ON s.author = ap.slug
@@ -87,7 +87,7 @@ export async function runGradingPipeline(
   }
 
   // Mark as grading
-  await env.submoacontent_db.prepare(
+  await env.DB.prepare(
     `UPDATE submissions SET grade_status = 'grading' WHERE id = ?`
   )
     .bind(submissionId)
@@ -137,7 +137,7 @@ export async function runGradingPipeline(
   }
 
   // Upsert grade row
-  await env.submoacontent_db.prepare(
+  await env.DB.prepare(
     `INSERT INTO grades (id, submission_id, grammar_score, readability_score,
        ai_detection_score, plagiarism_score, seo_score, overall_score,
        rewrite_attempts, status, graded_at, created_at)
@@ -160,7 +160,7 @@ export async function runGradingPipeline(
     .run();
 
   // Update submission grade_status
-  await env.submoacontent_db.prepare(
+  await env.DB.prepare(
     `UPDATE submissions SET grade_status = ? WHERE id = ?`
   )
     .bind(submissionGradeStatus, submissionId)
@@ -260,7 +260,7 @@ ${submission.article_content}`;
     return;
   }
 
-  await env.submoacontent_db.prepare(
+  await env.DB.prepare(
     `UPDATE submissions SET article_content = ? WHERE id = ?`
   )
     .bind(newContent, submission.id)
@@ -291,7 +291,7 @@ export async function handleGetGrade(
   env: Env,
   submissionId: string
 ): Promise<Response> {
-  const grade = await env.submoacontent_db.prepare(
+  const grade = await env.DB.prepare(
     `SELECT * FROM grades WHERE submission_id = ? ORDER BY graded_at DESC LIMIT 1`
   )
     .bind(submissionId)
@@ -309,7 +309,7 @@ export async function handleGradeAll(
   _request: Request,
   env: Env
 ): Promise<Response> {
-  const { results } = await env.submoacontent_db.prepare(
+  const { results } = await env.DB.prepare(
     `SELECT id, title FROM submissions
      WHERE status = 'article_done' AND grade_status = 'ungraded'
      ORDER BY created_at ASC`
