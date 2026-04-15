@@ -818,32 +818,94 @@ function RevisionPanel({ panel, setPanel, onSubmit }) {
 }
 
 // ---------------------------------------------------------------------------
-// Audio player row — always visible, active or greyed
+// Audio player row — three states: ready | generating | not requested
 // ---------------------------------------------------------------------------
-function AudioRow({ submission }) {
-  const audioReady = Number(submission.generate_audio) === 1 && submission.package_status === 'ready';
+function AudioRow({ submission, onRequestAudio }) {
+  const [requesting, setRequesting] = useState(false);
+  const [error, setError]           = useState(null);
+
+  const genAudio = Number(submission.generate_audio) === 1;
+  const audioReq = Number(submission.audio_requested) === 1;
+  const pkgReady = submission.package_status === 'ready';
+
+  const state1 = genAudio && pkgReady;              // audio exists — play controls
+  const state3 = !genAudio && !audioReq;            // never requested — show button
+  // state2 = everything else (generate_audio=1 but not ready yet, or audio_requested)
+
+  const containerBase = {
+    marginBottom: 12,
+    padding: '10px 12px',
+    background: '#081508',
+    border: '0.5px solid #1e3a1e',
+    borderRadius: 5,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 48,
+    boxSizing: 'border-box',
+  };
+
+  if (state1) {
+    return (
+      <div style={containerBase}>
+        <span style={{ fontFamily: 'sans-serif', fontSize: 10, color: '#5a7a5a', textTransform: 'uppercase', letterSpacing: '.06em', flexShrink: 0 }}>
+          Audio
+        </span>
+        <audio
+          controls
+          preload="none"
+          style={{ flex: 1, height: 28, accentColor: '#c8973a' }}
+          src={`/api/submissions/${submission.id}/audio`}
+        />
+      </div>
+    );
+  }
+
+  if (state3) {
+    const handleClick = async () => {
+      setRequesting(true);
+      setError(null);
+      try {
+        await onRequestAudio(submission.id);
+      } catch (e) {
+        setError(e.message || 'Request failed');
+      }
+      setRequesting(false);
+    };
+    return (
+      <div style={containerBase}>
+        <span style={{ color: '#c8973a', fontSize: 12, flexShrink: 0 }}>✦</span>
+        <span style={{ flex: 1, fontSize: 12, color: 'var(--text-light)' }}>
+          {error ? <span style={{ color: '#b55' }}>{error}</span> : 'No audio yet'}
+        </span>
+        <button
+          className="db-btn"
+          onClick={handleClick}
+          disabled={requesting}
+          style={{ fontSize: 11, padding: '4px 10px', flexShrink: 0 }}
+        >
+          {requesting ? 'Generating…' : 'Generate Audio'}
+        </button>
+      </div>
+    );
+  }
+
+  // state2 — generating
   return (
-    <div style={{
-      marginBottom: 12,
-      padding: '10px 12px',
-      background: '#081508',
-      border: '0.5px solid #1e3a1e',
-      borderRadius: 5,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10,
-      opacity: audioReady ? 1 : 0.35,
-      pointerEvents: audioReady ? 'auto' : 'none',
-    }}>
+    <div style={{ ...containerBase, opacity: 0.5 }}>
       <span style={{ fontFamily: 'sans-serif', fontSize: 10, color: '#5a7a5a', textTransform: 'uppercase', letterSpacing: '.06em', flexShrink: 0 }}>
         Audio
       </span>
       <audio
         controls
         preload="none"
-        style={{ flex: 1, height: 28, accentColor: '#c8973a' }}
-        src={`/api/submissions/${submission.id}/audio`}
+        muted
+        disabled
+        style={{ flex: 1, height: 28, accentColor: '#c8973a', pointerEvents: 'none' }}
       />
+      <span style={{ fontSize: 11, color: 'var(--text-light)', fontStyle: 'italic', flexShrink: 0, animation: 'audioGenPulse 1.6s ease-in-out infinite' }}>
+        Audio generating…
+      </span>
     </div>
   );
 }
@@ -851,7 +913,7 @@ function AudioRow({ submission }) {
 // ---------------------------------------------------------------------------
 // Single card — one structure, always identical
 // ---------------------------------------------------------------------------
-function SubmissionCard({ submission, onView, onDownload, onPublishClick, onPublish, onDelete, onEdit, onDiscard, onRequestRevision, publishingId, publishUrl, setPublishUrl, revisionPanel, setRevisionPanel }) {
+function SubmissionCard({ submission, onView, onDownload, onPublishClick, onPublish, onDelete, onEdit, onDiscard, onRequestRevision, onRequestAudio, publishingId, publishUrl, setPublishUrl, revisionPanel, setRevisionPanel }) {
   const [shareOpen, setShareOpen] = useState(false);
   const {
     topic,               // ← INJECT: topic field
@@ -1008,7 +1070,7 @@ function SubmissionCard({ submission, onView, onDownload, onPublishClick, onPubl
       <GradeRow grade={grade} gradeStatus={grade_status} />
 
       {/* ── Audio player — always visible ── */}
-      <AudioRow submission={submission} />
+      <AudioRow submission={submission} onRequestAudio={onRequestAudio} />
 
       {/* ── Author + word count — always rendered ── */}
       <div className="db-author-row">
@@ -1245,6 +1307,21 @@ export default function Dashboard() {
     });
   }
 
+  async function handleRequestAudio(id) {
+    const res = await fetch(`/api/submissions/${id}/request-audio`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    let data = {};
+    try { data = await res.json(); } catch {}
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    setSubmissions(subs => subs.map(s =>
+      s.id === id ? { ...s, generate_audio: 1, audio_requested: 1 } : s
+    ));
+    return data;
+  }
+
   function handleRequestRevision(submissionOrId, overrides) {
     // When called with a submission object (from button click) — open the panel
     if (typeof submissionOrId === 'object' && submissionOrId !== null && !overrides) {
@@ -1416,6 +1493,7 @@ export default function Dashboard() {
             onEdit={() => handleEdit(sub.id)}
             onDiscard={() => handleDiscard(sub.id)}
             onRequestRevision={handleRequestRevision}
+            onRequestAudio={handleRequestAudio}
             publishingId={publishingId}
             publishUrl={publishUrl}
             setPublishUrl={setPublishUrl}
