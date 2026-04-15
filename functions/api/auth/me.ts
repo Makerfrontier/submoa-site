@@ -19,7 +19,16 @@ export async function onRequest(context: { request: Request; env: Env }) {
 
   // GET — return current user
   if (context.request.method === 'GET') {
-    return json({ user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+    return json({ user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      // @ts-ignore — populated by getSessionUser when admin is impersonating
+      impersonating: !!(user as any).impersonating,
+      // @ts-ignore
+      impersonating_from: (user as any).impersonating_from || null,
+    }});
   }
 
   // PUT — update user settings

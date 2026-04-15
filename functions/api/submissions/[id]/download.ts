@@ -1,72 +1,69 @@
 // functions/api/submissions/[id]/download.ts
 // GET /api/submissions/:id/download
-// Streams pre-packaged zip from R2.
-// If package isn't ready yet, returns 202 with status.
+// Builds zip from unified project folder (real files + placeholders).
+// Always available — project folder is created on submission.
 
 import JSZip from 'jszip';
+import { listProjectFiles } from '../../../../src/project-template';
 
 export async function onRequestGet({ request, env, params }) {
   // Auth
   const session = getCookieValue(request, 'submoa_session');
-  if (!session) return json({ error: 'Unauthorized' }, 401);
+  if (!session) return jsonResp({ error: 'Unauthorized' }, 401);
 
   const user = await env.submoacontent_db.prepare(
     `SELECT id, account_id FROM users
-     WHERE id = (SELECT user_id FROM sessions WHERE token = ? AND expires_at > ?)
+     WHERE id = (SELECT user_id FROM sessions WHERE id = ? AND expires_at > ?)
      LIMIT 1`
   ).bind(session, Date.now()).first();
 
-  if (!user) return json({ error: 'Unauthorized' }, 401);
+  if (!user) return jsonResp({ error: 'Unauthorized' }, 401);
 
   const { id } = params;
 
-  // Fetch submission — confirm ownership and package status
+  // Verify ownership
   const sub = await env.submoacontent_db.prepare(
-    `SELECT id, topic, package_status, zip_url, account_id
-     FROM submissions
-     WHERE id = ? AND account_id = ?`
-  ).bind(id, user.account_id).first();
+    `SELECT id, topic FROM submissions WHERE id = ? AND account_id = ?`
+  ).bind(id, user.account_id).first<{ id: string; topic: string }>();
 
-  if (!sub) return json({ error: 'Not found' }, 404);
+  if (!sub) return jsonResp({ error: 'Not found' }, 404);
 
-  // Package not ready yet
-  if (sub.package_status !== 'ready') {
-    return json({
-      error: 'Package not ready',
-      package_status: sub.package_status ?? 'pending',
-      message: sub.package_status === 'packaging'
-        ? 'Your package is being prepared. Check back in a moment.'
-        : 'Your article has not been packaged yet.',
-    }, 202);
-  }
-
-  // Fetch files from R2 and build zip on the fly
-  // (zip is small — HTML + DOCX + JSON, typically <500KB)
-  const basePath = `packages/${id}`;
-
-  const [htmlObj, docxObj, metaObj, audioObj] = await Promise.all([
-    env.SUBMOA_IMAGES.get(`${basePath}/article.html`),
-    env.SUBMOA_IMAGES.get(`${basePath}/article.docx`),
-    env.SUBMOA_IMAGES.get(`${basePath}/meta.json`),
-    env.SUBMOA_IMAGES.get(`${basePath}/audio.mp3`),
-  ]);
-
-  if (!htmlObj) {
-    return json({ error: 'Package files not found in storage' }, 404);
-  }
-
-  // Build zip from R2 objects
+  // Try unified project folder first (new), fall back to legacy packages/ path
+  const files = await listProjectFiles(env, id);
   const zip = new JSZip();
 
-  zip.file('article.html', await htmlObj.arrayBuffer());
-  if (docxObj) zip.file('article.docx', await docxObj.arrayBuffer());
-  if (metaObj) zip.file('meta.json', await metaObj.text());
-  if (audioObj) zip.file('audio.mp3', await audioObj.arrayBuffer());
+  if (files.length > 0) {
+    // New path: projects/{id}/folder/file
+    const fetchPromises = files.map(async (file) => {
+      const obj = await env.SUBMOA_IMAGES.get(file.key);
+      if (!obj) return;
+      const buffer = await obj.arrayBuffer();
+      zip.file(`${file.folder}/${file.filename}`, buffer);
+    });
+    await Promise.all(fetchPromises);
+  } else {
+    // Legacy path: packages/{id}/article.html + article.docx + meta.json
+    const basePath = `packages/${id}`;
+    const [htmlObj, docxObj, metaObj, audioObj] = await Promise.all([
+      env.SUBMOA_IMAGES.get(`${basePath}/article.html`),
+      env.SUBMOA_IMAGES.get(`${basePath}/article.docx`),
+      env.SUBMOA_IMAGES.get(`${basePath}/meta.json`),
+      env.SUBMOA_IMAGES.get(`${basePath}/audio.mp3`),
+    ]);
+    if (!htmlObj) return jsonResp({ error: 'Package files not found in storage' }, 404);
+    zip.file('article/article.html', await htmlObj.arrayBuffer());
+    if (docxObj) zip.file('article/article.docx', await docxObj.arrayBuffer());
+    if (metaObj) zip.file('seo/meta.json', await metaObj.arrayBuffer());
+    if (audioObj) zip.file('audio/audio.mp3', await audioObj.arrayBuffer());
+  }
 
-  const zipBuffer = await zip.generateAsync({ type: 'arraybuffer' });
+  const zipBuffer = await zip.generateAsync({
+    type: 'arraybuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+  });
 
-  // Slug the filename from the topic
-  const slug = (sub.topic ?? 'article')
+  const safeTopic = (sub.topic ?? id)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
@@ -76,13 +73,14 @@ export async function onRequestGet({ request, env, params }) {
     status: 200,
     headers: {
       'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="${slug}.zip"`,
+      'Content-Disposition': `attachment; filename="${safeTopic}-${id.slice(0, 8)}.zip"`,
       'Content-Length': String(zipBuffer.byteLength),
+      'Cache-Control': 'private, no-store',
     },
   });
 }
 
-function json(data: unknown, status = 200) {
+function jsonResp(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { 'Content-Type': 'application/json' },

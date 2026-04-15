@@ -57,8 +57,11 @@ export async function handleGetSubmissions(request: Request, env: Env): Promise<
   const auth = await requireAdmin(request, env);
   if (auth instanceof Response) return auth;
 
-  const { results } = await env.submoacontent_db.prepare(
-    `SELECT s.*, s.topic as title,
+  // Admins see all submissions EXCEPT super_admin-owned ones.
+  // Super admins see everything.
+  const isSuperAdmin = (auth as any).role === 'super_admin';
+
+  const baseSelect = `SELECT s.*, s.topic as title,
             ap.name as author_display_name,
             g.grammar_score, g.readability_score, g.ai_detection_score,
             g.plagiarism_score, g.seo_score, g.overall_score,
@@ -70,9 +73,17 @@ export async function handleGetSubmissions(request: Request, env: Env): Promise<
        WHERE submission_id = s.id
        ORDER BY COALESCE(graded_at, created_at) DESC
        LIMIT 1
-     )
-     ORDER BY s.created_at DESC`
-  ).all();
+     )`;
+
+  const stmt = isSuperAdmin
+    ? env.submoacontent_db.prepare(`${baseSelect} ORDER BY s.created_at DESC`)
+    : env.submoacontent_db.prepare(
+        `${baseSelect}
+         WHERE s.user_id NOT IN (SELECT id FROM users WHERE role = 'super_admin')
+         ORDER BY s.created_at DESC`
+      );
+
+  const { results } = await stmt.all();
 
   // Shape grade data nested
   const submissions = results.map((row: any) => ({
@@ -98,12 +109,16 @@ export async function handleGetStats(request: Request, env: Env): Promise<Respon
   const auth = await requireAdmin(request, env);
   if (auth instanceof Response) return auth;
 
+  // Admins exclude super_admin-owned content from stat counts.
+  const isSuperAdmin = (auth as any).role === 'super_admin';
+  const exclude = isSuperAdmin ? '' : ` AND user_id NOT IN (SELECT id FROM users WHERE role = 'super_admin')`;
+
   const rows = await Promise.all([
-    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions`).first<{ n: number }>(),
-    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status IN ('queued','generating')`).first<{ n: number }>(),
-    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'article_done' AND grade_status IN ('graded', 'passed')`).first<{ n: number }>(),
-    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE grade_status = 'needs_review'`).first<{ n: number }>(),
-    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'failed'`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE 1=1${exclude}`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status IN ('queued','generating')${exclude}`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'article_done' AND grade_status IN ('graded', 'passed')${exclude}`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE grade_status = 'needs_review'${exclude}`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'failed'${exclude}`).first<{ n: number }>(),
   ]);
 
   return json({
@@ -161,26 +176,28 @@ export async function handleGetQueue(request: Request, env: Env): Promise<Respon
 
   const STALE_MS = 30 * 60 * 1000;
   const cutoff = Date.now() - STALE_MS;
+  const isSuperAdmin = (auth as any).role === 'super_admin';
+  const exclude = isSuperAdmin ? '' : ` AND s.user_id NOT IN (SELECT id FROM users WHERE role = 'super_admin')`;
 
   const [generating, queued, stuck] = await Promise.all([
     env.submoacontent_db.prepare(
       `SELECT s.id, s.topic as title, s.updated_at, ap.name as author_display_name, s.article_format
        FROM submissions s
        LEFT JOIN author_profiles ap ON s.author = ap.slug
-       WHERE s.status = 'generating'`
+       WHERE s.status = 'generating'${exclude}`
     ).all<any>(),
     env.submoacontent_db.prepare(
       `SELECT s.id, s.topic as title, s.created_at, ap.name as author_display_name, s.article_format
        FROM submissions s
        LEFT JOIN author_profiles ap ON s.author = ap.slug
-       WHERE s.status = 'queued'
+       WHERE s.status = 'queued'${exclude}
        ORDER BY s.created_at ASC`
     ).all<any>(),
     env.submoacontent_db.prepare(
       `SELECT s.id, s.topic as title, s.updated_at, ap.name as author_display_name
        FROM submissions s
        LEFT JOIN author_profiles ap ON s.author = ap.slug
-       WHERE s.status = 'generating' AND s.updated_at < ?`,
+       WHERE s.status = 'generating' AND s.updated_at < ?${exclude}`,
     ).bind(cutoff).all<any>(),
   ]);
 
@@ -455,10 +472,12 @@ export async function handleGetUsers(request: Request, env: Env): Promise<Respon
   const auth = await requireAdmin(request, env);
   if (auth instanceof Response) return auth;
 
-  const { results } = await env.submoacontent_db.prepare(
-    `SELECT id, name, email, role, account_id, created_at FROM users ORDER BY created_at DESC`
-  ).all();
+  const isSuperAdmin = (auth as any).role === 'super_admin';
+  const stmt = isSuperAdmin
+    ? env.submoacontent_db.prepare(`SELECT id, name, email, role, account_id, created_at FROM users ORDER BY created_at DESC`)
+    : env.submoacontent_db.prepare(`SELECT id, name, email, role, account_id, created_at FROM users WHERE role != 'super_admin' ORDER BY created_at DESC`);
 
+  const { results } = await stmt.all();
   return json({ users: results });
 }
 
@@ -554,11 +573,13 @@ export async function handleGetBadgeCounts(request: Request, env: Env): Promise<
 
   const STALE_MS = 30 * 60 * 1000;
   const cutoff = Date.now() - STALE_MS;
+  const isSuperAdmin = (auth as any).role === 'super_admin';
+  const exclude = isSuperAdmin ? '' : ` AND user_id NOT IN (SELECT id FROM users WHERE role = 'super_admin')`;
 
   const [queueRow, stuckRow, reviewRow] = await Promise.all([
-    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status IN ('queued','generating')`).first<{ n: number }>(),
-    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'generating' AND updated_at < ?`).bind(cutoff).first<{ n: number }>(),
-    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE grade_status = 'needs_review'`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status IN ('queued','generating')${exclude}`).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE status = 'generating' AND updated_at < ?${exclude}`).bind(cutoff).first<{ n: number }>(),
+    env.submoacontent_db.prepare(`SELECT COUNT(*) as n FROM submissions WHERE grade_status = 'needs_review'${exclude}`).first<{ n: number }>(),
   ]);
 
   return json({

@@ -14,11 +14,9 @@ async function fetchDataforSEO(text: string, login: string, password: string) {
     },
     body: JSON.stringify([
       {
-        data: {
-          text: text.slice(0, 10000), // DataforSEO has a text length limit
-          language_code: 'en',
-          location_code: 2840,
-        }
+        text: text.slice(0, 10000),
+        language_code: 'en',
+        location_code: 2840,
       }
     ]),
   });
@@ -36,12 +34,28 @@ async function fetchDataforSEO(text: string, login: string, password: string) {
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// Robust text extractor — handles CDATA, HTML entities, plain text
+// ---------------------------------------------------------------------------
+function extractText(raw: string): string {
+  // 1. Unwrap CDATA: <![CDATA[ ... ]]>
+  let text = raw.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+  // 2. Strip remaining HTML tags
+  text = text.replace(/<[^>]+>/g, ' ');
+  // 3. Decode common HTML entities
+  text = text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&[a-z]+;/g, ' ');
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 export async function onRequest(context: { request: Request; env: Env }) {
   const { request, env } = context;
-  
-  // DEBUG — remove after fix
-  console.log('ALL ENV KEYS:', Object.keys(env || {}));
-  console.log('OPENROUTER direct:', typeof env?.OPENROUTER_API_KEY, env?.OPENROUTER_API_KEY?.slice(0,8));
   
   if (request.method === 'OPTIONS') {
     return new Response(null, {
@@ -114,7 +128,6 @@ export async function onRequest(context: { request: Request; env: Env }) {
       }
 
       // Fetch and parse RSS feed
-      console.log('Fetching RSS URL:', rssUrl);
       const response = await fetch(rssUrl, {
         redirect: 'follow',
         headers: {
@@ -122,38 +135,60 @@ export async function onRequest(context: { request: Request; env: Env }) {
           'Accept': 'application/rss+xml, application/xml, text/xml, */*'
         }
       });
-      console.log('RSS fetch status:', response.status);
       if (!response.ok) {
         return json({ error: `Failed to fetch RSS feed: ${response.status}` }, 400);
       }
 
       const xmlText = await response.text();
-      
-      // Simple RSS parser - extract items
-      const itemMatches = xmlText.match(/<item[^>]*>([\s\S]*?)<\/item>/gi) || [];
+
       const articles: string[] = [];
-      
-      for (const item of itemMatches.slice(0, 10)) {
-        const descMatch = item.match(/<description[^>]*>([\s\S]*?)<\/description>/i);
-        if (descMatch && descMatch[1]) {
-          // Strip HTML tags from description
-          const text = descMatch[1].replace(/<[^>]+>/g, '').trim();
-          if (text.length > 50) {
-            articles.push(text);
+      const MIN_LEN = 20;
+
+      // Helper — pick the longest non-empty field from a node
+      function bestText(node: string): string {
+        const tags = [
+          /<content:encoded[^>]*>([\s\S]*?)<\/content:encoded>/i,
+          /<content[^>]*>([\s\S]*?)<\/content>/i,
+          /<description[^>]*>([\s\S]*?)<\/description>/i,
+          /<summary[^>]*>([\s\S]*?)<\/summary>/i,
+        ];
+        let best = '';
+        for (const re of tags) {
+          const m = node.match(re);
+          if (m && m[1]) {
+            const t = extractText(m[1]);
+            if (t.length > best.length) best = t;
           }
         }
-        
-        const contentMatch = item.match(/<content:encoded[^>]*>([\s\S]*?)<\/content:encoded>/i);
-        if (contentMatch && contentMatch[1]) {
-          const text = contentMatch[1].replace(/<[^>]+>/g, '').trim();
-          if (text.length > 50) {
-            articles.push(text);
-          }
+        return best;
+      }
+
+      // RSS 2.0 — <item> elements
+      const itemMatches = xmlText.match(/<item[^>]*>([\s\S]*?)<\/item>/gi) || [];
+      for (const item of itemMatches.slice(0, 10)) {
+        const text = bestText(item);
+        if (text.length >= MIN_LEN) articles.push(text);
+      }
+
+      // Atom — <entry> elements (fallback when no <item> found)
+      if (articles.length === 0) {
+        const entryMatches = xmlText.match(/<entry[^>]*>([\s\S]*?)<\/entry>/gi) || [];
+        for (const entry of entryMatches.slice(0, 10)) {
+          const text = bestText(entry);
+          if (text.length >= MIN_LEN) articles.push(text);
         }
       }
 
+      // Last resort — collect all <title> elements as thin signal
       if (articles.length === 0) {
-        return json({ error: 'No article content found in RSS feed' }, 400);
+        const titles = [...xmlText.matchAll(/<title[^>]*>([\s\S]*?)<\/title>/gi)]
+          .map(m => extractText(m[1]))
+          .filter(t => t.length >= MIN_LEN && !t.toLowerCase().includes('rss'));
+        if (titles.length > 0) articles.push(titles.join('. '));
+      }
+
+      if (articles.length === 0) {
+        return json({ error: 'No article content found in RSS feed. The feed may use an unsupported format or contain only links.' }, 400);
       }
 
       textBlob = articles.join('\n\n');
@@ -162,14 +197,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
     }
 
     // Step 3b: AI style analysis via OpenRouter
-    console.log('Calling OpenRouter for style analysis...');
-    console.log('Text blob length:', textBlob.length);
-    
-    // Debug: check which path the secret is accessible from
-    const openRouterKey = (context as any).env?.OPENROUTER_API_KEY
-      ?? (context as any).OPENROUTER_API_KEY
-      ?? (env as any)?.OPENROUTER_API_KEY;
-    console.log('OPENROUTER_API_KEY accessible:', !!openRouterKey, '| length:', openRouterKey?.length ?? 0);
+    const openRouterKey = env.OPENROUTER_API_KEY;
 
     // Declare keywordThemes and semanticEntities early so they're available for name prompt
     let keywordThemes: string[] = [];
@@ -179,9 +207,6 @@ export async function onRequest(context: { request: Request; env: Env }) {
 
 ---
 ${textBlob.slice(0, 8000)}`;
-
-    console.log('Style prompt length:', stylePrompt.length);
-    console.log('Style prompt preview:', stylePrompt.slice(0, 200));
 
     let styleGuide = 'Style guide could not be generated.';
 
@@ -199,19 +224,15 @@ ${textBlob.slice(0, 8000)}`;
         messages: [{ role: 'user', content: stylePrompt }]
       })
     });
-    console.log('OpenRouter style response status:', styleResponse.status);
-    const styleData = await styleResponse.json();
-    console.log('OpenRouter style response:', JSON.stringify(styleData));
-    
-    if (styleData.choices && styleData.choices[0]?.message?.content) {
+    let styleData: any = {};
+    try { styleData = await styleResponse.json(); } catch {}
+    if (styleData.choices?.[0]?.message?.content) {
       styleGuide = styleData.choices[0].message.content;
     } else if (styleData.error) {
-      console.error('OpenRouter API error:', styleData.error);
-      return json({ error: 'OpenRouter API error: ' + JSON.stringify(styleData.error) }, 500);
+      return json({ error: 'OpenRouter style error: ' + JSON.stringify(styleData.error) }, 500);
     }
 
     // Step 3c: Generate author name from style and content
-    console.log('Calling OpenRouter for name generation...');
     const namePrompt = `Based on this author's writing style and topics covered, generate a short, memorable author name/label (2-4 words) that captures their identity and expertise. Examples: "The Field Reviewer", "Backcountry Expert", "Gear Tester". Respond ONLY with the name, nothing else.
 
 ---
@@ -234,12 +255,10 @@ Topics: ${keywordThemes.slice(0, 10).join(', ')}`;
         messages: [{ role: 'user', content: namePrompt }]
       })
     });
-    console.log('OpenRouter name response status:', nameResponse.status);
-    const nameData = await nameResponse.json();
-    console.log('OpenRouter name response:', JSON.stringify(nameData));
-    
-    if (nameData.choices && nameData.choices[0]?.message?.content) {
-      authorName = nameData.choices[0].message.content.trim().replace(/^"+|"+$/g, '');
+    let nameData: any = {};
+    try { nameData = await nameResponse.json(); } catch {}
+    if (nameData.choices?.[0]?.message?.content) {
+      authorName = nameData.choices[0].message.content.trim().replace(/\*\*/g, '').replace(/^"+|"+$/g, '');
     } else if (nameData.error) {
       console.error('OpenRouter name API error:', nameData.error);
     }
@@ -288,7 +307,6 @@ Topics: ${keywordThemes.slice(0, 10).join(', ')}`;
         const readability = scoreReadability(sampleText);
         const overall = calcOverall({ grammar, readability, ai_detection: null, plagiarism: null, seo, overall: null });
         sampleGrade = { grammar, readability, ai_detection: null, plagiarism: null, seo, overall };
-        console.log('Sample grade:', sampleGrade);
       } catch (gradeErr) {
         console.error('Sample grading error:', gradeErr);
       }
@@ -312,7 +330,6 @@ Topics: ${keywordThemes.slice(0, 10).join(', ')}`;
       rss_url: rssUrl || null,
       grade: sampleGrade,
     };
-    console.log('Preview being returned:', JSON.stringify(preview));
     return json(preview);
 
   } catch (err: any) {

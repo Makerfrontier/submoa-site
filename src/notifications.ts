@@ -226,12 +226,42 @@ export async function emailBriefReceived(
     env.RESEND_API_KEY,
     to,
     `Brief received — ${submission.title}`,
-    `
-    <p>Your brief has been received and is queued for generation.</p>
-    <p><strong>${submission.title}</strong></p>
-    <p>We'll email you when your article is ready to download.</p>
-    <p><a href="https://www.submoacontent.com/dashboard">View your dashboard</a></p>
-    `
+    `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#0a1a0a;font-family:Georgia,serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a1a0a;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr><td style="padding:0 0 32px 0;text-align:center;border-bottom:1px solid #1e3a1e;">
+          <div style="font-family:Georgia,serif;font-size:28px;font-weight:700;color:#ffffff;">SubMoa</div>
+          <div style="font-family:sans-serif;font-size:11px;color:#5a7a5a;letter-spacing:.1em;text-transform:uppercase;margin-top:4px;">Content Platform</div>
+        </td></tr>
+        <tr><td style="padding:40px 0;">
+          <div style="font-family:Georgia,serif;font-size:22px;color:#ffffff;margin-bottom:16px;">Brief received.</div>
+          <div style="font-family:sans-serif;font-size:15px;color:#8aaa8a;line-height:1.7;margin-bottom:24px;">
+            Your brief has been received and queued for generation. We'll notify you the moment your article is ready.
+          </div>
+          <div style="background:#0f200f;border:0.5px solid #1e3a1e;border-radius:6px;padding:16px 20px;margin-bottom:32px;">
+            <div style="font-family:sans-serif;font-size:11px;color:#5a7a5a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Article</div>
+            <div style="font-family:Georgia,serif;font-size:16px;color:#ffffff;">${submission.title}</div>
+          </div>
+          <table cellpadding="0" cellspacing="0">
+            <tr><td style="border-radius:5px;background:#c8973a;">
+              <a href="https://www.submoacontent.com/dashboard" style="display:inline-block;padding:12px 28px;font-family:sans-serif;font-size:13px;font-weight:600;color:#000000;text-decoration:none;">
+                View Dashboard
+              </a>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:24px 0 0 0;border-top:1px solid #1e3a1e;text-align:center;">
+          <div style="font-family:sans-serif;font-size:11px;color:#3a5a3a;">SubMoa Content · submoacontent.com</div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
   );
 }
 
@@ -249,12 +279,52 @@ export async function emailArticleReady(
     env.RESEND_API_KEY,
     to,
     `Your article is ready — ${submission.title}`,
-    `
-    <p>Your article has been generated and graded.</p>
-    <p><strong>${submission.title}</strong></p>
-    <p>Overall Score: <strong>${submission.overall_score}/100</strong></p>
-    <p><a href="https://www.submoacontent.com/dashboard">Download your article</a></p>
-    `
+    `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#0a1a0a;font-family:Georgia,serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a1a0a;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr><td style="padding:0 0 32px 0;text-align:center;border-bottom:1px solid #1e3a1e;">
+          <div style="font-family:Georgia,serif;font-size:28px;font-weight:700;color:#ffffff;">SubMoa</div>
+          <div style="font-family:sans-serif;font-size:11px;color:#5a7a5a;letter-spacing:.1em;text-transform:uppercase;margin-top:4px;">Content Platform</div>
+        </td></tr>
+        <tr><td style="padding:40px 0;">
+          <div style="font-family:Georgia,serif;font-size:22px;color:#ffffff;margin-bottom:8px;">Your article is ready.</div>
+          <div style="font-family:sans-serif;font-size:15px;color:#8aaa8a;line-height:1.7;margin-bottom:24px;">
+            Your article has been generated and graded. Download your complete package from the dashboard.
+          </div>
+          <div style="background:#0f200f;border:0.5px solid #1e3a1e;border-radius:6px;padding:16px 20px;margin-bottom:24px;">
+            <div style="font-family:sans-serif;font-size:11px;color:#5a7a5a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Article</div>
+            <div style="font-family:Georgia,serif;font-size:16px;color:#ffffff;margin-bottom:12px;">${submission.title}</div>
+            <div style="font-family:sans-serif;font-size:13px;color:#5a7a5a;">
+              Overall score: <span style="color:${submission.overall_score >= 80 ? '#5ab85a' : submission.overall_score >= 65 ? '#d4a85a' : '#d45a5a'};font-weight:600;">${submission.overall_score}/100</span>
+            </div>
+          </div>
+          <table cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+            <tr><td style="border-radius:5px;background:#c8973a;">
+              <a href="https://www.submoacontent.com/dashboard" style="display:inline-block;padding:12px 28px;font-family:sans-serif;font-size:13px;font-weight:600;color:#000000;text-decoration:none;">
+                Download Article
+              </a>
+            </td></tr>
+          </table>
+          <table cellpadding="0" cellspacing="0">
+            <tr><td style="border-radius:5px;border:0.5px solid #1e3a1e;">
+              <a href="https://www.submoacontent.com/content/${submission.id}" style="display:inline-block;padding:12px 28px;font-family:sans-serif;font-size:13px;color:#8aaa8a;text-decoration:none;">
+                View Rendered Article
+              </a>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:24px 0 0 0;border-top:1px solid #1e3a1e;text-align:center;">
+          <div style="font-family:sans-serif;font-size:11px;color:#3a5a3a;">SubMoa Content · submoacontent.com</div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
   );
 }
 

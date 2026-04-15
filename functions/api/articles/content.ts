@@ -26,11 +26,22 @@ export async function onRequestGet(context: any) {
 
     if (!id) return Response.json({ error: 'Missing article id' }, { status: 400 });
 
-    const stmt = env.submoacontent_db.prepare(`
-      SELECT id, user_id, topic, author, email, article_format, article_content, content_path, status, created_at, optimization_target, tone_stance, article_images, youtube_url, youtube_transcript
-      FROM submissions WHERE id = ?
-    `);
-    const article = await stmt.bind(id).first();
+    const isAdmin = user.role === 'admin' || user.role === 'super_admin';
+
+    let article;
+    if (isAdmin) {
+      // Admins can view any article with content
+      article = await env.submoacontent_db.prepare(`
+        SELECT id, user_id, account_id, topic, author, email, article_format, article_content, content_path, status, created_at, optimization_target, tone_stance, article_images, youtube_url, youtube_transcript, generated_image_key
+        FROM submissions WHERE id = ? AND article_content IS NOT NULL
+      `).bind(id).first();
+    } else {
+      // Regular users only see their own articles
+      article = await env.submoacontent_db.prepare(`
+        SELECT id, user_id, account_id, topic, author, email, article_format, article_content, content_path, status, created_at, optimization_target, tone_stance, article_images, youtube_url, youtube_transcript, generated_image_key
+        FROM submissions WHERE id = ? AND account_id = ? AND article_content IS NOT NULL
+      `).bind(id, user.account_id).first();
+    }
 
     if (!article) return Response.json({ error: 'Article not found' }, { status: 404 });
 

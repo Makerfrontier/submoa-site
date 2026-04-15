@@ -1,11 +1,22 @@
 name = "submoa-queue-consumer"
 main = "src/queue-consumer.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "submoacontent-db"
 database_id = "f7d72bbc-3ec6-4b50-b22f-9700811939e1"
+
+[[r2_buckets]]
+binding = "SUBMOA_IMAGES"
+bucket_name = "submoa-images"
+
+[ai]
+binding = "AI"
+
+[browser]
+binding = "BROWSER"
 
 [[queues.consumers]]
 queue = "submoa-generation-queue"

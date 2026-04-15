@@ -10,6 +10,7 @@ export interface Env {
   DISCORD_BOT_TOKEN: string;
   RESEND_API_KEY: string;
   OPENROUTER_API_KEY: string;
+  OPENAI_API_KEY?: string;
   OPENROUTER_DEFAULT_MODEL: string;
   OPENROUTER_VISION_MODEL: string;
   DATAFORSEO_LOGIN: string;
@@ -117,6 +118,32 @@ export function getAuthToken(request: Request): string | null {
   return match ? match[1] : null;
 }
 
+export async function getRealSessionUser(request: Request, env: Env): Promise<User | null> {
+  if (env.STAGING_BYPASS_TOKEN) {
+    return {
+      id: 'staging-admin', email: 'staging@submoacontent.com', name: 'Staging Admin',
+      password_hash: '', role: 'admin', created_at: 0, updated_at: 0, account_id: 'staging',
+    };
+  }
+  const token = getAuthToken(request);
+  if (!token) return null;
+  const sessions = await env.submoacontent_db
+    .prepare('SELECT s.*, u.id as uid, u.email, u.name, u.password_hash, u.role, u.created_at, u.updated_at, u.account_id FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = ? AND s.expires_at > ?')
+    .bind(token, Date.now()).all();
+  if (!sessions.results || sessions.results.length === 0) return null;
+  const row = sessions.results[0] as any;
+  return {
+    id: row.uid, email: row.email, name: row.name, password_hash: row.password_hash,
+    role: row.role || 'user', created_at: row.created_at, updated_at: row.updated_at, account_id: row.account_id,
+  };
+}
+
+function getImpersonateTarget(request: Request): string | null {
+  const cookie = request.headers.get('Cookie') || '';
+  const m = cookie.match(/submoa_impersonate=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 export async function getSessionUser(request: Request, env: Env): Promise<User | null> {
   // Staging bypass — if STAGING_BYPASS_TOKEN is set in env (preview only), treat all requests as admin
   if (env.STAGING_BYPASS_TOKEN) {
@@ -143,7 +170,7 @@ export async function getSessionUser(request: Request, env: Env): Promise<User |
   if (!sessions.results || sessions.results.length === 0) return null;
 
   const row = sessions.results[0] as any;
-  return {
+  const realUser: User = {
     id: row.uid,
     email: row.email,
     name: row.name,
@@ -153,6 +180,32 @@ export async function getSessionUser(request: Request, env: Env): Promise<User |
     updated_at: row.updated_at,
     account_id: row.account_id,
   };
+
+  // Admin impersonation — if the real session user is admin/super_admin AND an
+  // impersonation cookie is set, return the target user with tracking fields so
+  // the UI keeps admin chrome visible and can stop impersonating.
+  const targetId = getImpersonateTarget(request);
+  if (targetId && (realUser.role === 'admin' || realUser.role === 'super_admin')) {
+    const target: any = await env.submoacontent_db
+      .prepare('SELECT id, email, name, password_hash, role, created_at, updated_at, account_id FROM users WHERE id = ?')
+      .bind(targetId)
+      .first();
+    if (target) {
+      return {
+        ...target,
+        role: target.role || 'user',
+        // @ts-ignore — runtime fields consumed by client + admin checks
+        impersonating: true,
+        impersonating_from: { id: realUser.id, name: realUser.name, email: realUser.email, role: realUser.role },
+      } as any;
+    }
+  }
+
+  return realUser;
+}
+
+export function isAdmin(user: User | null): boolean {
+  return user?.role === 'admin' || user?.role === 'super_admin';
 }
 
 export function json(data: any, status = 200) {

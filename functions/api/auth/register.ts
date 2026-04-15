@@ -42,7 +42,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
     }
 
     if (invite.expires_at && invite.expires_at < Date.now()) {
-      return json({ error: 'This invite link has expired' }, 403);
+      return json({ error: 'This invite code has expired' }, 403);
     }
 
     if (invite.max_uses <= 1 && invite.used_by) {

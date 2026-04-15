@@ -7,9 +7,14 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "vite build && wrangler pages deploy dist --project-name=submoacontent --branch=main --commit-dirty=true",
+    "deploy:cron": "wrangler deploy --config wrangler.cron.toml",
+    "deploy:consumer": "wrangler deploy --config wrangler.consumer.toml",
+    "action": "printf '\\n---\\n\\n## N. <TITLE>\\n\\n**Problem.**\\n\\n**Files.**\\n\\n**Exact change.**\\n\\n**Acceptance.**\\n\\n**Blast radius.**\\n\\n**Effort.**\\n' >> ACTION_ITEMS.md && ${EDITOR:-vi} ACTION_ITEMS.md"
   },
   "dependencies": {
+    "@cloudflare/puppeteer": "^1.1.0",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource/crimson-pro": "^5.2.8",
     "@fontsource/playfair-display": "^5.2.8",
@@ -17,6 +22,7 @@
     "jszip": "^3.10.1",
     "mammoth": "^1.12.0",
     "marked": "^18.0.0",
+    "pptxgenjs": "^4.0.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "resend": "^6.10.0",

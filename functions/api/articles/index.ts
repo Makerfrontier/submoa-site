@@ -39,19 +39,48 @@ export async function onRequest(context) {
     if (context.request.method === 'POST' && pathname.match(/\/api\/articles\/[^/]+\/feedback$/)) {
       const id = pathname.split('/')[3];
       try {
-        const { rating, what_worked, what_needs_work } = await context.request.json();
-        if (!rating || rating < 1 || rating > 5) {
-          return json({ error: 'Rating must be 1 to 5' }, 400);
+        const isAdmin = user.role === 'admin' || user.role === 'super_admin';
+        if (!isAdmin) return json({ error: 'Forbidden — admin only' }, 403);
+
+        const body = await context.request.json() as {
+          star_rating?: number;
+          notes?: string;
+          answers?: { q1?: boolean | null; q2?: boolean | null; q3?: boolean | null; q4?: boolean | null; q5?: boolean | null };
+        };
+
+        const { star_rating, notes, answers = {} } = body;
+        if (!star_rating || star_rating < 1 || star_rating > 10) {
+          return json({ error: 'star_rating must be 1 to 10' }, 400);
         }
+
+        const boolToInt = (v: boolean | null | undefined) => v === true ? 1 : v === false ? 0 : null;
+
         const feedbackId = generateId();
         const now = Date.now();
         await context.env.submoacontent_db
-          .prepare(`INSERT INTO feedback (id, submission_id, user_id, rating, what_worked, what_needs_work, created_at, account_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-          .bind(feedbackId, id, user.id, rating, what_worked || '', what_needs_work || '', now, 'makerfrontier')
+          .prepare(`INSERT INTO article_feedback
+                      (id, submission_id, user_id, star_rating, notes,
+                       q1_author_voice, q2_factual_accuracy, q3_optimization_met,
+                       q4_no_ai_patterns, q5_publish_ready, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(submission_id) DO UPDATE SET
+                      star_rating = excluded.star_rating,
+                      notes = excluded.notes,
+                      q1_author_voice = excluded.q1_author_voice,
+                      q2_factual_accuracy = excluded.q2_factual_accuracy,
+                      q3_optimization_met = excluded.q3_optimization_met,
+                      q4_no_ai_patterns = excluded.q4_no_ai_patterns,
+                      q5_publish_ready = excluded.q5_publish_ready,
+                      created_at = excluded.created_at`)
+          .bind(
+            feedbackId, id, user.id, star_rating, notes || null,
+            boolToInt(answers.q1), boolToInt(answers.q2), boolToInt(answers.q3),
+            boolToInt(answers.q4), boolToInt(answers.q5),
+            now
+          )
           .run();
         return json({ success: true });
-      } catch (e) {
+      } catch (e: any) {
         return json({ error: e.message }, 500);
       }
     }

@@ -31,12 +31,28 @@ export default {
     console.log('Cron fired:', new Date().toISOString());
 
     await Promise.all([
+      resetStuckGrading(env),
       processUngradedArticles(env),
       processUnpackagedArticles(env),
       detectStaleGenerations(env),
     ]);
   },
 };
+
+// Reset submissions stuck in grade_status='grading' for >15 minutes so the
+// next sweep picks them up again.
+async function resetStuckGrading(env: Env): Promise<void> {
+  const cutoff = Date.now() - 15 * 60 * 1000;
+  const stuckGrading = await env.submoacontent_db.prepare(
+    "SELECT id FROM submissions WHERE grade_status = 'grading' AND updated_at < ? LIMIT 10"
+  ).bind(cutoff).all<{ id: string }>().catch(() => ({ results: [] as { id: string }[] }));
+
+  for (const sub of stuckGrading.results) {
+    await env.submoacontent_db.prepare(
+      "UPDATE submissions SET grade_status = 'ungraded', updated_at = ? WHERE id = ?"
+    ).bind(Date.now(), sub.id).run().catch(err => console.error(`Watchdog reset failed for ${sub.id}:`, err));
+  }
+}
 
 // ---------------------------------------------------------------------------
 // 1. Grading sweep

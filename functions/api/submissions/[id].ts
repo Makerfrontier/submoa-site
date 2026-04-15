@@ -1,4 +1,4 @@
-import { json, getSessionUser, generateId } from '../_utils';
+import { json, getSessionUser, isAdmin, generateId } from '../_utils';
 import { emailArticlePublished, notifyBriefSubmitted } from '../discord-notifications';
 
 async function createNotification(env, userId, type, message, link) {
@@ -82,9 +82,9 @@ export async function onRequest(context) {
 
     try {
       const body = await context.request.json();
-      const { is_hidden, is_deleted, status, article_content, seo_report_content, article_images, youtube_url, use_youtube, youtube_transcript } = body;
+      const { is_hidden, is_deleted, status, article_content, seo_report_content, article_images, youtube_url, use_youtube, youtube_transcript, product_details_manual } = body;
 
-      if (user.role !== 'admin') {
+      if (!isAdmin(user)) {
         const check = await context.env.submoacontent_db.prepare('SELECT id FROM submissions WHERE id = ? AND user_id = ?').bind(id, user.id).first();
         if (!check) return json({ error: 'Not found' }, 404);
       }
@@ -154,7 +154,7 @@ export async function onRequest(context) {
     try {
       const sub = await context.env.submoacontent_db.prepare('SELECT * FROM submissions WHERE id = ?').bind(id).first();
       if (!sub) return json({ error: 'Not found' }, 404);
-      if (sub.user_id !== user.id && user.role !== 'admin') return json({ error: 'Forbidden' }, 403);
+      if (sub.user_id !== user.id && !isAdmin(user)) return json({ error: 'Forbidden' }, 403);
 
       let live_url: string | null = null;
       try {
@@ -191,7 +191,7 @@ export async function onRequest(context) {
         WHERE s.id = ?
       `).bind(id).first();
       if (!sub) return json({ error: 'Not found' }, 404);
-      if (sub.user_id !== user.id && user.role !== 'admin') return json({ error: 'Forbidden' }, 403);
+      if (sub.user_id !== user.id && !isAdmin(user)) return json({ error: 'Forbidden' }, 403);
 
       await context.env.submoacontent_db.prepare(`
         UPDATE submissions
@@ -231,7 +231,7 @@ export async function onRequest(context) {
 
     try {
       const check = await context.env.submoacontent_db.prepare('SELECT id FROM submissions WHERE id = ? AND user_id = ?').bind(id, user.id).first();
-      if (!check && user.role !== 'admin') return json({ error: 'Not found' }, 404);
+      if (!check && !isAdmin(user)) return json({ error: 'Not found' }, 404);
 
       await context.env.submoacontent_db.prepare('DELETE FROM submissions WHERE id = ?').bind(id).run();
       return json({ success: true });

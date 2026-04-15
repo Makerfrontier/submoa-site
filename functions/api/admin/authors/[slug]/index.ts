@@ -1,4 +1,4 @@
-import { json, getSessionUser, Env } from '../../../_utils';
+import { json, getSessionUser, isAdmin, Env } from '../../../_utils';
 
 // PATCH /api/admin/authors/:slug — admin only, update existing profile
 export async function onRequest(context: { request: Request; env: Env }) {
@@ -19,7 +19,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
 
   const user = await getSessionUser(request, env);
   if (!user) return json({ error: 'Not authenticated' }, 401);
-  if (user.role !== 'admin') return json({ error: 'Forbidden' }, 403);
+  if (!isAdmin(user)) return json({ error: 'Forbidden' }, 403);
 
   try {
     // Extract slug from URL path
