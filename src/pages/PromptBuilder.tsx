@@ -187,23 +187,23 @@ export default function PromptBuilder() {
     return (
       <div style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px" }}>
         <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: "#fff", fontFamily: "Georgia, serif", marginBottom: 4 }}>
+          <h1 style={{ fontSize: 28, fontWeight: 700, color: "var(--text)", fontFamily: "Georgia, serif", marginBottom: 4 }}>
             Prompt Builder
           </h1>
-          <p style={{ fontSize: 13, color: "#6a8a6a" }}>
+          <p style={{ fontSize: 13, color: "var(--text-light)" }}>
             Describe what you want. We'll ask the right questions and build you a production-ready prompt.
           </p>
         </div>
 
         {error && (
-          <div style={{ background: "#1f0a0a", border: "0.5px solid #5a1a1a", borderRadius: 5, padding: "10px 14px", fontSize: 13, color: "#d45a5a", marginBottom: 20 }}>
+          <div style={{ background: "var(--error-bg)", border: "1px solid var(--error-border)", borderRadius: 5, padding: "10px 14px", fontSize: 13, color: "var(--error)", marginBottom: 20 }}>
             {error}
           </div>
         )}
 
         <div style={{ marginBottom: 20 }}>
-          <label style={{ display: "block", fontSize: 12, color: "#6a8a6a", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6 }}>
-            Desired Outcome <span style={{ color: "#d45a5a" }}>*</span>
+          <label style={{ display: "block", fontSize: 12, color: "var(--text-light)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6 }}>
+            Desired Outcome <span style={{ color: "var(--error)" }}>*</span>
           </label>
           <textarea
             className="brief-input"
@@ -215,8 +215,8 @@ export default function PromptBuilder() {
         </div>
 
         <div style={{ marginBottom: 32 }}>
-          <label style={{ display: "block", fontSize: 12, color: "#6a8a6a", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6 }}>
-            LLM <span style={{ color: "#d45a5a" }}>*</span>
+          <label style={{ display: "block", fontSize: 12, color: "var(--text-light)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6 }}>
+            LLM <span style={{ color: "var(--error)" }}>*</span>
           </label>
           <select
             className="brief-input"
@@ -232,17 +232,8 @@ export default function PromptBuilder() {
         <button
           onClick={handleStart}
           disabled={!desiredOutcome.trim()}
-          style={{
-            padding: "10px 28px",
-            borderRadius: 5,
-            fontSize: 13,
-            fontWeight: 500,
-            cursor: !desiredOutcome.trim() ? "not-allowed" : "pointer",
-            border: "0.5px solid #c8973a",
-            color: "#000",
-            background: "#c8973a",
-            opacity: !desiredOutcome.trim() ? 0.5 : 1,
-          }}
+          className="btn-primary"
+          style={{ opacity: !desiredOutcome.trim() ? 0.5 : 1, cursor: !desiredOutcome.trim() ? "not-allowed" : "pointer" }}
         >
           Start Building →
         </button>
@@ -258,23 +249,23 @@ export default function PromptBuilder() {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: "#fff", fontFamily: "Georgia, serif", marginBottom: 2 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", fontFamily: "Georgia, serif", marginBottom: 2 }}>
             Prompt Builder
           </h1>
-          <p style={{ fontSize: 12, color: "#5a7a5a" }}>
+          <p style={{ fontSize: 12, color: "var(--text-light)" }}>
             Building for {LLM_OPTIONS.find(o => o.value === llm)?.label ?? llm}
           </p>
         </div>
         <button
           onClick={handleReset}
-          style={{ background: "none", border: "none", color: "#5a7a5a", fontSize: 12, cursor: "pointer", padding: 0 }}
+          style={{ background: "none", border: "none", color: "var(--text-light)", fontSize: 12, cursor: "pointer", padding: 0 }}
         >
           ← Start over
         </button>
       </div>
 
       {error && (
-        <div style={{ background: "#1f0a0a", border: "0.5px solid #5a1a1a", borderRadius: 5, padding: "10px 14px", fontSize: 13, color: "#d45a5a", marginBottom: 16 }}>
+        <div style={{ background: "var(--error-bg)", border: "1px solid var(--error-border)", borderRadius: 5, padding: "10px 14px", fontSize: 13, color: "var(--error)", marginBottom: 16 }}>
           {error}
         </div>
       )}
@@ -294,10 +285,10 @@ export default function PromptBuilder() {
                 maxWidth: "80%",
                 padding: "10px 14px",
                 borderRadius: msg.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
-                background: msg.role === "user" ? "rgba(200,151,58,0.15)" : "#0f200f",
-                border: `0.5px solid ${msg.role === "user" ? "#c8973a40" : "#1e3a1e"}`,
+                background: msg.role === "user" ? "var(--amber-border)" : "var(--surface-inp)",
+                border: `0.5px solid ${msg.role === "user" ? "var(--amber-border)" : "var(--border)"}`,
                 fontSize: 13,
-                color: "#c8c8b8",
+                color: "var(--text)",
                 lineHeight: 1.6,
                 whiteSpace: "pre-wrap",
               }}
@@ -309,8 +300,8 @@ export default function PromptBuilder() {
 
         {loading && (
           <div style={{ display: "flex", justifyContent: "flex-start" }}>
-            <div style={{ padding: "10px 14px", borderRadius: "12px 12px 12px 2px", background: "#0f200f", border: "0.5px solid #1e3a1e" }}>
-              <span style={{ fontSize: 13, color: "#5a7a5a" }}>Thinking...</span>
+            <div style={{ padding: "10px 14px", borderRadius: "12px 12px 12px 2px", background: "var(--surface-inp)", border: "0.5px solid var(--border)" }}>
+              <span style={{ fontSize: 13, color: "var(--text-light)" }}>Thinking...</span>
             </div>
           </div>
         )}
@@ -321,20 +312,20 @@ export default function PromptBuilder() {
       {/* Final prompt block */}
       {finalPrompt && (
         <div style={{
-          background: "#081508",
-          border: "0.5px solid #c8973a40",
+          background: "var(--surface-inp)",
+          border: "0.5px solid var(--amber-border)",
           borderRadius: 8,
           padding: "16px 20px",
           marginBottom: 16,
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <span style={{ fontSize: 11, color: "#c8973a", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 500 }}>
+            <span style={{ fontSize: 11, color: "var(--amber)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 500 }}>
               Your Prompt
             </span>
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 onClick={() => navigator.clipboard.writeText(finalPrompt)}
-                style={{ padding: "4px 12px", borderRadius: 4, fontSize: 11, cursor: "pointer", border: "0.5px solid #1e3a1e", color: "#8aaa8a", background: "transparent" }}
+                style={{ padding: "4px 12px", borderRadius: 4, fontSize: 11, cursor: "pointer", border: "0.5px solid var(--border)", color: "var(--text-mid)", background: "transparent" }}
               >
                 Copy
               </button>
@@ -342,16 +333,16 @@ export default function PromptBuilder() {
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  style={{ padding: "4px 12px", borderRadius: 4, fontSize: 11, cursor: saving ? "not-allowed" : "pointer", border: "0.5px solid #c8973a", color: "#c8973a", background: "transparent", opacity: saving ? 0.6 : 1 }}
+                  style={{ padding: "4px 12px", borderRadius: 4, fontSize: 11, cursor: saving ? "not-allowed" : "pointer", border: "0.5px solid var(--amber)", color: "var(--amber)", background: "transparent", opacity: saving ? 0.6 : 1 }}
                 >
                   {saving ? "Saving..." : "Save to Dashboard"}
                 </button>
               ) : (
-                <span style={{ fontSize: 11, color: "#5ab85a", padding: "4px 12px" }}>✓ Saved to Dashboard</span>
+                <span style={{ fontSize: 11, color: "var(--success)", padding: "4px 12px" }}>✓ Saved to Dashboard</span>
               )}
             </div>
           </div>
-          <pre style={{ fontSize: 12, color: "#c8c8b8", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0, fontFamily: "monospace" }}>
+          <pre style={{ fontSize: 12, color: "var(--text)", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0, fontFamily: "monospace" }}>
             {finalPrompt}
           </pre>
         </div>
@@ -376,10 +367,10 @@ export default function PromptBuilder() {
               flex: 1,
               minWidth: 0,
               padding: "9px 12px",
-              background: "#0f200f",
-              border: "0.5px solid #1e3a1e",
+              background: "var(--surface-inp)",
+              border: "0.5px solid var(--border)",
               borderRadius: 5,
-              color: "#c8c8b8",
+              color: "var(--text)",
               fontSize: 13,
               fontFamily: "sans-serif",
               outline: "none",
@@ -393,15 +384,17 @@ export default function PromptBuilder() {
             disabled={loading || !input.trim()}
             style={{
               padding: "0 20px",
-              borderRadius: 5,
-              fontSize: 13,
-              fontWeight: 500,
+              borderRadius: 7,
+              fontSize: 14,
+              fontWeight: 600,
+              fontFamily: "var(--font-ui)",
               cursor: loading || !input.trim() ? "not-allowed" : "pointer",
-              border: "0.5px solid #c8973a",
-              color: "#000",
-              background: "#c8973a",
+              border: "none",
+              color: "var(--card)",
+              background: "var(--green)",
               opacity: loading || !input.trim() ? 0.5 : 1,
               flexShrink: 0,
+              boxShadow: "var(--shadow-button)",
             }}
           >
             Send
@@ -413,7 +406,7 @@ export default function PromptBuilder() {
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <button
             onClick={handleReset}
-            style={{ padding: "8px 20px", borderRadius: 5, fontSize: 13, cursor: "pointer", border: "0.5px solid #1e3a1e", color: "#6a8a6a", background: "transparent" }}
+            style={{ padding: "8px 20px", borderRadius: 5, fontSize: 13, cursor: "pointer", border: "0.5px solid var(--border)", color: "var(--text-light)", background: "transparent" }}
           >
             Build another prompt
           </button>
