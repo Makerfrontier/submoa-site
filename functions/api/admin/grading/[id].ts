@@ -1,10 +1,10 @@
-import { json, getSessionUser, Env } from '../../_utils';
+import { json, getSessionUser, isAdmin, Env } from '../../_utils';
 import { handleGradeArticle, handleGetGrade } from '../../routes/grade';
 
 export async function onRequest(context: { request: Request, env: Env, waitUntil: (p: Promise<any>) => void }) {
   // Admin only
   const user = await getSessionUser(context.request, context.env);
-  if (!user || user.role !== 'admin') {
+  if (!user || !isAdmin(user)) {
     return json({ error: 'Unauthorized' }, 401);
   }
 

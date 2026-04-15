@@ -1,4 +1,4 @@
-import { json, getSessionUser, Env } from '../../_utils';
+import { json, getSessionUser, isAdmin, Env } from '../../_utils';
 import { scrapeProductPage } from '../../_utils';
 import { runPhaseA } from '../../dataforseo/phase-a';
 import { runPhaseB } from '../../dataforseo/phase-b';
@@ -69,7 +69,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
 
   const user = await getSessionUser(context.request, context.env);
   if (!user) return json({ error: 'Not authenticated' }, 401);
-  if (user.role !== 'admin') return json({ error: 'Forbidden' }, 403);
+  if (!isAdmin(user)) return json({ error: 'Forbidden' }, 403);
 
   try {
     const { submission_id } = await context.request.json();

@@ -2,12 +2,12 @@
 // POST /api/admin/articles/upload-for-grading
 // Admin tool: upload article text and create a submission ready for grading.
 
-import { json, getSessionUser, generateId } from '../../_utils';
+import { json, getSessionUser, isAdmin, generateId } from '../../_utils';
 
 export async function onRequestPost(context: { request: Request; env: any }) {
   const user = await getSessionUser(context.request, context.env);
   if (!user) return json({ error: 'Not authenticated' }, 401);
-  if (user.role !== 'admin') return json({ error: 'Forbidden' }, 403);
+  if (!isAdmin(user)) return json({ error: 'Forbidden' }, 403);
 
   let content: string, filename: string;
   try {

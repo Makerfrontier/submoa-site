@@ -359,14 +359,18 @@ export function scoreSeo(
 
 // ---------------------------------------------------------------------------
 // 3f. Weighted overall score
+// Core three: grammar 35%, readability 30%, seo 35%
+// ai_detection and plagiarism are optional — excluded when null, weight
+// redistributed proportionally among whatever scores are present.
+// Always returns a number, never null.
 // ---------------------------------------------------------------------------
 export function calcOverall(scores: GradeScores): number {
   const weights: Record<keyof Omit<GradeScores, "overall">, number> = {
-    grammar: 0.2,
-    readability: 0.15,
-    ai_detection: 0.3,
-    plagiarism: 0.2,
-    seo: 0.15,
+    grammar:      0.35,
+    readability:  0.30,
+    seo:          0.35,
+    ai_detection: 0,   // optional — informational only, does not affect overall
+    plagiarism:   0,   // optional — informational only, does not affect overall
   };
 
   let weightSum = 0;
@@ -376,6 +380,7 @@ export function calcOverall(scores: GradeScores): number {
     keyof typeof weights,
     number
   ][]) {
+    if (weight === 0) continue; // skip optional scores
     const val = scores[key];
     if (val !== null && val !== undefined) {
       scoreSum += val * weight;
@@ -385,7 +390,7 @@ export function calcOverall(scores: GradeScores): number {
 
   if (weightSum === 0) return 0;
 
-  // Redistribute excluded weights proportionally
+  // Redistribute excluded weights proportionally (handles null core scores)
   return Math.round(scoreSum / weightSum);
 }
 
