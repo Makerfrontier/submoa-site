@@ -14,7 +14,7 @@ async function logApiUsage(
 ): Promise<void> {
   try {
     await db.prepare(`
-      INSERT INTO api_usage_log (api_name, input_tokens, output_tokens, cost_usd, submission_id, created_at)
+      INSERT INTO api_usage_log (api_name, input_tokens, output_tokens, cost, submission_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).bind(apiName, inputTokens, outputTokens, costUsd, submissionId || null, Date.now()).run();
   } catch (e) {
@@ -614,7 +614,7 @@ async function processGenerationJob(
           'X-Title': 'SubMoa Content',
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash-image-preview',
+          model: 'google/gemini-2.5-flash-image',
           modalities: ['image', 'text'],
           messages: [
             { role: 'user', content: imagePrompt },
