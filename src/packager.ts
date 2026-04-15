@@ -117,8 +117,8 @@ export async function packageArticle(env: Env, submissionId: string): Promise<vo
       if (!existingAudio) {
         try {
           const ALLOWED_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
-          const rawVoice = sub.tts_voice_id ?? 'alloy';
-          const voice = ALLOWED_VOICES.includes(rawVoice) ? rawVoice : 'alloy';
+          const rawVoice = sub.tts_voice_id ?? 'onyx';
+          const voice = ALLOWED_VOICES.includes(rawVoice) ? rawVoice : 'onyx';
 
           const stripped = sub.article_content
             .replace(/<[^>]+>/g, ' ')

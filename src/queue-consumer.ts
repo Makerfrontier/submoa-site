@@ -717,7 +717,7 @@ async function processGenerationJob(
             Authorization: `Bearer ${env.OPENAI_API_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ model: 'tts-1', input, voice: 'alloy', response_format: 'mp3' }),
+          body: JSON.stringify({ model: 'tts-1', input, voice: 'onyx', response_format: 'mp3' }),
         });
 
         if (!ttsRes.ok) {

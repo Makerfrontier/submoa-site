@@ -81,8 +81,8 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
         continue;
       }
 
-      const rawVoice = sub.tts_voice_id ?? 'alloy';
-      const voice = ALLOWED_VOICES.includes(rawVoice) ? rawVoice : 'alloy';
+      const rawVoice = sub.tts_voice_id ?? 'onyx';
+      const voice = ALLOWED_VOICES.includes(rawVoice) ? rawVoice : 'onyx';
 
       if (!env.OPENAI_API_KEY) {
         results.push({ id: sub.id, topic: sub.topic, status: 'OPENAI_API_KEY not set on Pages' });

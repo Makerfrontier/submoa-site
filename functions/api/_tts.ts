@@ -64,7 +64,7 @@ export async function generateAudio(
   }
 
   // 5. Generate MP3 for each chunk via OpenRouter
-  const voice = authorProfile.tts_voice_id || 'alloy';
+  const voice = authorProfile.tts_voice_id || 'onyx';
   const mp3Buffers: ArrayBuffer[] = [];
 
   for (const chunk of chunks) {
