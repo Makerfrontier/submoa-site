@@ -187,31 +187,28 @@
    ─────────────────────────────────────────────────────────────────────── */
 
 .nav {
-  background: #0d1d0d;
+  background: var(--bg);
   border-bottom: 0.5px solid #1e3a1e;
   position: sticky;
   top: 0;
-  z-index: 100;
+  left: 0;
+  right: 0;
   width: 100%;
+  margin: 0;
+  z-index: 100;
 }
 
 .nav-inner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 0 24px;
-  height: 72px;
+  height: 45px;
 }
 
-/* Logo — larger, crisp */
+/* Logo — hidden */
 .nav-logo {
-  height: 48px;
-  width: auto;
-  display: block;
-  object-fit: contain;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
-  flex-shrink: 0;
+  display: none;
 }
 
 /* Nav links row */
@@ -222,20 +219,21 @@
 }
 
 .nav-link {
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 700;
   font-family: sans-serif;
-  letter-spacing: 0.04em;
-  color: #8aaa8a;
+  letter-spacing: 0.03em;
+  color: #c8973a;
   text-decoration: none;
   transition: color 0.15s;
   white-space: nowrap;
 }
 
-.nav-link:hover { color: #c8c8b8; }
+.nav-link:hover { color: #fff; }
 
 .nav-link.active {
   color: #fff;
-  border-bottom: 1px solid #c8973a;
+  border-bottom: 2px solid #c8973a;
   padding-bottom: 2px;
 }
 
@@ -436,4 +434,36 @@
   width: 1px;
   height: 16px;
   background: #1e3a1e;
+}
+
+/* ── Brief / Prompt form inputs — matches global .form-input treatment ──── */
+.brief-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--surface-inp);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.brief-input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-glow);
+}
+.brief-input::placeholder { color: var(--text-dim); }
+textarea.brief-input { resize: vertical; min-height: 96px; line-height: 1.5; }
+select.brief-input {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%236B5744' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+  padding-right: 36px;
 }
