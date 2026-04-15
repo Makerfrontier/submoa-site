@@ -2279,7 +2279,7 @@ function ContentPage({ navigate }) {
   const readTimeDisplay = readTimeMinutes > 0 ? `${readTimeMinutes} min read` : ''
 
   return (
-    <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--bg)', minHeight: '100vh', paddingBottom: 80 }}>
       {/* Back link - fixed at top of page */}
       <div style={{ maxWidth: '740px', margin: '0 auto', padding: '1rem 1.5rem 0' }}>
         <button
