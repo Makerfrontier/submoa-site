@@ -29,9 +29,11 @@ export async function onRequest(context: any) {
     conversationId = conv.id;
   }
 
-  // Pull platform context (features + recent bugs) so the model can reason
+  // Pull platform context (features + recent bugs) so the model can reason.
+  // source_files is included so package_prompt can build the explicit
+  // per-file `git add` list the writeback contract requires.
   const featuresRows = await context.env.submoacontent_db
-    .prepare(`SELECT slug, name, status FROM features ORDER BY name`)
+    .prepare(`SELECT slug, name, status, source_files FROM features ORDER BY name`)
     .all();
   const features: any[] = featuresRows.results || [];
   const openBugs = await context.env.submoacontent_db
@@ -183,7 +185,42 @@ Authenticate all POSTs below with header: Authorization: Bearer \${CLAUDE_CODE_A
    POST ${PRODUCTION_BASE_URL}/api/admin/agent/tasks/${taskId}/complete
    Body: { files_changed, bugs_closed, features_updated, summary }
 
-These writebacks are MANDATORY. Fill every <placeholder> with the real id/slug — unfilled placeholders will be rejected.`;
+7. Git commit step — ONLY the files this task touched:
+   \`\`\`bash
+   # Stage only the files this task touched.
+   # If any path is missing (file not present), skip it silently.
+   git add <path/to/file1> <path/to/file2> <path/to/file3>
+   git diff --cached --stat   # sanity check — verify scope
+
+   # If git status shows MORE files staged than expected:
+   #   git reset HEAD <unexpected-file>
+   # Do NOT commit unrelated dirty files under this task's message.
+
+   git commit -m "${taskId}: <one-line summary of what this task changed>"
+   git push origin main
+   \`\`\`
+
+   If the working tree has uncommitted files NOT touched by this task,
+   include a NOTE in the /complete summary field listing them so the user
+   can triage separately.
+
+These writebacks are MANDATORY. Fill every <placeholder> with the real id/slug — unfilled placeholders will be rejected.
+
+WRITEBACK CONTRACT — GIT COMMIT STEP:
+
+The final step of every generated prompt MUST instruct Claude Code to commit
+ONLY the files this specific task touched. Do NOT use \`git add -A\`,
+\`git add --all\`, or \`git add .\` — these sweep up unrelated dirty files
+and produce mislabeled commits. Use the explicit per-file staging template
+shown above.
+
+Populate the explicit file list from:
+ - bug.affected_source_files for each bug being fixed (when provided)
+ - feature.source_files for each feature spec being PATCHed in writebacks
+ - Any NEW files explicitly named in your fix instructions
+The list above belongs in both the \`git add\` command in step 7 AND in a
+visible "FILES THIS TASK WILL LIKELY TOUCH" section near the top of the
+generated prompt so a reader can sanity-check scope before executing.`;
       const sonnetRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -199,7 +236,7 @@ These writebacks are MANDATORY. Fill every <placeholder> with the real id/slug �
             { role: 'system', content: sonnetSys },
             {
               role: 'user',
-              content: `Package a Claude Code prompt for this request:\n\n${userMessage}\n\nAvailable features: ${features.map((f: any) => f.slug).join(', ')}\nOpen bug ids: ${(openBugs.results || []).map((b: any) => b.id).join(', ') || 'none'}`,
+              content: `Package a Claude Code prompt for this request:\n\n${userMessage}\n\nAvailable features: ${features.map((f: any) => f.slug).join(', ')}\nOpen bug ids: ${(openBugs.results || []).map((b: any) => b.id).join(', ') || 'none'}\n\nFILES THIS TASK WILL LIKELY TOUCH (use these verbatim for step 7 \`git add\` — do NOT use \`git add -A\`):\n${buildFilesTaskSection(features)}`,
             },
           ],
         }),
@@ -222,6 +259,22 @@ These writebacks are MANDATORY. Fill every <placeholder> with the real id/slug �
       if (leaks && leaks.length > 0) {
         reply = `Packager rejected: generated prompt contains unfilled placeholders (${leaks.join(', ')}). Ask me again with a more specific request so the model can fill them in.`;
         prompt = '';
+      }
+
+      // Belt-and-suspenders: if Sonnet ever regresses back to `git add -A`,
+      // don't block the flow — append a warning footer so Claude Code sees
+      // the correction inline when it runs the generated prompt.
+      const forbiddenAddAllPattern = /git\s+add\s+(-A|--all|\.)\b/g;
+      if (prompt && forbiddenAddAllPattern.test(prompt)) {
+        console.warn(`[site-agent/package_prompt] forbidden 'git add -A' detected for task ${taskId} — appending correction footer`);
+        prompt += `
+
+---
+
+## ⚠️ PACKAGER WARNING — IGNORE THE 'git add -A' INSTRUCTION ABOVE
+
+The writeback contract above contains \`git add -A\` (or \`git add --all\` / \`git add .\`) which the packager guidelines forbid. Stage explicitly per file using the FILES THIS TASK WILL LIKELY TOUCH list. Do not commit files unrelated to this task. If unsure, pause and ask the user.
+`;
       }
 
       if (prompt) {
@@ -251,6 +304,27 @@ These writebacks are MANDATORY. Fill every <placeholder> with the real id/slug �
   });
 
   return json({ reply, intent, actions, conversation_id: conversationId });
+}
+
+// Build the "FILES THIS TASK WILL LIKELY TOUCH" block appended to the Sonnet
+// user message. We can't know which features the user's request will hit
+// without reading Sonnet's mind, so we list ALL features' source_files here —
+// the model is instructed to pick the ones relevant to its chosen
+// feature attributions in its per-file git add step.
+function buildFilesTaskSection(features: any[]): string {
+  const parseList = (v: any): string[] => {
+    if (Array.isArray(v)) return v;
+    try { const p = JSON.parse(v || '[]'); return Array.isArray(p) ? p : []; } catch { return []; }
+  };
+  const lines = features
+    .map(f => {
+      const files = parseList(f.source_files);
+      if (files.length === 0) return null;
+      return `- ${f.slug}: ${files.join(', ')}`;
+    })
+    .filter(Boolean);
+  if (lines.length === 0) return '(no source_files recorded on features yet — use the fix instructions to populate the git add list)';
+  return lines.join('\n');
 }
 
 function buildBrandBiblePrefix(config: any, version: number, lockedAt: number | null): string {

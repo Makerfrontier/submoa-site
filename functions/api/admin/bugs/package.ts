@@ -106,6 +106,19 @@ export async function onRequest(context: any) {
   const otherBlock = (otherOpen.results || []).length === 0 ? '(none)'
     : (otherOpen.results || []).map((b: any) => `- ${b.id} · ${b.severity} · ${b.feature_slug} · ${b.title}`).join('\n');
 
+  // Explicit file list for the per-file `git add` step. Draws from each
+  // affected feature's source_files plus any bug-level affected_source_files
+  // that happen to be on the record. If a bug record surface adds that column
+  // later, the list here picks it up automatically.
+  const filesThisTask = (() => {
+    const set = new Set<string>();
+    for (const f of features) for (const p of parseList(f.source_files)) set.add(p);
+    for (const b of bugs) for (const p of parseList((b as any).affected_source_files)) set.add(p);
+    const arr = [...set];
+    return arr.length === 0 ? '(no source_files on features yet — use the fix instructions to populate the git add list)'
+      : arr.map(p => `- ${p}`).join('\n');
+  })();
+
   const userMessage = `Package these ${bugs.length} bug${bugs.length === 1 ? '' : 's'} into a Claude Code prompt.
 
 Task id: ${taskId}
@@ -119,6 +132,9 @@ ${featuresBlock}
 
 ## OUT OF SCOPE (other open bugs on the same features — do NOT touch in this prompt)
 ${otherBlock}
+
+## FILES THIS TASK WILL LIKELY TOUCH (use these verbatim for step 6 \`git add\` — do NOT use \`git add -A\`)
+${filesThisTask}
 
 ## BRAND BIBLE
 ${bbPrefix}
@@ -176,8 +192,34 @@ End with the writeback contract showing (absolute URLs):
 3. POST ${PRODUCTION_BASE_URL}/api/admin/bugs/<actual-bug-id>/close for each closed bug (include closed_in_task_id)
 4. PATCH ${PRODUCTION_BASE_URL}/api/admin/features/<actual-feature-slug> for each updated spec
 5. POST ${PRODUCTION_BASE_URL}/api/admin/agent/tasks/${taskId}/complete at the end
+6. Git commit — per-file staging ONLY:
+   \`\`\`bash
+   # Stage only the files this task touched — skip missing paths silently.
+   git add <path/to/file1> <path/to/file2> <path/to/file3>
+   git diff --cached --stat
+   # If unexpected files are staged: git reset HEAD <file>
+   git commit -m "${taskId}: <one-line summary>"
+   git push origin main
+   \`\`\`
+   If the working tree has uncommitted files NOT touched by this task,
+   include a NOTE listing them in the /complete summary field so the user
+   can triage.
 
 All writebacks authenticate with: Authorization: Bearer \${CLAUDE_CODE_API_KEY from .env.local}
+
+WRITEBACK CONTRACT — GIT COMMIT STEP:
+
+The git step of every generated prompt MUST instruct Claude Code to commit
+ONLY the files this specific task touched. Do NOT use \`git add -A\`,
+\`git add --all\`, or \`git add .\` — these sweep up unrelated dirty files
+and produce mislabeled commits. Populate the explicit file list from:
+ - bug.affected_source_files for each bug being fixed (when provided — see
+   FILES THIS TASK WILL LIKELY TOUCH in the user message)
+ - feature.source_files for each feature spec being PATCHed in writebacks
+ - Any NEW files explicitly named in your fix instructions
+The list also belongs in a visible "FILES THIS TASK WILL LIKELY TOUCH"
+section near the top of the generated prompt so a reader can sanity-check
+scope before executing.
 
 Return only the .md prompt — no preamble, no code fences around the whole thing. Fill every {placeholder} with real values — unfilled placeholders will be rejected.`;
 
@@ -223,6 +265,22 @@ Return only the .md prompt — no preamble, no code fences around the whole thin
         code: 'PACKAGER_PLACEHOLDER_LEAK',
         placeholders_found: leaks,
       }, 500);
+    }
+
+    // Belt-and-suspenders: if Sonnet regresses to `git add -A` / `git add .` /
+    // `git add --all`, append a correction footer rather than blocking. The
+    // system prompt already forbids these; the regex is a safety net.
+    const forbiddenAddAllPattern = /git\s+add\s+(-A|--all|\.)\b/g;
+    if (forbiddenAddAllPattern.test(promptText)) {
+      console.warn(`[packager] forbidden 'git add -A' pattern detected for task ${taskId} — appending correction footer`);
+      promptText += `
+
+---
+
+## ⚠️ PACKAGER WARNING — IGNORE THE 'git add -A' INSTRUCTION ABOVE
+
+The writeback contract above contains \`git add -A\` (or \`git add --all\` / \`git add .\`) which the packager guidelines forbid. Stage explicitly per file using the FILES THIS TASK WILL LIKELY TOUCH list. Do not commit files unrelated to this task. If unsure, pause and ask the user.
+`;
     }
 
     // Persist the task row
