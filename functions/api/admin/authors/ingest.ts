@@ -76,7 +76,13 @@ export async function onRequest(context: { request: Request; env: Env }) {
   if (!user) return json({ error: 'Not authenticated' }, 401);
 
   try {
-    const body = await request.json().catch(() => ({}));
+    const contentType = request.headers.get('Content-Type') || '';
+    const isJson = contentType.includes('application/json');
+    const isMultipart = contentType.includes('multipart/form-data');
+
+    // Only parse JSON up-front; for multipart we must defer to formData() below
+    // (reading the body twice throws "body has already been used").
+    const body: any = isJson ? await request.json().catch(() => ({})) : {};
     const scope = body.scope || 'admin';
     const custom_name = body.custom_name || null;
     const account_id = user.account_id || 'makerfrontier';
@@ -91,13 +97,12 @@ export async function onRequest(context: { request: Request; env: Env }) {
       }
     }
 
-    const contentType = request.headers.get('Content-Type') || '';
     let rssUrl: string | null = null;
     let textBlob: string | null = null;
     let rssUrlInput: string | null = null;
 
     // Handle multipart form (DOCX upload)
-    if (contentType.includes('multipart/form-data')) {
+    if (isMultipart) {
       const formData = await request.formData();
       const file = formData.get('document') as File | null;
       
@@ -119,7 +124,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
       }
     }
     // Handle JSON (RSS URL)
-    else if (contentType.includes('application/json')) {
+    else if (isJson) {
       rssUrlInput = body.rss_url || body.rssUrl;
       rssUrl = rssUrlInput;
 

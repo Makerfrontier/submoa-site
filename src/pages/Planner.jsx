@@ -118,9 +118,9 @@ function TaskSection({ task, sectionId, flags, onCommentSaved, itineraryId, lock
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 14 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
         {(task?.options || []).map((o, i) => (
-          <div key={i} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 14 }}>
+          <div key={i} style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 14 }}>
             <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--green)', color: '#fff', fontWeight: 700, textAlign: 'center', lineHeight: '22px', fontSize: 12, marginBottom: 8 }}>{o?.rank ?? i + 1}</div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>{o?.name}</div>
             <div style={{ fontSize: 12, color: 'var(--text-mid)', marginBottom: 8 }}>{o?.tagline}</div>
@@ -270,8 +270,7 @@ export default function Planner({ navigate }) {
   }
 
   const confirmAndGenerate = async () => {
-    setError('')
-    setPhase('plan-loading'); setLoading(true)
+    setError(''); setLoading(true)
     try {
       // Save draft first
       let id = itineraryId
@@ -288,12 +287,13 @@ export default function Planner({ navigate }) {
         id = draft.id
         setItineraryId(id)
       }
-      const { plan: p } = await api('/api/planner/generate', {
+      // Fire-and-forget enqueue. The queue consumer writes the plan and the
+      // /planner/building/:id page polls for readiness.
+      await api('/api/planner/generate', {
         method: 'POST',
         body: JSON.stringify({ itinerary_id: id, situation, answers, confirmed_recap: recap, additions }),
       })
-      setPlan(p)
-      setPhase('plan')
+      navigate(`/planner/building/${id}`)
     } catch (e) { setError(e.message); setPhase('recap') } finally { setLoading(false) }
   }
 

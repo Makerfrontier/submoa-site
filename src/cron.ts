@@ -21,6 +21,7 @@ interface Env {
   LANGUAGETOOL_API_KEY?: string;
   OPENROUTER_API_KEY: string;
   APP_URL?: string;
+  GENERATION_QUEUE?: Queue;
 }
 
 const STALE_GENERATION_MS = 30 * 60 * 1000;
@@ -35,9 +36,64 @@ export default {
       processUngradedArticles(env),
       processUnpackagedArticles(env),
       detectStaleGenerations(env),
+      sweepStuckInfographics(env),
     ]);
   },
 };
+
+// ---------------------------------------------------------------------------
+// Infographic stuck-sweep — auto-requeue up to MAX_ATTEMPTS, then terminal fail
+// ---------------------------------------------------------------------------
+const INFOGRAPHIC_STUCK_MS = 15 * 60 * 1000;
+const INFOGRAPHIC_MAX_ATTEMPTS = 3;
+
+async function sweepStuckInfographics(env: Env): Promise<void> {
+  const cutoff = Date.now() - INFOGRAPHIC_STUCK_MS;
+  const { results } = await env.submoacontent_db.prepare(
+    `SELECT id, submission_id, generation_attempts
+       FROM infographic_submissions
+      WHERE infographic_status IN ('generating', 'rendering', 'queued')
+        AND COALESCE(updated_at, created_at) < ?`
+  ).bind(cutoff).all<any>().catch(() => ({ results: [] }));
+
+  const stuck = results || [];
+  if (stuck.length === 0) return;
+  console.log(`[cron/infographic-sweep] detected ${stuck.length} stuck infographic(s)`);
+
+  const now = Date.now();
+  for (const row of stuck) {
+    const attempts = Number(row.generation_attempts || 0);
+    if (attempts >= INFOGRAPHIC_MAX_ATTEMPTS) {
+      try {
+        await env.submoacontent_db.prepare(
+          `UPDATE infographic_submissions SET infographic_status='generation_failed', error_message=?, updated_at=? WHERE id=?`
+        ).bind(`Generation failed after ${attempts} attempts (timeout)`, now, row.id).run();
+        await env.submoacontent_db.prepare(
+          `UPDATE submissions SET status='generation_failed', updated_at=? WHERE id=?`
+        ).bind(now, row.submission_id).run();
+        console.warn(`[cron/infographic-sweep] submission=${row.submission_id} attempts=${attempts} → marked failed`);
+      } catch (e) {
+        console.error('[cron/infographic-sweep] terminal update failed:', e);
+      }
+      continue;
+    }
+
+    try {
+      await env.submoacontent_db.prepare(
+        `UPDATE infographic_submissions SET infographic_status='queued', generation_attempts=COALESCE(generation_attempts,0)+1, error_message=NULL, updated_at=? WHERE id=?`
+      ).bind(now, row.id).run();
+      await env.submoacontent_db.prepare(
+        `UPDATE submissions SET status='queued', updated_at=? WHERE id=?`
+      ).bind(now, row.submission_id).run();
+      if (env.GENERATION_QUEUE) {
+        await env.GENERATION_QUEUE.send({ submission_id: row.submission_id, type: 'generation_job', queued_at: now });
+      }
+      console.log(`[cron/infographic-sweep] submission=${row.submission_id} attempt=${attempts + 1}/${INFOGRAPHIC_MAX_ATTEMPTS} → requeued`);
+    } catch (e: any) {
+      console.error(`[cron/infographic-sweep] requeue failed for ${row.submission_id}:`, e?.message || e);
+    }
+  }
+}
 
 // Reset submissions stuck in grade_status='grading' for >15 minutes so the
 // next sweep picks them up again.

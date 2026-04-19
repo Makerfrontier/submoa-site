@@ -16,6 +16,9 @@
       "bucket_name": "submoa-images"
     }
   ],
+  "browser": {
+    "binding": "BROWSER"
+  },
   "queues": {
     "producers": [
       {

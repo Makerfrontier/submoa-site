@@ -1,497 +1,491 @@
-// src/pages/EmailBrief.tsx
-// /brief/email — HTML Email Template Builder brief
+// /brief/email — Email Builder
+// Comp Studio-style three-column authoring tool.
+// Left: template picker → brief fields (purpose, audience, author, prompt wrapper).
+// Center: live email preview iframe.
+// Right: content palette (subject, preheader, CTA, sections).
+// Desktop-only (<1024px shows the Comp Studio-style gate screen).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from 'react';
+import { stripAndClean } from '../comp-utils';
+import { EMAIL_TEMPLATES } from '../template-baselines';
 
-interface Section { title: string; brief: string }
-interface SavedTemplate {
-  id: string;
-  template_name: string;
-  template_type: string;
-  subject_line?: string | null;
-  preheader_text?: string | null;
-  brand_name?: string | null;
-  primary_color?: string | null;
-  secondary_color?: string | null;
-  brand_voice?: string | null;
-  logo_url?: string | null;
-  cta_text?: string | null;
-  cta_url?: string | null;
-  unsubscribe_url?: string | null;
-  company_address?: string | null;
-  sections?: string | null;
-}
-interface AssetRow { id: string; filename: string; url: string }
 interface AuthorRow { slug: string; name: string }
 
-const TEMPLATE_TYPES = [
-  { value: "newsletter", label: "Newsletter" },
-  { value: "transactional", label: "Process / Transactional" },
-  { value: "marketing", label: "Marketing / Email Blast" },
-];
+interface EmailSection { id: string; kind: 'hero' | 'paragraph' | 'cta' | 'divider' | 'quote'; text: string; cta?: { label: string; href: string } }
+
+// Templates now drawn from the shared baseline registry. Each card shows
+// name + description + the accent color; the HTML baseline is fetched at
+// generation time from the same registry on the server-side.
+const TEMPLATES = Object.values(EMAIL_TEMPLATES).map(t => ({
+  id: t.id,
+  name: t.name,
+  desc: t.description,
+  color: t.accentColor,
+}));
+
+function TemplateThumb({ color }: { color: string }) {
+  return (
+    <svg viewBox="0 0 80 50" width="100%" height="72" preserveAspectRatio="xMidYMid meet">
+      <rect x="2" y="2" width="76" height="46" rx="3" fill="#FAF7F2" stroke={color} strokeWidth="1"/>
+      <rect x="6" y="6" width="68" height="14" fill={color} opacity="0.9"/>
+      <rect x="6" y="24" width="56" height="3" fill={color} opacity="0.4"/>
+      <rect x="6" y="30" width="44" height="3" fill={color} opacity="0.3"/>
+      <rect x="6" y="36" width="50" height="3" fill={color} opacity="0.3"/>
+      <rect x="6" y="42" width="20" height="4" rx="1" fill={color}/>
+    </svg>
+  );
+}
+
+function UploadThumb() {
+  return (
+    <svg viewBox="0 0 80 50" width="100%" height="72" preserveAspectRatio="xMidYMid meet">
+      <rect x="2" y="2" width="76" height="46" rx="3" fill="#EDE8DF" stroke="#A09080" strokeWidth="1" strokeDasharray="3 2"/>
+      <circle cx="40" cy="25" r="10" fill="none" stroke="#6B5744" strokeWidth="1.5"/>
+      <path d="M40 20v10M35 25h10" stroke="#6B5744" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function DesktopOnlyGate() {
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 32 }}>
+      <div className="card" style={{ padding: 40, maxWidth: 440, textAlign: 'center' }}>
+        <div className="eyebrow" style={{ marginBottom: 12 }}>✦ EMAIL BUILDER</div>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, marginBottom: 8 }}>Desktop only</h2>
+        <p style={{ color: 'var(--text-mid)', fontSize: 14, lineHeight: 1.6 }}>
+          Email Builder is a precision authoring tool. Please open it on a screen 1024px or wider.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function renderEmailHtml(state: {
+  subject: string; preheader: string; primaryColor: string; sections: EmailSection[];
+}) {
+  const { subject, preheader, primaryColor, sections } = state;
+  const parts = sections.map(s => {
+    if (s.kind === 'hero') return `<h1 style="margin:0 0 16px;font-family:Georgia,serif;font-size:28px;color:#221A10;line-height:1.2">${escape(s.text)}</h1>`;
+    if (s.kind === 'paragraph') return `<p style="margin:0 0 16px;font-family:Arial,sans-serif;font-size:15px;color:#4a4a4a;line-height:1.6">${escape(s.text)}</p>`;
+    if (s.kind === 'cta') return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0"><tr><td style="background:${primaryColor};border-radius:6px;padding:12px 22px"><a href="${escape(s.cta?.href || '#')}" style="color:#fff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;font-weight:600">${escape(s.cta?.label || s.text || 'Click here')}</a></td></tr></table>`;
+    if (s.kind === 'divider') return `<hr style="border:none;border-top:1px solid #CDC5B4;margin:24px 0" />`;
+    if (s.kind === 'quote') return `<blockquote style="margin:20px 0;padding:16px 20px;border-left:3px solid ${primaryColor};background:#F5EDD8;font-family:Georgia,serif;font-size:16px;color:#221A10;line-height:1.5">${escape(s.text)}</blockquote>`;
+    return '';
+  }).join('\n');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escape(subject)}</title></head><body style="margin:0;padding:0;background:#EDE8DF;font-family:Arial,sans-serif"><div style="display:none;max-height:0;overflow:hidden">${escape(preheader)}</div><table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#EDE8DF;padding:24px 0"><tr><td align="center"><table role="presentation" cellpadding="0" cellspacing="0" width="600" style="background:#FAF7F2;padding:32px;border-radius:8px">${parts ? `<tr><td>${parts}</td></tr>` : ''}</table></td></tr></table></body></html>`;
+}
+
+function escape(str: string) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c));
+}
 
 export default function EmailBrief({ navigate }: { navigate?: (p: string) => void }) {
-  // ── Setup
-  const [templateType, setTemplateType] = useState("newsletter");
-  const [templateName, setTemplateName] = useState("");
-  const [saveAsTemplate, setSaveAsTemplate] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
+  useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= 1024);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
-  // ── Load Saved
-  const [templates, setTemplates] = useState<SavedTemplate[]>([]);
-  const [loadId, setLoadId] = useState("");
-
-  // ── Identity
-  const [brandName, setBrandName] = useState("");
-  const [brandVoice, setBrandVoice] = useState("");
-  const [logoUrl, setLogoUrl] = useState("");
-  const [author, setAuthor] = useState("");
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  // Session-only custom HTML template from the Upload Your Own card. When set,
+  // the preview iframe renders this html directly (not the assembled template).
+  const [customHtml, setCustomHtml] = useState<string | null>(null);
+  const [customFilename, setCustomFilename] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [authors, setAuthors] = useState<AuthorRow[]>([]);
-  const [assets, setAssets] = useState<AssetRow[]>([]);
-
-  // ── Colors
-  const [primaryColor, setPrimaryColor] = useState("#c8973a");
-  const [secondaryColor, setSecondaryColor] = useState("#1e3a1e");
-
-  // ── Content
-  const [subjectLine, setSubjectLine] = useState("");
-  const [preheaderText, setPreheaderText] = useState("");
-  const [contentBrief, setContentBrief] = useState("");
-  const [sections, setSections] = useState<Section[]>([]);
-  const [ctaText, setCtaText] = useState("");
-  const [ctaUrl, setCtaUrl] = useState("");
-
-  // ── Compliance
-  const [unsubscribeUrl, setUnsubscribeUrl] = useState("");
-  const [companyAddress, setCompanyAddress] = useState("");
-
-  // ── API push
-  const [pushOpen, setPushOpen] = useState(false);
-  const [apiPushEnabled, setApiPushEnabled] = useState(false);
-  const [apiPushService, setApiPushService] = useState("sendgrid");
-  const [sendgridApiKey, setSendgridApiKey] = useState("");
-  const [sendgridListId, setSendgridListId] = useState("");
-  const [aweberAccount, setAweberAccount] = useState("");
-
-  // ── State
+  const [author, setAuthor] = useState('');
+  const [topic, setTopic] = useState('');
+  const [purpose, setPurpose] = useState('');
+  const [audience, setAudience] = useState('');
+  const [subject, setSubject] = useState('');
+  const [preheader, setPreheader] = useState('');
+  const [primaryColor, setPrimaryColor] = useState('#B8872E');
+  const [sections, setSections] = useState<EmailSection[]>([]);
+  const [optimizing, setOptimizing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState('');
 
-  // Load templates, assets, authors on mount
   useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch("/api/email-templates", { credentials: "include" });
-        if (r.ok) {
-          const d = await r.json();
-          setTemplates(d.templates || []);
-        }
-      } catch {}
-
-      try {
-        const r = await fetch("/api/email-assets", { credentials: "include" });
-        if (r.ok) {
-          const d = await r.json();
-          setAssets(d.assets || []);
-        }
-      } catch {}
-
-      try {
-        const r = await fetch("/api/authors", { credentials: "include" });
-        if (r.ok) {
-          const d = await r.json();
-          const list: AuthorRow[] = (d.authors || []).filter(
-            (a: any) => a.slug && a.slug !== "infographic-agent"
-          );
-          setAuthors(list);
-          if (list.length > 0 && !author) setAuthor(list[0].slug);
-        }
-      } catch {}
-    })();
+    fetch('/api/authors', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : { authors: [] })
+      .then(d => {
+        const list: AuthorRow[] = d.authors || [];
+        setAuthors(list);
+        if (list.length > 0) setAuthor(list[0].slug);
+      })
+      .catch(() => {});
   }, []);
 
-  // Apply selected saved template
-  useEffect(() => {
-    if (!loadId) return;
-    const t = templates.find((x) => x.id === loadId);
+  function pickTemplate(id: string) {
+    setTemplateId(id);
+    const t = TEMPLATES.find(x => x.id === id);
     if (!t) return;
-    setTemplateType(t.template_type || templateType);
-    setTemplateName(t.template_name || "");
-    setSubjectLine(t.subject_line || "");
-    setPreheaderText(t.preheader_text || "");
-    setBrandName(t.brand_name || "");
-    setBrandVoice(t.brand_voice || "");
-    setLogoUrl(t.logo_url || "");
-    if (t.primary_color) setPrimaryColor(t.primary_color);
-    if (t.secondary_color) setSecondaryColor(t.secondary_color);
-    setCtaText(t.cta_text || "");
-    setCtaUrl(t.cta_url || "");
-    setUnsubscribeUrl(t.unsubscribe_url || "");
-    setCompanyAddress(t.company_address || "");
-    if (t.sections) {
-      try {
-        const parsed = JSON.parse(t.sections);
-        if (Array.isArray(parsed)) setSections(parsed);
-      } catch {}
-    }
-  }, [loadId, templates]);
-
-  const isMarketing = templateType === "marketing";
-
-  function addSection() {
-    if (sections.length >= 5) return;
-    setSections([...sections, { title: "", brief: "" }]);
+    setPrimaryColor(t.color);
+    const seed: EmailSection[] = [
+      { id: 's1', kind: 'hero',      text: 'Your headline goes here' },
+      { id: 's2', kind: 'paragraph', text: 'Opening paragraph — what the reader needs to know in the first 30 seconds.' },
+      { id: 's3', kind: 'cta',       text: '', cta: { label: 'Read more', href: 'https://…' } },
+      { id: 's4', kind: 'divider',   text: '' },
+      { id: 's5', kind: 'paragraph', text: 'Closing note or sign-off.' },
+    ];
+    setSections(seed);
   }
-  function updateSection(i: number, key: keyof Section, val: string) {
-    setSections(sections.map((s, idx) => (idx === i ? { ...s, [key]: val } : s)));
+
+  function updateSection(i: number, patch: Partial<EmailSection>) {
+    setSections(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
+  }
+  function addSection(kind: EmailSection['kind']) {
+    setSections(prev => [...prev, { id: `s-${Date.now()}`, kind, text: '', cta: kind === 'cta' ? { label: 'Click here', href: '#' } : undefined }]);
   }
   function removeSection(i: number) {
-    setSections(sections.filter((_, idx) => idx !== i));
+    setSections(prev => prev.filter((_, idx) => idx !== i));
+  }
+  function moveSection(i: number, dir: -1 | 1) {
+    setSections(prev => {
+      const next = [...prev];
+      const j = i + dir;
+      if (j < 0 || j >= next.length) return next;
+      const tmp = next[i]; next[i] = next[j]; next[j] = tmp;
+      return next;
+    });
   }
 
-  function validate(): string | null {
-    if (!templateType) return "Template type is required";
-    if (!templateName.trim()) return "Template name is required";
-    if (!brandName.trim()) return "Brand name is required";
-    if (!subjectLine.trim()) return "Subject line is required";
-    if (!contentBrief.trim()) return "Content brief is required";
-    if (isMarketing) {
-      if (!unsubscribeUrl.trim()) return "Unsubscribe URL is required for marketing emails";
-      if (!companyAddress.trim()) return "Company address is required for marketing emails (CAN-SPAM)";
+  async function optimize() {
+    if (!topic.trim() || !purpose.trim() || !audience.trim()) {
+      setError('Topic, purpose, and audience are required before optimization.');
+      return;
     }
-    return null;
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    const v = validate();
-    if (v) { setError(v); return; }
-    setSubmitting(true);
-
+    setOptimizing(true); setError(null);
     try {
-      const body = {
-        template_type: templateType,
-        template_name: templateName.trim(),
-        subject_line: subjectLine.trim(),
-        preheader_text: preheaderText.trim() || null,
-        brand_name: brandName.trim(),
-        primary_color: primaryColor,
-        secondary_color: secondaryColor,
-        brand_voice: brandVoice.trim() || null,
-        logo_url: logoUrl.trim() || null,
-        author: author || null,
-        content_brief: contentBrief.trim(),
-        sections: sections.filter((s) => s.title.trim() && s.brief.trim()),
-        cta_text: ctaText.trim() || null,
-        cta_url: ctaUrl.trim() || null,
-        unsubscribe_url: unsubscribeUrl.trim() || null,
-        company_address: companyAddress.trim() || null,
-        sendgrid_api_key: apiPushEnabled && apiPushService === "sendgrid" ? sendgridApiKey.trim() : null,
-        aweber_account: apiPushEnabled && apiPushService === "aweber" ? aweberAccount.trim() : null,
-        api_push_enabled: apiPushEnabled ? 1 : 0,
-        api_push_service: apiPushEnabled ? apiPushService : null,
-        save_as_template: saveAsTemplate,
-      };
-
-      const res = await fetch("/api/email-submissions", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+      const res = await fetch('/api/comp-studio/generate-copy', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category: 'email',
+          blockType: 'email-outline',
+          blockLabel: topic,
+          surroundingContext: JSON.stringify({ purpose, audience, current: sections }).slice(0, 6000),
+          userInstruction: `Rewrite this email for audience "${audience}" with purpose "${purpose}". Return JSON {subject, preheader, sections:[{kind, text, cta?}]} where kind ∈ hero|paragraph|cta|divider|quote. Email client-safe copy only.`,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Submit failed");
+      if (!res.ok) throw new Error(data?.error || 'Optimization failed');
+      const raw = String(data.generated_text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
+      const parsed = JSON.parse(raw);
+      if (parsed.subject) setSubject(parsed.subject);
+      if (parsed.preheader) setPreheader(parsed.preheader);
+      if (Array.isArray(parsed.sections)) {
+        setSections(parsed.sections.map((s: any, i: number) => ({
+          id: `s-${i}`,
+          kind: (['hero','paragraph','cta','divider','quote'] as const).includes(s.kind) ? s.kind : 'paragraph',
+          text: String(s.text || ''),
+          cta: s.cta ? { label: String(s.cta.label || 'Click here'), href: String(s.cta.href || '#') } : undefined,
+        })));
+      }
+      setToast('Email optimized.');
+      setTimeout(() => setToast(''), 2500);
+    } catch (e: any) {
+      setError(e?.message || 'Optimization failed');
+    } finally {
+      setOptimizing(false);
+    }
+  }
 
+  async function handleSubmit() {
+    if (!topic.trim() || !subject.trim()) { setError('Topic and subject line are required'); return; }
+    if (!templateId) { setError('Pick a template first'); return; }
+    setSubmitting(true); setError(null);
+    try {
+      // Custom uploaded HTML bypasses the baseline entirely.
+      let html: string;
+      if (customHtml && templateId === 'custom') {
+        html = customHtml;
+      } else {
+        // Use the baseline via the new /api/email/generate endpoint which
+        // calls OpenRouter for copy, fills tokens, applies luminance-derived
+        // text color, and returns the final HTML.
+        const genRes = await fetch('/api/email/generate', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            template_id: templateId,
+            topic,
+            subject,
+            preheader,
+            purpose,
+            audience,
+            author,
+            primary_color: primaryColor,
+            background_color: '#EDE8DF',
+          }),
+        });
+        const genData = await genRes.json();
+        if (!genRes.ok) throw new Error(genData?.error || 'Email generation failed');
+        html = genData.html;
+      }
+
+      const res = await fetch('/api/email-submissions', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic,
+          author,
+          template_type: templateId,
+          template_name: topic,
+          subject_line: subject,
+          preheader,
+          primary_color: primaryColor,
+          purpose,
+          audience,
+          html_content: html,
+          sections,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Submit failed');
+      setCustomHtml(html); // render the final in the preview iframe
       setDone(true);
-    } catch (err: any) {
-      setError(err?.message || "Submit failed");
+    } catch (e: any) {
+      setError(e?.message || 'Submit failed');
     } finally {
       setSubmitting(false);
     }
   }
 
+  if (!isDesktop) return <DesktopOnlyGate />;
+
   if (done) {
     return (
-      <div className="page"><div className="container">
-        <div className="form-card" style={{ maxWidth: 640, margin: "60px auto", textAlign: "center" }}>
+      <div className="page"><div style={{ maxWidth: 640, margin: '60px auto', padding: '0 24px' }}>
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 40, textAlign: 'center', boxShadow: 'var(--shadow-card)' }}>
           <div className="confirm-icon">✓</div>
           <h1 className="confirm-title">Email brief received.</h1>
-          <p className="confirm-sub">Your email is being assembled. You'll see it on your dashboard once it's ready.</p>
-          <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap", marginTop: "1.5rem" }}>
-            <button className="btn-primary" onClick={() => navigate?.("/dashboard")}>View Dashboard</button>
-            <button className="btn-secondary" onClick={() => window.location.reload()}>Submit Another</button>
+          <p className="confirm-sub">Your email is being rendered and hardened for every major client.</p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: 16 }}>
+            <button className="btn-primary" onClick={() => navigate?.('/dashboard')}>View Dashboard</button>
+            <button className="btn-secondary" onClick={() => window.location.reload()}>Build Another</button>
           </div>
         </div>
       </div></div>
     );
   }
 
-  // ── UI helpers
-  const sectionTitleStyle: React.CSSProperties = {
-    fontFamily: "Georgia, serif", fontSize: 16, color: "var(--amber)",
-    marginTop: 32, marginBottom: 12, paddingBottom: 6,
-    borderBottom: "0.5px solid var(--border)",
-  };
+  async function handleCustomUpload(file: File | null) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.html') && file.type !== 'text/html') {
+      setUploadError('Only .html files are accepted.');
+      return;
+    }
+    setUploadError(null);
+    try {
+      const raw = await file.text();
+      const cleaned = stripAndClean(raw);
+      // Session-only — the custom template is not saved to the admin library
+      // unless the user explicitly saves it later.
+      setCustomHtml(cleaned);
+      setCustomFilename(file.name);
+      // Seed a minimal section list so the brief editor has something to edit.
+      setSections([
+        { id: 's1', kind: 'paragraph', text: 'Custom template loaded. Replace this copy with your own.' },
+      ]);
+      setTemplateId('custom');
+    } catch (e: any) {
+      setUploadError(e?.message || 'Upload failed');
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _customFilenameUnused = customFilename;
+  if (!templateId) {
+    return (
+      <div className="page"><div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
+        <h1 className="page-title">Email Builder</h1>
+        <p className="page-sub">Pick a template to start. You'll get a three-column editor with a live preview.</p>
+        {uploadError && (
+          <div style={{ marginTop: 16, background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, padding: '10px 14px', color: 'var(--error)', fontSize: 13 }}>
+            {uploadError}
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginTop: 24 }}>
+          {TEMPLATES.map(t => (
+            <button key={t.id} type="button" onClick={() => pickTemplate(t.id)}
+              style={{
+                textAlign: 'left', padding: 14, borderRadius: 12,
+                background: 'var(--card)', border: '1px solid var(--border)',
+                cursor: 'pointer', boxShadow: 'var(--shadow-card)',
+              }}>
+              <TemplateThumb color={t.color} />
+              <div style={{ marginTop: 10, fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 600, color: 'var(--text)' }}>{t.name}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-light)', marginTop: 4 }}>{t.desc}</div>
+            </button>
+          ))}
+
+          {/* Upload Your Own — dashed-border card at the end of the grid */}
+          <label
+            style={{
+              display: 'block',
+              textAlign: 'left', padding: 14, borderRadius: 12,
+              background: 'var(--card-alt)',
+              border: '2px dashed var(--text-light)',
+              cursor: 'pointer',
+              boxShadow: 'var(--shadow-card)',
+            }}>
+            <UploadThumb />
+            <div style={{ marginTop: 10, fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 600, color: 'var(--text)' }}>
+              Upload Your Own
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-light)', marginTop: 4 }}>
+              Use your own template, we'll analyze and match the layout exactly.
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 8 }}>
+              .html upload · session only
+            </div>
+            <input
+              type="file"
+              accept=".html,text/html"
+              style={{ display: 'none' }}
+              onChange={(e) => handleCustomUpload(e.target.files?.[0] || null)}
+            />
+          </label>
+        </div>
+      </div></div>
+    );
+  }
+
+  // Custom uploaded HTML takes precedence over the generated preview.
+  const html = customHtml ?? renderEmailHtml({ subject, preheader, primaryColor, sections });
 
   return (
-    <div className="page"><div className="container">
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: "3rem 0" }}>
-        <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: "1.625rem", fontWeight: 700, color: "var(--cream)", marginBottom: "1.5rem" }}>
-          Email Builder.
-        </h1>
-        <p style={{ fontSize: 13, color: "var(--text-light)", marginBottom: "2rem" }}>
-          Build a bulletproof, table-based HTML email with inline CSS, plain-text fallback, and (optionally) one-click push to your ESP.
-        </p>
+    <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr 280px', height: 'calc(100vh - 48px)', background: 'var(--bg)' }}>
+      <aside style={{ borderRight: '1px solid var(--border-light)', padding: 16, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', background: 'var(--card)' }}>
+        <div>
+          <div className="eyebrow">✦ EMAIL BUILDER</div>
+          <button type="button" onClick={() => setTemplateId(null)} className="btn-ghost" style={{ fontSize: 11, marginTop: 4, padding: '2px 6px' }}>
+            ← Change template
+          </button>
+        </div>
 
         {error && (
-          <div style={{ background: "#1f0a0a", border: "0.5px solid #5a1a1a", borderRadius: 5, padding: "10px 14px", fontSize: 13, color: "var(--error)", marginBottom: 16 }}>
+          <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, padding: '8px 10px', fontSize: 12, color: 'var(--error)' }}>
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
-          {/* Template Setup */}
-          <div style={sectionTitleStyle}>Template Setup</div>
+        <div>
+          <label className="form-label">Topic <span className="required">✦</span></label>
+          <input className="form-input" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Email subject matter" />
+        </div>
+        <div>
+          <label className="form-label">What is this for?</label>
+          <textarea className="form-textarea" rows={2} placeholder="Purpose — e.g. weekly digest, product launch"
+            value={purpose} onChange={(e) => setPurpose(e.target.value)} />
+        </div>
+        <div>
+          <label className="form-label">Who is the audience?</label>
+          <textarea className="form-textarea" rows={2} placeholder="Describe the subscriber list"
+            value={audience} onChange={(e) => setAudience(e.target.value)} />
+        </div>
+        <div>
+          <label className="form-label">Author style</label>
+          <select className="form-select" value={author} onChange={(e) => setAuthor(e.target.value)}>
+            {authors.length === 0 && <option value="">No authors available</option>}
+            {authors.map(a => <option key={a.slug} value={a.slug}>{a.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="form-label">Subject line <span className="required">✦</span></label>
+          <input className="form-input" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Inbox headline" />
+        </div>
+        <div>
+          <label className="form-label">Preheader</label>
+          <input className="form-input" value={preheader} onChange={(e) => setPreheader(e.target.value)} placeholder="Preview text shown after subject" />
+        </div>
+        <div>
+          <label className="form-label">Primary color</label>
+          <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} style={{ width: '100%', height: 32, border: '1px solid var(--border)', borderRadius: 6 }} />
+        </div>
 
-          <div className="form-group">
-            <label className="form-label">Template Type *</label>
-            <select className="form-input" value={templateType} onChange={(e) => setTemplateType(e.target.value)} required>
-              {TEMPLATE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
+        <button className="btn-accent" onClick={optimize} disabled={optimizing}>
+          {optimizing ? 'Optimizing…' : '✦ AI Optimize Email'}
+        </button>
+        <button className="btn-primary" onClick={handleSubmit} disabled={submitting}>
+          {submitting ? 'Submitting…' : 'Build Email →'}
+        </button>
+        <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 6 }}>
+          Every AI pass routes through the server-side prompt wrapper — no raw user text hits the model.
+        </div>
+      </aside>
+
+      <div style={{ display: 'flex', flexDirection: 'column', background: 'var(--card-alt)' }}>
+        <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border-light)', fontSize: 12, color: 'var(--text-light)' }}>
+          Live preview
+        </div>
+        <div style={{ flex: 1, padding: 20, overflow: 'auto', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ width: '100%', maxWidth: 720, background: '#fff', border: '1px solid var(--border)', borderRadius: 8, boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}>
+            <iframe
+              title="Email preview"
+              srcDoc={html}
+              style={{ width: '100%', height: '100%', minHeight: 720, border: 'none' }}
+              sandbox="allow-same-origin"
+            />
           </div>
+        </div>
+      </div>
 
-          <div className="form-group">
-            <label className="form-label">Template Name *</label>
-            <input className="form-input" type="text" placeholder="Save this template as..."
-              value={templateName} onChange={(e) => setTemplateName(e.target.value)} required />
-          </div>
-
-          <label style={{ display: "flex", gap: 8, alignItems: "center", margin: "0 0 12px 0", fontSize: 13, color: "var(--text)" }}>
-            <input type="checkbox" checked={saveAsTemplate} onChange={(e) => setSaveAsTemplate(e.target.checked)} />
-            Save as reusable template
-          </label>
-
-          {templates.length > 0 && (
-            <div className="form-group">
-              <label className="form-label">Load saved template (optional)</label>
-              <select className="form-input" value={loadId} onChange={(e) => setLoadId(e.target.value)}>
-                <option value="">— none —</option>
-                {templates.map((t) => <option key={t.id} value={t.id}>{t.template_name} ({t.template_type})</option>)}
-              </select>
-            </div>
-          )}
-
-          {/* Identity */}
-          <div style={sectionTitleStyle}>Identity</div>
-
-          <div className="form-group">
-            <label className="form-label">Brand Name *</label>
-            <input className="form-input" type="text" value={brandName} onChange={(e) => setBrandName(e.target.value)} required />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Brand Voice / Tagline</label>
-            <input className="form-input" type="text" placeholder="One line describing your brand"
-              value={brandVoice} onChange={(e) => setBrandVoice(e.target.value)} />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Logo URL</label>
-            <input className="form-input" type="text" placeholder="https://..."
-              value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} />
-            {assets.length > 0 && (
-              <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-light)" }}>
-                Or pick an uploaded asset:{" "}
-                {assets.map((a) => (
-                  <button key={a.id} type="button"
-                    onClick={() => setLogoUrl(a.url)}
-                    style={{ marginRight: 6, padding: "2px 8px", borderRadius: 4, fontSize: 11,
-                      border: "0.5px solid var(--border)", background: "transparent", color: "var(--amber)", cursor: "pointer" }}>
-                    {a.filename}
-                  </button>
-                ))}
+      <aside style={{ borderLeft: '1px solid var(--border-light)', padding: 14, overflowY: 'auto', background: 'var(--card)' }}>
+        <div className="eyebrow" style={{ marginBottom: 8 }}>SECTIONS</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {sections.map((s, i) => (
+            <div key={s.id} style={{ padding: 8, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
+                <span>{s.kind}</span>
+                <div style={{ flex: 1 }} />
+                <button className="db-btn" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => moveSection(i, -1)} disabled={i === 0}>↑</button>
+                <button className="db-btn" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => moveSection(i, 1)} disabled={i === sections.length - 1}>↓</button>
+                <button className="btn-danger-sm" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => removeSection(i)}>×</button>
               </div>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Author Voice</label>
-            <select className="form-input" value={author} onChange={(e) => setAuthor(e.target.value)}>
-              {authors.length === 0
-                ? <option value="">No author profiles available</option>
-                : authors.map((a) => <option key={a.slug} value={a.slug}>{a.name}</option>)}
-            </select>
-          </div>
-
-          {/* Colors */}
-          <div style={sectionTitleStyle}>Colors</div>
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <ColorField label="Primary" sub="header, CTA, accents" value={primaryColor} onChange={setPrimaryColor} />
-            <ColorField label="Secondary" sub="body, footer, dividers" value={secondaryColor} onChange={setSecondaryColor} />
-          </div>
-          <p style={{ fontSize: 12, color: "var(--text-light)", marginTop: 8 }}>
-            The agent will derive complementary sub-colors automatically.
-          </p>
-
-          {/* Content */}
-          <div style={sectionTitleStyle}>Content</div>
-
-          <div className="form-group">
-            <label className="form-label">Subject Line *</label>
-            <input className="form-input" type="text" value={subjectLine} onChange={(e) => setSubjectLine(e.target.value)} required maxLength={120} />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Preheader Text</label>
-            <input className="form-input" type="text"
-              placeholder="Preview text shown in inbox before opening. Agent generates if blank."
-              value={preheaderText} onChange={(e) => setPreheaderText(e.target.value)} maxLength={150} />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Content Brief *</label>
-            <textarea className="form-input" rows={5}
-              placeholder="What is this email about? Be as brief or detailed as you like."
-              value={contentBrief} onChange={(e) => setContentBrief(e.target.value)} required />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Sections (up to 5)</label>
-            {sections.map((s, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 8 }}>
-                <input className="form-input" style={{ flex: "1 1 200px", minWidth: 0 }}
-                  placeholder="Section title"
-                  value={s.title} onChange={(e) => updateSection(i, "title", e.target.value)} />
-                <input className="form-input" style={{ flex: "2 1 300px", minWidth: 0 }}
-                  placeholder="Section brief"
-                  value={s.brief} onChange={(e) => updateSection(i, "brief", e.target.value)} />
-                <button type="button" onClick={() => removeSection(i)}
-                  style={{ flexShrink: 0, padding: "8px 12px", border: "0.5px solid #5a1a1a", color: "var(--error)", background: "transparent", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>
-                  Remove
-                </button>
-              </div>
-            ))}
-            {sections.length < 5 && (
-              <button type="button" onClick={addSection}
-                style={{ padding: "6px 12px", border: "0.5px solid var(--border)", color: "var(--amber)", background: "transparent", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>
-                + Add Section
-              </button>
-            )}
-          </div>
-
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <div className="form-group" style={{ flex: "1 1 200px", minWidth: 0 }}>
-              <label className="form-label">CTA Button Text</label>
-              <input className="form-input" type="text" value={ctaText} onChange={(e) => setCtaText(e.target.value)} maxLength={40} />
-            </div>
-            <div className="form-group" style={{ flex: "2 1 300px", minWidth: 0 }}>
-              <label className="form-label">CTA URL</label>
-              <input className="form-input" type="text" value={ctaUrl} onChange={(e) => setCtaUrl(e.target.value)} placeholder="https://..." />
-            </div>
-          </div>
-
-          {/* Compliance */}
-          {isMarketing && (
-            <>
-              <div style={sectionTitleStyle}>Compliance (CAN-SPAM)</div>
-              <div className="form-group">
-                <label className="form-label">Unsubscribe URL *</label>
-                <input className="form-input" type="text" value={unsubscribeUrl} onChange={(e) => setUnsubscribeUrl(e.target.value)} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Company Address *</label>
-                <input className="form-input" type="text" value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} required />
-              </div>
-            </>
-          )}
-
-          {/* API push */}
-          <div style={sectionTitleStyle}>
-            <button type="button" onClick={() => setPushOpen((v) => !v)}
-              style={{ all: "unset", cursor: "pointer", color: "var(--amber)", fontFamily: "Georgia, serif", fontSize: 16 }}>
-              API Push (optional) {pushOpen ? "▾" : "▸"}
-            </button>
-          </div>
-          {pushOpen && (
-            <>
-              <label style={{ display: "flex", gap: 8, alignItems: "center", margin: "0 0 12px 0", fontSize: 13, color: "var(--text)" }}>
-                <input type="checkbox" checked={apiPushEnabled} onChange={(e) => setApiPushEnabled(e.target.checked)} />
-                Push to email service after building
-              </label>
-
-              {apiPushEnabled && (
+              {s.kind === 'divider' ? (
+                <div style={{ fontSize: 11, color: 'var(--text-light)', fontStyle: 'italic' }}>Horizontal divider</div>
+              ) : s.kind === 'cta' ? (
                 <>
-                  <div className="form-group">
-                    <label className="form-label">Service</label>
-                    <div style={{ display: "flex", gap: 16 }}>
-                      <label style={{ display: "flex", gap: 6, alignItems: "center", color: "var(--text)", fontSize: 13 }}>
-                        <input type="radio" name="apiSvc" value="sendgrid" checked={apiPushService === "sendgrid"} onChange={() => setApiPushService("sendgrid")} />
-                        SendGrid
-                      </label>
-                      <label style={{ display: "flex", gap: 6, alignItems: "center", color: "var(--text)", fontSize: 13 }}>
-                        <input type="radio" name="apiSvc" value="aweber" checked={apiPushService === "aweber"} onChange={() => setApiPushService("aweber")} />
-                        AWeber
-                      </label>
-                    </div>
-                  </div>
-
-                  {apiPushService === "sendgrid" && (
-                    <>
-                      <div className="form-group">
-                        <label className="form-label">SendGrid API Key</label>
-                        <input className="form-input" type="password" value={sendgridApiKey} onChange={(e) => setSendgridApiKey(e.target.value)} />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">SendGrid List ID</label>
-                        <input className="form-input" type="text" value={sendgridListId} onChange={(e) => setSendgridListId(e.target.value)} />
-                      </div>
-                    </>
-                  )}
-
-                  {apiPushService === "aweber" && (
-                    <div className="form-group">
-                      <label className="form-label">AWeber Account ID</label>
-                      <input className="form-input" type="text" value={aweberAccount} onChange={(e) => setAweberAccount(e.target.value)} />
-                    </div>
-                  )}
+                  <input className="form-input" style={{ fontSize: 12, padding: 6, marginBottom: 4 }}
+                    placeholder="Button label"
+                    value={s.cta?.label || ''}
+                    onChange={(e) => updateSection(i, { cta: { ...(s.cta || { href: '#' }), label: e.target.value } })} />
+                  <input className="form-input" style={{ fontSize: 12, padding: 6 }}
+                    placeholder="https://…"
+                    value={s.cta?.href || ''}
+                    onChange={(e) => updateSection(i, { cta: { ...(s.cta || { label: 'Click' }), href: e.target.value } })} />
                 </>
+              ) : (
+                <textarea className="form-textarea" rows={2} value={s.text}
+                  onChange={(e) => updateSection(i, { text: e.target.value })}
+                  style={{ fontSize: 12, padding: 6 }} />
               )}
-            </>
-          )}
+            </div>
+          ))}
+        </div>
 
-          <button type="submit" className="btn-primary" disabled={submitting}
-            style={{ width: "100%", marginTop: 24 }}>
-            {submitting ? "Building..." : "Build Email"}
-          </button>
-        </form>
-      </div>
-    </div></div>
-  );
-}
+        <div className="eyebrow" style={{ marginTop: 14, marginBottom: 8 }}>ADD SECTION</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {(['hero','paragraph','cta','divider','quote'] as const).map(k => (
+            <button key={k} type="button" className="db-btn"
+              onClick={() => addSection(k)}
+              style={{ justifyContent: 'flex-start', fontSize: 12 }}>
+              + {k}
+            </button>
+          ))}
+        </div>
 
-function ColorField({ label, sub, value, onChange }: { label: string; sub: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-      <label className="form-label" style={{ display: "block" }}>{label}</label>
-      <div style={{ fontSize: 11, color: "var(--text-light)", marginBottom: 6 }}>{sub}</div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <input type="color" value={normalizeHex(value)} onChange={(e) => onChange(e.target.value)}
-          style={{ width: 44, height: 36, padding: 0, border: "0.5px solid var(--border)", borderRadius: 4, background: "transparent", cursor: "pointer" }} />
-        <input className="form-input" type="text" value={value} onChange={(e) => onChange(e.target.value)}
-          style={{ flex: 1, fontFamily: "monospace", textTransform: "lowercase", letterSpacing: ".05em" }}
-          placeholder="#000000" maxLength={9} />
-      </div>
+        {toast && (
+          <div style={{ marginTop: 14, fontSize: 12, color: 'var(--success)', fontFamily: 'sans-serif' }}>{toast}</div>
+        )}
+      </aside>
     </div>
   );
-}
-
-function normalizeHex(v: string): string {
-  if (!v) return "#000000";
-  if (/^#[0-9a-fA-F]{6}$/.test(v)) return v;
-  if (/^#[0-9a-fA-F]{3}$/.test(v)) {
-    const c = v.slice(1);
-    return "#" + c.split("").map((x) => x + x).join("");
-  }
-  return "#000000";
 }

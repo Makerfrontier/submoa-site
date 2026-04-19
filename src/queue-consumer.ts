@@ -41,6 +41,7 @@ import { packageAudio } from "./packager-update";
 import { processImages, injectImagesIntoArticle, generateImageCopyBuffers } from "./image-processor";
 import { assembleEmail, type EmailRecord } from "./email-assembler";
 import { assemblePresentation, type PresentationRecord } from "./presentation-assembler";
+import { renderPlanHtml } from "./planner-render";
 import type { GenerationJob } from "./queue-producer";
 import puppeteer from "@cloudflare/puppeteer";
 
@@ -60,7 +61,8 @@ interface Env {
 
 type QueueMessage =
   | GenerationJob
-  | { type: 'itinerary_pdf'; itinerary_id: string; account_id: string; queued_at: number };
+  | { type: 'itinerary_pdf'; itinerary_id: string; account_id: string; queued_at: number }
+  | { type: 'itinerary_plan'; itinerary_id: string; account_id: string; queued_at: number };
 
 // ---------------------------------------------------------------------------
 // Queue consumer export
@@ -73,6 +75,8 @@ export default {
       try {
         if (body?.type === 'itinerary_pdf') {
           await processItineraryPdf(env, body.itinerary_id);
+        } else if (body?.type === 'itinerary_plan') {
+          await processItineraryPlan(env, body.itinerary_id);
         } else {
           await processGenerationJob(env, body as GenerationJob);
         }
@@ -199,6 +203,118 @@ function esc(s: any): string {
 }
 
 // ---------------------------------------------------------------------------
+// Itinerary plan generation via OpenRouter (moved off the request path so we
+// don't race Cloudflare Pages' 30s response timeout).
+// ---------------------------------------------------------------------------
+async function processItineraryPlan(env: Env, itineraryId: string): Promise<void> {
+  console.log(`[itinerary-plan] start ${itineraryId}`);
+
+  const row: any = await env.DB.prepare(
+    `SELECT id, situation, clarifications, recap, additions
+     FROM itinerary_submissions WHERE id = ?`
+  ).bind(itineraryId).first();
+
+  if (!row) {
+    console.error(`[itinerary-plan] missing itinerary ${itineraryId}`);
+    return;
+  }
+
+  const situation: string = row.situation || '';
+  const answers: Record<string, unknown> = (() => {
+    try { return row.clarifications ? JSON.parse(row.clarifications) : {}; } catch { return {}; }
+  })();
+  const recap: string = row.recap || '';
+  const additions: string[] = (() => {
+    try { const p = row.additions ? JSON.parse(row.additions) : []; return Array.isArray(p) ? p : []; } catch { return []; }
+  })();
+
+  const slotRow: any = await env.DB.prepare(
+    'SELECT model_string FROM llm_config WHERE slot = 1'
+  ).first();
+  const model = slotRow?.model_string || 'anthropic/claude-sonnet-4-5';
+
+  const systemPrompt = [
+    'You are an expert planning assistant. Create a comprehensive actionable plan with real vendor recommendations, accurate phone numbers, website URLs, cost estimates, and practical considerations a person might not think of.',
+    'Every option must be a real business or service with real contact information.',
+    'Return ONLY valid JSON with no preamble:',
+    '{"plan_title":"Title","summary":"2-3 sentence overview","tasks":[{"task_id":"t1","task_name":"Name","task_description":"Brief description","tags":["tag1"],"options":[{"rank":1,"name":"Vendor name","tagline":"One line","cost_estimate":"Range","phone":"Number or null","website":"URL or null","pros":["Pro 1","Pro 2"],"considerations":["Note 1"],"best_for":"Who this suits"}]}],"timeline":"Overall timeline","total_cost_estimate":"Range","next_steps":["Step 1","Step 2","Step 3"]}',
+    'Include 3 real options per task.',
+  ].join('\n');
+
+  const userPrompt = [
+    `=== PLANNING REQUEST ===`,
+    situation,
+    ``,
+    `=== USER ANSWERS ===`,
+    ...Object.entries(answers).map(([k, v]) => `${k}: ${String(v)}`),
+    ``,
+    `=== CONFIRMED RECAP ===`,
+    recap,
+    additions.length ? `\n=== ADDITIONAL DETAILS ===\n${additions.join('\n')}` : '',
+    ``,
+    'Produce the plan now.',
+  ].join('\n');
+
+  let plan: any;
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
+        'HTTP-Referer': 'https://www.submoacontent.com',
+        'X-Title': 'SubMoa Planner',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 6000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error(`Model HTTP ${res.status}: ${t.slice(0, 400)}`);
+    }
+    const data: any = await res.json();
+    let content = data?.choices?.[0]?.message?.content ?? '{}';
+    content = content.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
+    plan = JSON.parse(content);
+  } catch (e: any) {
+    const errMsg = (e?.message ?? String(e)).slice(0, 500);
+    console.error(`[itinerary-plan] generation failed for ${itineraryId}:`, errMsg);
+    await env.DB.prepare(
+      `UPDATE itinerary_submissions
+         SET status = 'generation_failed', error_detail = ?, updated_at = ?
+       WHERE id = ?`
+    ).bind(errMsg, Math.floor(Date.now() / 1000), itineraryId).run();
+    return;
+  }
+
+  const plan_html = renderPlanHtml(plan);
+
+  await env.DB.prepare(
+    `UPDATE itinerary_submissions
+       SET plan_json = ?,
+           plan_html = ?,
+           title = ?,
+           status = 'plan_ready',
+           updated_at = ?
+     WHERE id = ?`
+  ).bind(
+    JSON.stringify(plan),
+    plan_html,
+    plan?.plan_title || 'Untitled plan',
+    Math.floor(Date.now() / 1000),
+    itineraryId
+  ).run();
+
+  console.log(`[itinerary-plan] done ${itineraryId}`);
+}
+
+// ---------------------------------------------------------------------------
 // Core generation pipeline
 // ---------------------------------------------------------------------------
 async function processGenerationJob(
@@ -254,9 +370,8 @@ async function processGenerationJob(
       revision_notes: string | null;
       content_rating: number | null;
       generate_featured_image: number | null;
-      image_mood: string | null;
-      image_perspective: string | null;
-      image_setting: string | null;
+      image_prompt_direction: string | null;
+      tts_voice_id: string | null;
     }>();
 
   if (!submission) {
@@ -445,7 +560,9 @@ async function processGenerationJob(
   });
 
 
-  const articleContent = enforcement.content;
+  // Sanitize em-dashes out of the final article before it ever touches the DB.
+  const { sanitizeContent: _sanitizeArticle } = await import('./content-utils');
+  const articleContent = _sanitizeArticle(enforcement.content);
 
   if (!enforcement.was_clean) {
     console.log(
@@ -477,6 +594,14 @@ async function processGenerationJob(
   console.log(
     `Generation complete for submission ${submission_id} — ${wordCount} words`
   );
+
+  // Notification — article-complete
+  try {
+    const { createNotification: _cn } = await import('./notifications-utils');
+    const acct = (submission as any).account_id || 'makerfrontier';
+    await _cn(env as any, acct, 'article-complete', 'Article ready',
+      `${submission.topic} has been generated and graded.`, '/dashboard');
+  } catch {}
 
   // -------------------------------------------------------------------------
   // Step 8b — Image SEO pipeline (before HTML write so images get injected)
@@ -566,10 +691,11 @@ async function processGenerationJob(
       const promptModel = slot1?.model_string ?? 'anthropic/claude-sonnet-4-5';
 
       const imagePromptSystem =
-        "You are a creative director briefing a graphic designer. Write a single detailed image generation prompt for a 16:9 featured image in graphic design style. The image must look like professional editorial graphic design work — not photography, not illustration, not AI art. Think: magazine cover design, editorial layout, bold typographic composition, intentional negative space, strong color palette, print-quality visual hierarchy. The image should never contain readable text, placeholder text, human faces, or people. It should use the mood, perspective, and setting values provided as directional inputs within the graphic design aesthetic. Return only the prompt text with no preamble, no explanation, no quotes.";
+        "You are a creative director briefing a graphic designer. Write a single detailed image generation prompt for a 16:9 featured image in graphic design style. The image must look like professional editorial graphic design work — not photography, not illustration, not AI art. Think: magazine cover design, editorial layout, bold typographic composition, intentional negative space, strong color palette, print-quality visual hierarchy. The image should never contain readable text, placeholder text, human faces, or people. Honor the user's freeform style direction while staying within the graphic design aesthetic. Return only the prompt text with no preamble, no explanation, no quotes.";
 
+      const userDirection = (submission.image_prompt_direction ?? '').trim();
       const imagePromptUser =
-        `Article title: ${submission.topic}. Target keywords: ${submission.target_keywords ?? 'none'}. Article opening: ${(articleContent || '').slice(0, 500)}. Mood: ${submission.image_mood ?? 'natural-bright'}. Perspective: ${submission.image_perspective ?? 'eye-level'}. Setting: ${submission.image_setting ?? 'outdoors'}. Write the image generation prompt now.`;
+        `Article title: ${submission.topic}. Target keywords: ${submission.target_keywords ?? 'none'}. Article opening: ${(articleContent || '').slice(0, 500)}.${userDirection ? ` User style direction: ${userDirection}.` : ''} Write the image generation prompt now.`;
 
       const promptRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -954,7 +1080,10 @@ async function callOpenRouter(
   systemPrompt: string | null
 ): Promise<string> {
   const messages: Array<{ role: string; content: string }> = [];
-  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+  // Inject em-dash guardrail into every LLM call that flows through this helper.
+  const guard = ' Never use em-dashes (—) in any output. Use a comma, a period, or restructure the sentence instead.';
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt + guard });
+  else messages.push({ role: 'system', content: guard.trim() });
   messages.push({ role: 'user', content: prompt });
 
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {

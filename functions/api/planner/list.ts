@@ -12,7 +12,9 @@ export async function onRequest(context: any) {
 
   const account_id = user.account_id || 'makerfrontier';
   const { results } = await env.submoacontent_db.prepare(
-    `SELECT id, title, status, pdf_r2_key, created_at, updated_at
+    `SELECT id, title, status, pdf_r2_key,
+            (plan_json IS NOT NULL) AS has_plan,
+            created_at, updated_at
      FROM itinerary_submissions
      WHERE account_id = ?
      ORDER BY created_at DESC

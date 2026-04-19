@@ -33,26 +33,46 @@ export async function onRequestPost(context: any) {
     const structuredNotesRaw = (formData.get("structured_notes") || "").toString();
 
     if (!topic) return json({ error: "topic is required" }, 400);
-    if (!keyDetails) return json({ error: "key_details is required" }, 400);
+    // key_details is derived from the purpose field in the new form — the
+    // old mandatory guard produced bogus 400s when the field was empty.
+
+    // Visual tone — used when no .pptx template is uploaded. The consumer
+    // applies these via CSS custom properties + luminance-derived text colors.
+    const primaryColor = (formData.get("primary_color") || "#3D5A3E").toString();
+    const accentColor = (formData.get("accent_color") || "#B8872E").toString();
+    const backgroundColor = (formData.get("background_color") || "#FAF7F2").toString();
+    const styleDirection = (formData.get("style_direction") || "").toString();
+    // Part 4 additions — optional emotional context + brand brief R2 key.
+    const emotionalContext = (formData.get("emotional_context") || "").toString().trim() || null;
+    const brandBriefR2Key = (formData.get("brand_brief_r2_key") || "").toString().trim() || null;
 
     const template = formData.get("template");
-    if (!(template instanceof File)) return json({ error: "template (.pptx) file is required" }, 400);
-    if (!template.name.toLowerCase().endsWith(".pptx")) {
-      return json({ error: "Template must be a .pptx file" }, 400);
-    }
-    if (template.size > MAX_TEMPLATE_SIZE) {
-      return json({ error: "Template exceeds 25 MB limit" }, 400);
-    }
-
+    // The user may have already uploaded the template via the Upload Your Own
+    // card — in that case the analyze-template endpoint stashed it in R2 and
+    // returned a key. Prefer that key when present so we don't duplicate.
+    const customKey = (formData.get("custom_template_r2_key") || "").toString().trim();
+    let templateKey: string | null = customKey || null;
+    let templateFilename: string | null = customKey ? customKey.split('/').pop() || null : null;
+    const hasTemplate = template instanceof File && template.size > 0;
     const submissionId = generateId();
     const presId = generateId();
     const now = Date.now();
 
-    // 1. Upload template
-    const templateKey = `projects/${submissionId}/presentation/template.pptx`;
-    await context.env.SUBMOA_IMAGES.put(templateKey, await template.arrayBuffer(), {
-      httpMetadata: { contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation" },
-    });
+    if (hasTemplate) {
+      const f = template as File;
+      if (!f.name.toLowerCase().endsWith(".pptx")) {
+        return json({ error: "Template must be a .pptx file" }, 400);
+      }
+      if (f.size > MAX_TEMPLATE_SIZE) {
+        return json({ error: "Template exceeds 25 MB limit" }, 400);
+      }
+      // 1. Upload template
+      templateKey = `projects/${submissionId}/presentation/template.pptx`;
+      templateFilename = f.name;
+      await context.env.SUBMOA_IMAGES.put(templateKey, await f.arrayBuffer(), {
+        httpMetadata: { contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation" },
+      });
+    }
 
     // 2. Upload images (if requested)
     const imageKeys: string[] = [];
@@ -97,25 +117,45 @@ export async function onRequestPost(context: any) {
     ).run();
 
     // 4. Presentation row
+    // Pack visual tone (used by the consumer when no template file was uploaded).
+    const visualTone = {
+      primary_color: primaryColor,
+      accent_color: accentColor,
+      background_color: backgroundColor,
+      style_direction: styleDirection,
+    };
+    const structuredNotesForStorage = (() => {
+      try {
+        const parsed = structuredNotesRaw ? JSON.parse(structuredNotesRaw) : null;
+        // Merge visual tone into the structured_notes blob so the consumer
+        // sees it without schema changes.
+        return JSON.stringify({ slides: parsed, visual_tone: visualTone });
+      } catch {
+        return JSON.stringify({ notes: structuredNotesRaw, visual_tone: visualTone });
+      }
+    })();
+
     await context.env.submoacontent_db.prepare(
       `INSERT INTO presentation_submissions
         (id, submission_id, template_r2_key, template_filename, slide_count_target,
          key_details, structured_notes, include_charts, include_images, image_r2_keys,
-         presentation_status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         presentation_status, created_at, emotional_context, brand_brief_r2_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       presId,
       submissionId,
-      templateKey,
-      template.name,
+      templateKey || null,
+      templateFilename || null,
       slideCountTarget,
       keyDetails,
-      structuredNotesRaw || null,
+      structuredNotesForStorage,
       includeCharts ? 1 : 0,
       includeImages ? 1 : 0,
       imageKeys.length ? JSON.stringify(imageKeys) : null,
       "queued",
-      now
+      now,
+      emotionalContext,
+      brandBriefR2Key,
     ).run();
 
     // 5. Project folder + queue
@@ -140,7 +180,7 @@ export async function onRequestPost(context: any) {
       postPresentationWake(context.env, {
         id: submissionId,
         topic,
-        templateFilename: template.name,
+        templateFilename: templateFilename || '(no template — visual tone driven)',
         slideCountTarget,
         includeCharts,
         includeImages,

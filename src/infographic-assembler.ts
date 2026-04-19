@@ -161,26 +161,81 @@ export function buildSourcesText(
 
 // ── Full assembler function (replace in infographic-assembler.ts) ─────────────
 
+// Per-stage failure recorder. Any caller that throws flips the row to
+// generation_failed and stamps an error message + timestamp so the UI can
+// surface it and the sweeper can requeue.
+async function recordFailure(
+  env: Env,
+  submissionId: string,
+  infraRecordId: string,
+  stage: string,
+  err: unknown,
+): Promise<void> {
+  const msg = err instanceof Error ? err.message : String(err);
+  const full = `[${stage}] ${msg}`.slice(0, 800);
+  console.error(`[infographic-assembler] failure at ${stage} for ${submissionId}:`, err);
+  try {
+    await env.submoacontent_db.prepare(
+      `UPDATE infographic_submissions
+         SET infographic_status = 'generation_failed',
+             error_message = ?,
+             updated_at = ?
+       WHERE id = ?`
+    ).bind(full, Date.now(), infraRecordId).run();
+  } catch (writeErr) {
+    console.error('[infographic-assembler] failed to persist failure state:', writeErr);
+  }
+  try {
+    await env.submoacontent_db.prepare(
+      `UPDATE submissions SET status = 'generation_failed', updated_at = ? WHERE id = ?`
+    ).bind(Date.now(), submissionId).run();
+  } catch {}
+}
+
 export async function assembleInfographic(
   env: Env,
   submission: any,
   infraRecord: any
 ): Promise<void> {
+  const submissionId = submission?.id;
+  const infraId = infraRecord?.id;
+  if (!submissionId || !infraId) {
+    console.error('[infographic-assembler] missing submission or infographic record id — aborting');
+    return;
+  }
+
+  // Stage 0 — mark generating with a fresh timestamp so the timeout sweeper
+  // has a clean reference point even if the row was left stale from before.
   try {
     await env.submoacontent_db.prepare(
-      `UPDATE infographic_submissions SET infographic_status = 'rendering' WHERE id = ?`
-    ).bind(infraRecord.id).run();
+      `UPDATE infographic_submissions
+         SET infographic_status = 'generating',
+             error_message = NULL,
+             updated_at = ?
+       WHERE id = ?`
+    ).bind(Date.now(), infraId).run();
+  } catch (e) {
+    console.error('[infographic-assembler] stage-0 status write failed:', e);
+  }
 
-    // Fetch skill + style
-    const skill = await env.submoacontent_db.prepare(
+  // Stage 1 — fetch skill + style.
+  let skill: { content: string } | null = null;
+  let style: any = null;
+  try {
+    skill = await env.submoacontent_db.prepare(
       `SELECT content FROM agent_skills WHERE name = 'writing-skill' AND active = 1 LIMIT 1`
     ).first<{ content: string }>();
-
-    const style = await env.submoacontent_db.prepare(
+    style = await env.submoacontent_db.prepare(
       `SELECT * FROM infographic_styles WHERE id = ?`
     ).bind(infraRecord.design_style).first();
+  } catch (e) {
+    await recordFailure(env, submissionId, infraId, 'fetch-skill-or-style', e);
+    return;
+  }
 
-    // Build prompt
+  // Stage 2 — call Claude.
+  let jsonText: string | undefined;
+  try {
     const prompt = `You are the Infographic Assembly Agent.
 
 ASSEMBLY PROFILE FROM SKILL DOCUMENT:
@@ -213,6 +268,8 @@ Return ONLY valid JSON. No markdown fences. No preamble. Schema:
   "sources": ["array of source URLs used"]
 }`;
 
+    if (!env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -226,71 +283,88 @@ Return ONLY valid JSON. No markdown fences. No preamble. Schema:
         messages: [{ role: "user", content: prompt }],
       }),
     });
-
-    const responseData: any = await response.json();
-    const jsonText = responseData.content?.[0]?.text?.trim();
-
-    let infographicData: any;
-    try {
-      infographicData = JSON.parse(jsonText);
-    } catch {
-      console.error("Infographic JSON parse failed:", jsonText);
-      await env.submoacontent_db.prepare(
-        `UPDATE infographic_submissions SET infographic_status = 'failed' WHERE id = ?`
-      ).bind(infraRecord.id).run();
-      return;
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`Anthropic HTTP ${response.status}: ${body.slice(0, 300)}`);
     }
+    const responseData: any = await response.json();
+    jsonText = responseData.content?.[0]?.text?.trim();
+    if (!jsonText) throw new Error('Anthropic returned empty content');
+  } catch (e) {
+    await recordFailure(env, submissionId, infraId, 'anthropic-generate', e);
+    return;
+  }
 
-    // ── CONTENT POLICE ────────────────────────────────────────────────────────
+  // Stage 3 — parse JSON.
+  let infographicData: any;
+  try {
+    infographicData = JSON.parse(jsonText);
+  } catch (e) {
+    await recordFailure(env, submissionId, infraId, 'parse-json', new Error(`JSON parse failed: ${(jsonText || '').slice(0, 200)}`));
+    return;
+  }
+
+  // Stage 4 — content police (pure function, should never throw but guard anyway).
+  try {
     const { data: cleanedData, violations } = enforceInfographicData(infographicData);
     infographicData = cleanedData;
-
     if (violations.length > 0) {
-      console.log(`Content police made ${violations.length} fix(es) to infographic data for ${submission.id}`);
+      console.log(`Content police made ${violations.length} fix(es) to infographic data for ${submissionId}`);
     }
+  } catch (e) {
+    await recordFailure(env, submissionId, infraId, 'content-police', e);
+    return;
+  }
 
-    // ── RENDER SVG ────────────────────────────────────────────────────────────
-    const svg = renderInfographicSVG(infographicData, style as any, infraRecord);
+  // Stage 5 — render SVG.
+  let svg = '';
+  try {
+    svg = renderInfographicSVG(infographicData, style as any, infraRecord);
+  } catch (e) {
+    await recordFailure(env, submissionId, infraId, 'render-svg', e);
+    return;
+  }
 
-    // ── EXPORT CSV + SOURCES ──────────────────────────────────────────────────
-    const sources: string[] = infographicData.sources ?? [];
-    const csvData = exportInfographicCsv(infographicData, sources);
-    const sourcesText = buildSourcesText(sources, submission.id, submission.topic ?? "Infographic");
+  // Stage 6 — export CSV + sources.
+  const sources: string[] = infographicData.sources ?? [];
+  let csvData = '';
+  let sourcesText = '';
+  try {
+    csvData = exportInfographicCsv(infographicData, sources);
+    sourcesText = buildSourcesText(sources, submissionId, submission.topic ?? "Infographic");
+  } catch (e) {
+    await recordFailure(env, submissionId, infraId, 'export-assets', e);
+    return;
+  }
 
-    // ── WRITE TO PROJECT FOLDER ───────────────────────────────────────────────
-    await packageInfographic(
-      env,
-      submission.id,
-      svg,
-      csvData,
-      sourcesText,
-      // PNG conversion would go here if a headless renderer is available
-      // For now, PNG placeholder remains until PNG renderer is wired
-      undefined
-    );
+  // Stage 7 — package to R2.
+  try {
+    await packageInfographic(env, submissionId, svg, csvData, sourcesText, undefined);
+  } catch (e) {
+    await recordFailure(env, submissionId, infraId, 'package-r2', e);
+    return;
+  }
 
-    // Save structured data to DB
+  // Stage 8 — persist final state.
+  try {
     await env.submoacontent_db.prepare(
       `UPDATE infographic_submissions SET
         infographic_data = ?,
         infographic_status = 'ready',
         svg_r2_key = ?,
-        assembled_at = ?
+        assembled_at = ?,
+        updated_at = ?,
+        error_message = NULL
        WHERE id = ?`
     ).bind(
       JSON.stringify(infographicData),
-      `projects/${submission.id}/infographic/infographic.svg`,
+      `projects/${submissionId}/infographic/infographic.svg`,
       Date.now(),
-      infraRecord.id
+      Date.now(),
+      infraId
     ).run();
-
-    console.log(`Infographic assembled for submission ${submission.id}`);
-
-  } catch (err) {
-    console.error("Infographic assembly error:", err);
-    await env.submoacontent_db.prepare(
-      `UPDATE infographic_submissions SET infographic_status = 'failed' WHERE id = ?`
-    ).bind(infraRecord.id).run();
-    // Never block pipeline
+    console.log(`Infographic assembled for submission ${submissionId}`);
+  } catch (e) {
+    await recordFailure(env, submissionId, infraId, 'persist-final', e);
   }
 }

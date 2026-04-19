@@ -1,454 +1,351 @@
-// src/pages/PromptBuilder.tsx
-// Prompt Builder — chat-driven prompt engineering assistant
-// Powered by Claude Sonnet 4.6 via OpenRouter
-// Accessible at /prompt-builder — all users
+// /prompt-builder — three-screen conversational prompt engineering assistant.
+// Screen 1: pick target AI. Screen 2: state initial intent. Screen 3: chat
+// until the server replies with "I HAVE EVERYTHING I NEED" on its own line —
+// at that point the response is split and the final prompt is rendered in an
+// amber-accented code block with Copy / Save / Start over actions.
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from 'react';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
+interface Message { role: 'user' | 'assistant'; content: string; }
+interface SavedPrompt {
+  id: string;
+  target_model: string;
+  title: string | null;
+  prompt_text: string;
+  conversation_history: Message[];
+  created_at: number;
 }
 
-interface ConversationState {
-  messages: Message[];
-  desiredOutcome: string;
-  llm: string;
-  finalPrompt: string | null;
-  submissionId: string | null;
-}
-
-// ── LLM options ───────────────────────────────────────────────────────────────
-
-const LLM_OPTIONS = [
-  { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.6" },
-  { value: "claude-opus-4-5", label: "Claude Opus 4.6" },
-  { value: "gpt-4o", label: "GPT-4o" },
-  { value: "gpt-4o-mini", label: "GPT-4o Mini" },
-  { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
-  { value: "meta-llama/llama-3-70b-instruct", label: "Llama 3 70B" },
-  { value: "mistralai/mixtral-8x7b-instruct", label: "Mistral Mixtral 8x7B" },
-  { value: "other", label: "Other (I'll specify in chat)" },
+const MODELS = [
+  { id: 'claude',  label: 'Claude (Anthropic)', desc: 'Long-form reasoning, nuanced style, XML-friendly structure.' },
+  { id: 'gpt4o',   label: 'GPT-4o (OpenAI)',    desc: 'Versatile generalist, strong at numbered directives.' },
+  { id: 'gemini',  label: 'Gemini (Google)',    desc: 'Massive context window, structured multi-section prompts.' },
+  { id: 'llama',   label: 'Llama 3 (Meta)',     desc: 'Open-source, prefers simple flat instructions.' },
+  { id: 'mistral', label: 'Mistral',            desc: 'Fast and concise — directive-focused prompts shine.' },
+  { id: 'other',   label: 'Other',              desc: 'Generic best-practice structure.' },
 ];
 
-// ── System prompt for the prompt engineer agent ───────────────────────────────
+const FINAL_MARKER = 'I HAVE EVERYTHING I NEED';
 
-function buildSystemPrompt(desiredOutcome: string, llm: string): string {
-  return `You are an expert prompt engineer. Your job is to help the user build a high-quality, hyper-detailed prompt for ${llm}.
-
-The user's desired outcome is:
-"${desiredOutcome}"
-
-Your process:
-1. Ask 2-3 targeted clarifying questions to understand exactly what the user needs. Ask only what is genuinely necessary — do not over-question.
-2. Once you have enough information, tell the user you are ready to build their prompt.
-3. Generate the final prompt. It must be:
-   - Hyper-technical and detailed, written so a non-technical user can copy and paste it directly
-   - Structured with clear sections where appropriate (role, context, instructions, format, examples)
-   - Optimized specifically for ${llm}'s strengths and quirks
-   - Include explicit output format instructions
-   - Include a clear success criteria section
-   - Written in second person addressing the LLM directly
-
-When you are ready to deliver the final prompt, wrap it in this exact marker:
-[FINAL_PROMPT_START]
-(prompt content here)
-[FINAL_PROMPT_END]
-
-Everything outside those markers is conversational. Everything inside is the deliverable.
-
-Keep conversational messages short and direct. The user is here to get a great prompt, not have a long discussion.`;
+function timeAgo(ts: number) {
+  const delta = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (delta < 60) return 'just now';
+  if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
+  if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
+  return `${Math.floor(delta / 86400)}d ago`;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
 export default function PromptBuilder() {
-  const [step, setStep] = useState<"form" | "chat">("form");
-  const [desiredOutcome, setDesiredOutcome] = useState("");
-  const [llm, setLlm] = useState("claude-sonnet-4-5");
+  const [screen, setScreen] = useState<'model' | 'intent' | 'dialogue'>('model');
+  const [modelId, setModelId] = useState<string>('claude');
+  const model = MODELS.find(m => m.id === modelId) || MODELS[0];
+  const [intent, setIntent] = useState('');
+
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [finalPrompt, setFinalPrompt] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [finalPrompt, setFinalPrompt] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [savedOnce, setSavedOnce] = useState(false);
+
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [savedList, setSavedList] = useState<SavedPrompt[]>([]);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, loading]);
 
-  // ── Start chat ──────────────────────────────────────────────────────────────
-
-  async function handleStart() {
-    if (!desiredOutcome.trim()) return;
-    setStep("chat");
-    setLoading(true);
-    setError(null);
-
-    const systemPrompt = buildSystemPrompt(desiredOutcome, llm);
-
-    // Initial message from agent
-    const initialMessages: Message[] = [
-      {
-        role: "user",
-        content: `I want to build a prompt for ${llm}. My desired outcome: ${desiredOutcome}`,
-      },
-    ];
-
-    const reply = await callOpenRouter(systemPrompt, initialMessages);
-    if (reply) {
-      const { text, extractedPrompt } = parseReply(reply);
-      setMessages([
-        ...initialMessages,
-        { role: "assistant", content: text },
-      ]);
-      if (extractedPrompt) setFinalPrompt(extractedPrompt);
-    } else {
-      setError("Failed to connect. Please try again.");
-      setStep("form");
-    }
-    setLoading(false);
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }
-
-  // ── Send message ────────────────────────────────────────────────────────────
-
-  async function handleSend() {
-    if (!input.trim() || loading) return;
-
-    const userMessage: Message = { role: "user", content: input.trim() };
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
-    setInput("");
-    setLoading(true);
-    setError(null);
-
-    const systemPrompt = buildSystemPrompt(desiredOutcome, llm);
-    const reply = await callOpenRouter(systemPrompt, updatedMessages);
-
-    if (reply) {
-      const { text, extractedPrompt } = parseReply(reply);
-      setMessages([...updatedMessages, { role: "assistant", content: text }]);
-      if (extractedPrompt) setFinalPrompt(extractedPrompt);
-    } else {
-      setError("Something went wrong. Please try again.");
-    }
-    setLoading(false);
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }
-
-  // ── Save prompt to dashboard ────────────────────────────────────────────────
-
-  async function handleSave() {
-    if (!finalPrompt) return;
-    setSaving(true);
+  async function loadSaved() {
     try {
-      const res = await fetch("/api/prompts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          desired_outcome: desiredOutcome,
-          llm,
-          prompt_content: finalPrompt,
-          conversation: messages,
-        }),
-      });
+      const res = await fetch('/api/prompt-builder', { credentials: 'include' });
+      const d = await res.json();
+      setSavedList(d.prompts || []);
+    } catch {}
+  }
+  useEffect(() => { loadSaved(); }, []);
 
-      if (!res.ok) throw new Error("Save failed");
-      setSaved(true);
-    } catch {
-      setError("Failed to save prompt. Please try again.");
-    } finally {
-      setSaving(false);
+  // Parse an assistant reply for the FINAL_MARKER. When present, split off
+  // everything after the marker line as the final prompt and keep the
+  // preamble as normal chat text.
+  function parseReply(raw: string): { text: string; prompt: string | null } {
+    const lines = raw.split('\n');
+    const idx = lines.findIndex(l => l.trim() === FINAL_MARKER);
+    if (idx === -1) return { text: raw, prompt: null };
+    const text = lines.slice(0, idx).join('\n').trim();
+    const prompt = lines.slice(idx + 1).join('\n').trim();
+    return { text: text || "Here's your prompt.", prompt: prompt || null };
+  }
+
+  async function startDialogue() {
+    if (!intent.trim()) return;
+    setScreen('dialogue');
+    setLoading(true); setError(null); setFinalPrompt(null); setSavedOnce(false);
+    const first: Message = { role: 'user', content: intent.trim() };
+    setMessages([first]);
+    try {
+      const res = await fetch('/api/prompt-builder/chat', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [first], target_model: model.label, initial_intent: intent.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Chat failed');
+      const { text, prompt } = parseReply(String(data.content || ''));
+      setMessages(prev => [...prev, { role: 'assistant', content: text }]);
+      if (prompt) {
+        setFinalPrompt(prompt);
+        void autoSave(prompt, [first, { role: 'assistant', content: text }]);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed');
+    }
+    setLoading(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }
+
+  async function send() {
+    if (!input.trim() || loading) return;
+    setLoading(true); setError(null);
+    const next: Message[] = [...messages, { role: 'user', content: input.trim() }];
+    setMessages(next);
+    setInput('');
+    try {
+      const res = await fetch('/api/prompt-builder/chat', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: next, target_model: model.label, initial_intent: intent }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Chat failed');
+      const { text, prompt } = parseReply(String(data.content || ''));
+      const finalMessages: Message[] = [...next, { role: 'assistant', content: text }];
+      setMessages(finalMessages);
+      if (prompt) {
+        setFinalPrompt(prompt);
+        void autoSave(prompt, finalMessages);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed');
+    }
+    setLoading(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }
+
+  async function autoSave(promptText: string, conversation: Message[]) {
+    if (savedOnce) return;
+    const title = intent.trim().slice(0, 60);
+    try {
+      await fetch('/api/prompt-builder/save', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_model: model.label, title, prompt_text: promptText, conversation_history: conversation }),
+      });
+      setSavedOnce(true);
+      loadSaved();
+    } catch {}
+  }
+
+  async function manualSave() {
+    if (!finalPrompt) return;
+    const title = intent.trim().slice(0, 60);
+    try {
+      await fetch('/api/prompt-builder/save', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_model: model.label, title, prompt_text: finalPrompt, conversation_history: messages }),
+      });
+      loadSaved();
+    } catch (e: any) {
+      setError(e?.message || 'Save failed');
     }
   }
 
-  // ── Reset ───────────────────────────────────────────────────────────────────
-
-  function handleReset() {
-    setStep("form");
-    setMessages([]);
-    setFinalPrompt(null);
-    setSaved(false);
-    setDesiredOutcome("");
-    setInput("");
-    setError(null);
+  async function copyPrompt() {
+    if (!finalPrompt) return;
+    try { await navigator.clipboard.writeText(finalPrompt); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
   }
 
-  // ── Render: form step ───────────────────────────────────────────────────────
+  function startOver() {
+    setScreen('model'); setIntent(''); setMessages([]); setFinalPrompt(null); setInput(''); setError(null); setSavedOnce(false);
+  }
 
-  if (step === "form") {
+  async function deleteSaved(id: string) {
+    try {
+      await fetch(`/api/prompt-builder/${id}`, { method: 'DELETE', credentials: 'include' });
+      setSavedList(prev => prev.filter(p => p.id !== id));
+    } catch {}
+  }
+
+  // Screen 1 — model selection
+  if (screen === 'model') {
     return (
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px" }}>
-        <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: "var(--text)", fontFamily: "Georgia, serif", marginBottom: 4 }}>
-            Prompt Builder
-          </h1>
-          <p style={{ fontSize: 13, color: "var(--text-light)" }}>
-            Describe what you want. We'll ask the right questions and build you a production-ready prompt.
-          </p>
+      <div style={{ maxWidth: 820, margin: '0 auto', padding: '40px 24px' }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--text)', marginBottom: 20 }}>
+          Which AI are you building this prompt for?
+        </h1>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          {MODELS.map(m => (
+            <button key={m.id} type="button" onClick={() => { setModelId(m.id); setScreen('intent'); }}
+              style={{
+                textAlign: 'left', padding: 16, borderRadius: 10,
+                background: 'var(--card)', border: '1px solid var(--border)',
+                cursor: 'pointer', boxShadow: 'var(--shadow-card)',
+              }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{m.label}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-mid)', marginTop: 4 }}>{m.desc}</div>
+            </button>
+          ))}
         </div>
-
-        {error && (
-          <div style={{ background: "var(--error-bg)", border: "1px solid var(--error-border)", borderRadius: 5, padding: "10px 14px", fontSize: 13, color: "var(--error)", marginBottom: 20 }}>
-            {error}
-          </div>
+        <div style={{ marginTop: 24 }}>
+          <button className="btn-ghost" onClick={() => setSavedOpen(true)}>View saved prompts →</button>
+        </div>
+        {savedOpen && (
+          <SavedPanel list={savedList} onClose={() => setSavedOpen(false)} onDelete={deleteSaved} />
         )}
-
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ display: "block", fontSize: 12, color: "var(--text-light)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6 }}>
-            Desired Outcome <span style={{ color: "var(--error)" }}>*</span>
-          </label>
-          <textarea
-            className="brief-input"
-            rows={4}
-            value={desiredOutcome}
-            onChange={(e) => setDesiredOutcome(e.target.value)}
-            placeholder="What do you want the AI to do? Be as specific or as vague as you like — we'll ask follow-up questions to sharpen it."
-          />
-        </div>
-
-        <div style={{ marginBottom: 32 }}>
-          <label style={{ display: "block", fontSize: 12, color: "var(--text-light)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6 }}>
-            LLM <span style={{ color: "var(--error)" }}>*</span>
-          </label>
-          <select
-            className="brief-input"
-            value={llm}
-            onChange={(e) => setLlm(e.target.value)}
-          >
-            {LLM_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        </div>
-
-        <button
-          onClick={handleStart}
-          disabled={!desiredOutcome.trim()}
-          className="btn-primary"
-          style={{ opacity: !desiredOutcome.trim() ? 0.5 : 1, cursor: !desiredOutcome.trim() ? "not-allowed" : "pointer" }}
-        >
-          Start Building →
-        </button>
       </div>
     );
   }
 
-  // ── Render: chat step ───────────────────────────────────────────────────────
-
-  return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: "32px 24px", display: "flex", flexDirection: "column", minHeight: "calc(100vh - 80px)" }}>
-
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", fontFamily: "Georgia, serif", marginBottom: 2 }}>
-            Prompt Builder
-          </h1>
-          <p style={{ fontSize: 12, color: "var(--text-light)" }}>
-            Building for {LLM_OPTIONS.find(o => o.value === llm)?.label ?? llm}
-          </p>
-        </div>
-        <button
-          onClick={handleReset}
-          style={{ background: "none", border: "none", color: "var(--text-light)", fontSize: 12, cursor: "pointer", padding: 0 }}
-        >
-          ← Start over
+  // Screen 2 — initial intent
+  if (screen === 'intent') {
+    return (
+      <div style={{ maxWidth: 680, margin: '0 auto', padding: '60px 24px' }}>
+        <button className="btn-ghost" onClick={() => setScreen('model')} style={{ fontSize: 12, marginBottom: 14 }}>
+          ← Change model ({model.label})
         </button>
+        <textarea
+          className="form-textarea"
+          rows={6}
+          value={intent}
+          onChange={(e) => setIntent(e.target.value)}
+          placeholder="Describe what you want to accomplish. Don't worry about getting it perfect — we'll work through it together."
+          style={{ fontSize: 14, padding: 14 }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+          <button className="btn-primary" onClick={startDialogue} disabled={!intent.trim()}>Start</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Screen 3 — dialogue
+  return (
+    <div style={{ maxWidth: 760, margin: '0 auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 80px)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 10, background: 'var(--amber-light)', color: 'var(--amber-dim)', padding: '3px 10px', borderRadius: 100, letterSpacing: '.06em', textTransform: 'uppercase', fontWeight: 700 }}>
+            {model.label}
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <button className="btn-ghost" onClick={() => setSavedOpen(true)} style={{ fontSize: 12 }}>Saved prompts</button>
+          <button className="btn-ghost" onClick={startOver} style={{ fontSize: 12 }}>Start over</button>
+        </div>
       </div>
 
-      {error && (
-        <div style={{ background: "var(--error-bg)", border: "1px solid var(--error-border)", borderRadius: 5, padding: "10px 14px", fontSize: 13, color: "var(--error)", marginBottom: 16 }}>
-          {error}
-        </div>
-      )}
+      {error && <div style={{ color: 'var(--error)', fontSize: 12, padding: '6px 10px', background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, marginBottom: 10 }}>{error}</div>}
 
-      {/* Chat messages */}
-      <div style={{ flex: 1, overflowY: "auto", marginBottom: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            style={{
-              display: "flex",
-              justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-            }}
-          >
-            <div
-              style={{
-                maxWidth: "80%",
-                padding: "10px 14px",
-                borderRadius: msg.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
-                background: msg.role === "user" ? "var(--amber-border)" : "var(--surface-inp)",
-                border: `0.5px solid ${msg.role === "user" ? "var(--amber-border)" : "var(--border)"}`,
-                fontSize: 13,
-                color: "var(--text)",
-                lineHeight: 1.6,
-                whiteSpace: "pre-wrap",
-              }}
-            >
-              {msg.content}
-            </div>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {messages.map((m, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+            <div style={{
+              maxWidth: m.role === 'user' ? '75%' : '85%',
+              padding: '10px 14px',
+              borderRadius: m.role === 'user' ? '10px 10px 2px 10px' : '10px 10px 10px 2px',
+              background: m.role === 'user' ? 'var(--green)' : 'var(--card)',
+              color: m.role === 'user' ? '#fff' : 'var(--text)',
+              border: m.role === 'user' ? 'none' : '1px solid var(--border)',
+              fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap',
+            }}>{m.content}</div>
           </div>
         ))}
-
-        {loading && (
-          <div style={{ display: "flex", justifyContent: "flex-start" }}>
-            <div style={{ padding: "10px 14px", borderRadius: "12px 12px 12px 2px", background: "var(--surface-inp)", border: "0.5px solid var(--border)" }}>
-              <span style={{ fontSize: 13, color: "var(--text-light)" }}>Thinking...</span>
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
+        {loading && <div style={{ fontSize: 12, color: 'var(--text-light)', fontStyle: 'italic' }}>Thinking…</div>}
       </div>
 
-      {/* Final prompt block */}
       {finalPrompt && (
         <div style={{
-          background: "var(--surface-inp)",
-          border: "0.5px solid var(--amber-border)",
-          borderRadius: 8,
-          padding: "16px 20px",
-          marginBottom: 16,
+          marginTop: 16, padding: 16,
+          background: 'var(--surface-inp)',
+          borderLeft: '3px solid var(--amber)',
+          borderRadius: '0 8px 8px 0',
+          fontFamily: 'var(--font-mono)', fontSize: 12,
+          whiteSpace: 'pre-wrap', color: 'var(--text)',
         }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <span style={{ fontSize: 11, color: "var(--amber)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 500 }}>
-              Your Prompt
-            </span>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={() => navigator.clipboard.writeText(finalPrompt)}
-                style={{ padding: "4px 12px", borderRadius: 4, fontSize: 11, cursor: "pointer", border: "0.5px solid var(--border)", color: "var(--text-mid)", background: "transparent" }}
-              >
-                Copy
-              </button>
-              {!saved ? (
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  style={{ padding: "4px 12px", borderRadius: 4, fontSize: 11, cursor: saving ? "not-allowed" : "pointer", border: "0.5px solid var(--amber)", color: "var(--amber)", background: "transparent", opacity: saving ? 0.6 : 1 }}
-                >
-                  {saving ? "Saving..." : "Save to Dashboard"}
-                </button>
-              ) : (
-                <span style={{ fontSize: 11, color: "var(--success)", padding: "4px 12px" }}>✓ Saved to Dashboard</span>
-              )}
-            </div>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--amber-dim)', fontWeight: 700, marginBottom: 8, fontFamily: 'var(--font-ui)' }}>
+            Your {model.label} prompt
           </div>
-          <pre style={{ fontSize: 12, color: "var(--text)", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0, fontFamily: "monospace" }}>
-            {finalPrompt}
-          </pre>
+          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{finalPrompt}</pre>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button className="btn-accent" onClick={copyPrompt}>{copied ? 'Copied ✓' : 'Copy to Clipboard'}</button>
+            <button className="btn-ghost" onClick={manualSave}>Save Prompt</button>
+            <button className="btn-ghost" onClick={startOver}>Start Over</button>
+          </div>
         </div>
       )}
 
-      {/* Input */}
       {!finalPrompt && (
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <textarea
             ref={inputRef}
+            className="form-textarea"
+            rows={2}
+            placeholder="Reply…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder="chat dammit!"
-            rows={2}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              padding: "9px 12px",
-              background: "var(--surface-inp)",
-              border: "0.5px solid var(--border)",
-              borderRadius: 5,
-              color: "var(--text)",
-              fontSize: 13,
-              fontFamily: "sans-serif",
-              outline: "none",
-              resize: "none",
-              lineHeight: 1.5,
-              boxSizing: "border-box",
-            }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+            style={{ flex: 1, fontSize: 13, padding: 10 }}
           />
-          <button
-            onClick={handleSend}
-            disabled={loading || !input.trim()}
-            style={{
-              padding: "0 20px",
-              borderRadius: 7,
-              fontSize: 14,
-              fontWeight: 600,
-              fontFamily: "var(--font-ui)",
-              cursor: loading || !input.trim() ? "not-allowed" : "pointer",
-              border: "none",
-              color: "var(--card)",
-              background: "var(--green)",
-              opacity: loading || !input.trim() ? 0.5 : 1,
-              flexShrink: 0,
-              boxShadow: "var(--shadow-button)",
-            }}
-          >
-            Send
-          </button>
+          <button className="btn-primary" onClick={send} disabled={loading || !input.trim()}>Send</button>
         </div>
       )}
 
-      {finalPrompt && (
-        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-          <button
-            onClick={handleReset}
-            style={{ padding: "8px 20px", borderRadius: 5, fontSize: 13, cursor: "pointer", border: "0.5px solid var(--border)", color: "var(--text-light)", background: "transparent" }}
-          >
-            Build another prompt
-          </button>
-        </div>
+      {savedOpen && (
+        <SavedPanel list={savedList} onClose={() => setSavedOpen(false)} onDelete={deleteSaved} />
       )}
     </div>
   );
 }
 
-// ── OpenRouter API call ───────────────────────────────────────────────────────
-
-async function callOpenRouter(
-  systemPrompt: string,
-  messages: Message[]
-): Promise<string | null> {
-  try {
-    const res = await fetch("/api/prompt-builder/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ system: systemPrompt, messages }),
-    });
-
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.content ?? null;
-  } catch {
-    return null;
+function SavedPanel({ list, onClose, onDelete }: { list: SavedPrompt[]; onClose: () => void; onDelete: (id: string) => void }) {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  async function copy(text: string, id: string) {
+    try { await navigator.clipboard.writeText(text); setCopiedId(id); setTimeout(() => setCopiedId(null), 1500); } catch {}
   }
-}
-
-// ── Parse reply — extract final prompt if present ─────────────────────────────
-
-function parseReply(text: string): { text: string; extractedPrompt: string | null } {
-  const start = text.indexOf("[FINAL_PROMPT_START]");
-  const end = text.indexOf("[FINAL_PROMPT_END]");
-
-  if (start !== -1 && end !== -1) {
-    const extractedPrompt = text.slice(start + "[FINAL_PROMPT_START]".length, end).trim();
-    const textWithout = (text.slice(0, start) + text.slice(end + "[FINAL_PROMPT_END]".length)).trim();
-    return { text: textWithout || "Here's your prompt — copy it or save it to your dashboard.", extractedPrompt };
-  }
-
-  return { text, extractedPrompt: null };
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'flex-end' }} onClick={onClose}>
+      <div style={{ width: 460, maxWidth: '95vw', height: '100%', background: 'var(--card)', padding: 20, overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>Saved Prompts</h3>
+          <button className="btn-ghost" onClick={onClose}>Close</button>
+        </div>
+        {list.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-light)', textAlign: 'center', padding: 40 }}>No saved prompts yet.</div>}
+        {list.map(p => (
+          <div key={p.id} style={{ marginBottom: 12, padding: 12, background: 'var(--card-alt)', border: '1px solid var(--border)', borderRadius: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{p.title || '(untitled)'}</div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 10, background: '#7A4A2A', color: '#fff', padding: '2px 8px', borderRadius: 100 }}>
+                    {p.target_model}
+                  </span>
+                  <span style={{ fontSize: 10, color: 'var(--text-light)' }}>{timeAgo(p.created_at)}</span>
+                </div>
+              </div>
+            </div>
+            <pre style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-mid)', marginTop: 8, maxHeight: 120, overflow: 'auto', whiteSpace: 'pre-wrap', background: 'var(--surface-inp)', padding: 8, borderRadius: 4 }}>
+              {p.prompt_text.slice(0, 400)}{p.prompt_text.length > 400 ? '…' : ''}
+            </pre>
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button className="db-btn db-btn-gold" onClick={() => copy(p.prompt_text, p.id)}>{copiedId === p.id ? 'Copied' : 'Copy'}</button>
+              <button className="btn-danger-sm" onClick={() => onDelete(p.id)}>Delete</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

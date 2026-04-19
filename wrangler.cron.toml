@@ -14,5 +14,9 @@ bucket_name = "submoa-images"
 [ai]
 binding = "AI"
 
+[[queues.producers]]
+queue = "submoa-generation-queue"
+binding = "GENERATION_QUEUE"
+
 [triggers]
 crons = ["*/10 * * * *"]

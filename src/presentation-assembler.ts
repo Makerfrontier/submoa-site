@@ -18,6 +18,7 @@
 import JSZip from "jszip";
 // pptxgenjs ships UMD; the default import gives us the constructor in both Node and Worker bundles.
 import PptxGenJS from "pptxgenjs";
+import { complementaryText } from "./content-utils";
 import { writeProjectFile } from "./project-template";
 
 interface Env {
@@ -96,16 +97,35 @@ export async function assemblePresentation(
   try {
     await setStatus(env, pres.id, "rendering");
 
-    // 1. Load template from R2
-    const tmplObj = await env.SUBMOA_IMAGES.get(pres.template_r2_key);
-    if (!tmplObj) throw new Error(`Template not found in R2: ${pres.template_r2_key}`);
-    const tmplBuffer = await tmplObj.arrayBuffer();
-
-    // 2. Extract template hints (colors, fonts) from theme1.xml
-    const hints = await extractTemplateHints(tmplBuffer);
-
-    // 3. Refine via Claude
-    const analysis = await analyzeTemplateWithClaude(env, hints, pres.template_filename);
+    // 1. Load template from R2 — optional. When the user picks a baseline
+    // template (no .pptx upload) we fall through to a default analysis and
+    // let buildPptx draw from the baseline accent color + visual tone.
+    let analysis: any = null;
+    if (pres.template_r2_key) {
+      const tmplObj = await env.SUBMOA_IMAGES.get(pres.template_r2_key);
+      if (tmplObj) {
+        const tmplBuffer = await tmplObj.arrayBuffer();
+        const hints = await extractTemplateHints(tmplBuffer);
+        analysis = await analyzeTemplateWithClaude(env, hints, pres.template_filename);
+      } else {
+        console.warn(`[presentation-assembler] template_r2_key set but R2 object missing: ${pres.template_r2_key}`);
+      }
+    }
+    if (!analysis) {
+      // Default analysis when no template was uploaded. The visual tone
+      // values from structured_notes override these downstream when present.
+      analysis = {
+        primary_color: '#B8872E',
+        secondary_color: '#6B5744',
+        accent_color: '#B8872E',
+        background_color: '#FAF7F2',
+        header_font: 'Playfair Display',
+        body_font: 'DM Sans',
+        header_size_pt: 32,
+        body_size_pt: 14,
+        text_alignment: 'left' as const,
+      };
+    }
 
     // 4. Author voice + writing skill (best effort)
     const skill = await getWritingSkill(env);
@@ -117,7 +137,25 @@ export async function assemblePresentation(
       : null;
 
     // 5. Generate slide content
-    const structured = pres.structured_notes ? safeJson<{ slide_type: string; notes: string }[]>(pres.structured_notes) ?? [] : [];
+    // structured_notes may be the old slide array OR the new {slides, visual_tone}
+    // shape packed by /api/presentation-submissions. Handle both.
+    let structured: any[] = [];
+    try {
+      const raw: any = pres.structured_notes ? JSON.parse(pres.structured_notes) : null;
+      if (Array.isArray(raw)) {
+        structured = raw;
+      } else if (raw && typeof raw === 'object') {
+        if (Array.isArray(raw.slides)) structured = raw.slides;
+        if (raw.visual_tone && typeof raw.visual_tone === 'object') {
+          // User-selected colors override the template's defaults.
+          if (raw.visual_tone.primary_color)    analysis.primary_color    = raw.visual_tone.primary_color;
+          if (raw.visual_tone.accent_color)     analysis.accent_color     = raw.visual_tone.accent_color;
+          if (raw.visual_tone.background_color) analysis.background_color = raw.visual_tone.background_color;
+        }
+      }
+    } catch {
+      structured = [];
+    }
     const slides = await generateSlides(env, submission, pres, analysis, skill, author, structured);
 
     // 6. Content police
@@ -465,6 +503,19 @@ async function buildPptx(
     const s = slides[i];
     const slide = pres.addSlide();
     slide.background = { color: stripHash(a.background_color) };
+    // Text color on the slide background — luminance-derived, never hardcoded.
+    const slideTextColor = complementaryText(a.background_color, a.primary_color);
+    // Text color on accent-filled shapes — luminance-derived against the accent.
+    const accentTextColor = complementaryText(a.accent_color, a.primary_color);
+    // Body copy falls back to the secondary color if it reads well; otherwise
+    // uses the luminance-derived slideTextColor.
+    const bodyTextColor = (() => {
+      // If the secondary color contrasts reasonably with the background, keep
+      // it for stylistic consistency. Otherwise switch to slideTextColor.
+      const bgLum = stripHash(a.background_color);
+      const sec = stripHash(a.secondary_color);
+      return bgLum === sec ? stripHash(slideTextColor) : stripHash(a.secondary_color);
+    })();
 
     if (s.slide_type === "title") {
       // Centered hero title
@@ -472,7 +523,7 @@ async function buildPptx(
         x: 0.5, y: SLIDE_H / 2 - 1.0, w: SLIDE_W - 1, h: 1.6,
         fontSize: a.header_size_pt + 8,
         fontFace: a.header_font,
-        color: stripHash(a.primary_color),
+        color: stripHash(slideTextColor),
         bold: true,
         align: "center",
         valign: "middle",
@@ -482,7 +533,7 @@ async function buildPptx(
           x: 1, y: SLIDE_H / 2 + 0.7, w: SLIDE_W - 2, h: 0.8,
           fontSize: a.body_size_pt + 2,
           fontFace: a.body_font,
-          color: stripHash(a.secondary_color),
+          color: stripHash(bodyTextColor),
           align: "center",
         });
       }
@@ -497,7 +548,7 @@ async function buildPptx(
         x: 0.5, y: SLIDE_H / 2 - 0.8, w: SLIDE_W - 1, h: 1.4,
         fontSize: a.header_size_pt + 4,
         fontFace: a.header_font,
-        color: stripHash(a.primary_color),
+        color: stripHash(slideTextColor),
         bold: true,
         align: "center",
       });
@@ -506,7 +557,7 @@ async function buildPptx(
           x: 1, y: SLIDE_H / 2 + 0.6, w: SLIDE_W - 2, h: 0.8,
           fontSize: a.body_size_pt,
           fontFace: a.body_font,
-          color: stripHash(a.secondary_color),
+          color: stripHash(bodyTextColor),
           align: "center",
         });
       }
@@ -524,7 +575,7 @@ async function buildPptx(
         x: 0.5, y: 0.4, w: SLIDE_W - 1, h: 0.9,
         fontSize: a.header_size_pt,
         fontFace: a.header_font,
-        color: stripHash(a.primary_color),
+        color: stripHash(slideTextColor),
         bold: true,
         align: a.text_alignment,
       });
@@ -540,7 +591,7 @@ async function buildPptx(
             x: bodyX, y: bodyTop, w: bodyW, h: SLIDE_H - bodyTop - 0.6,
             fontSize: a.body_size_pt,
             fontFace: a.body_font,
-            color: "404040",
+            color: stripHash(bodyTextColor),
             valign: "top",
             paraSpaceAfter: 6,
           }
@@ -550,7 +601,7 @@ async function buildPptx(
           x: bodyX, y: bodyTop, w: bodyW, h: SLIDE_H - bodyTop - 0.6,
           fontSize: a.body_size_pt,
           fontFace: a.body_font,
-          color: "404040",
+          color: stripHash(bodyTextColor),
           valign: "top",
         });
       }
@@ -577,7 +628,7 @@ async function buildPptx(
             showTitle: !!s.chart_data.title,
             title: s.chart_data.title,
             titleFontSize: 12,
-            titleColor: stripHash(a.primary_color),
+            titleColor: stripHash(slideTextColor),
             catAxisLabelFontSize: 10,
             valAxisLabelFontSize: 10,
           });

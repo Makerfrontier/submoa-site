@@ -58,7 +58,8 @@ export async function onRequest(context) {
             g.status as grade_result,
             s.live_url,
             s.featured_image_filename,
-            s.generated_image_key
+            s.generated_image_key,
+            s.custom_featured_image_key
           FROM submissions s
           LEFT JOIN author_profiles ap ON s.author = ap.slug
           LEFT JOIN grades g ON g.id = (
@@ -99,6 +100,7 @@ export async function onRequest(context) {
         llm_display_name:    row.llm_display_name || null,
         featured_image_filename: row.featured_image_filename || null,
         generated_image_key: row.generated_image_key || null,
+        custom_featured_image_key: row.custom_featured_image_key || null,
         infographic_r2_key:  row.infographic_r2_key || null,
         audio_path:          row.audio_path || null,
         has_docx:            !!row.has_docx,
@@ -130,7 +132,8 @@ export async function onRequest(context) {
         human_observation, anecdotal_stories, include_faq, has_images, generate_audio, email,
         youtube_url, use_youtube, relevant_links,
         content_rating,
-        generate_featured_image, image_mood, image_perspective, image_setting,
+        generate_featured_image, image_prompt_direction,
+        tts_voice_id,
         status = 'draft',
       } = await context.request.json();
 
@@ -158,8 +161,8 @@ export async function onRequest(context) {
       const effectiveEmail = email || user.email || null;
 
       await context.env.submoacontent_db
-        .prepare(`INSERT INTO submissions (id, user_id, topic, author, article_format, optimization_target, tone_stance, vocal_tone, min_word_count, product_link, product_details_manual, target_keywords, seo_research, human_observation, anecdotal_stories, include_faq, has_images, generate_audio, email, status, created_at, updated_at, account_id, youtube_url, use_youtube, youtube_transcript, relevant_links, content_rating, generate_featured_image, image_mood, image_perspective, image_setting)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .prepare(`INSERT INTO submissions (id, user_id, topic, author, article_format, optimization_target, tone_stance, vocal_tone, min_word_count, product_link, product_details_manual, target_keywords, seo_research, human_observation, anecdotal_stories, include_faq, has_images, generate_audio, email, status, created_at, updated_at, account_id, youtube_url, use_youtube, youtube_transcript, relevant_links, content_rating, generate_featured_image, image_prompt_direction, tts_voice_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .bind(
           id, user.id,
           topic || null, effectiveAuthor, effectiveArticleFormat,
@@ -186,9 +189,8 @@ export async function onRequest(context) {
           relevant_links || null,
           [1, 2, 3].includes(Number(content_rating)) ? Number(content_rating) : 1,
           generate_featured_image ? 1 : 0,
-          image_mood || null,
-          image_perspective || null,
-          image_setting || null,
+          image_prompt_direction || null,
+          tts_voice_id || 'onyx',
         )
         .run();
 

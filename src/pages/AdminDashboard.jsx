@@ -3,6 +3,7 @@
 // Route: /admin — protected by role = 'admin'
 
 import { useState, useEffect, useCallback } from 'react';
+import AdminTemplates from './AdminTemplates';
 import './AdminDashboard.css';
 
 // ---------------------------------------------------------------------------
@@ -96,6 +97,27 @@ function SectionSubmissions() {
   const [authors, setAuthors] = useState([]);
   const [stats, setStats] = useState({});
   const [page, setPage] = useState(1);
+  // Two-step delete — tracks which row is currently armed for confirmation.
+  const [deleteArmed, setDeleteArmed] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(null);
+
+  async function handleDelete(id) {
+    if (deleteArmed !== id) { setDeleteArmed(id); return; }
+    setDeleteBusy(id);
+    try {
+      const res = await fetch(`/api/admin/submissions/${id}`, { method: 'DELETE', credentials: 'include' });
+      if (res.ok) {
+        setSubmissions(prev => prev.filter(s => s.id !== id));
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Delete failed');
+      }
+    } catch (e) {
+      alert(e.message);
+    }
+    setDeleteArmed(null);
+    setDeleteBusy(null);
+  }
   const PER_PAGE = 20;
 
   const load = useCallback(async () => {
@@ -207,6 +229,14 @@ function SectionSubmissions() {
                     <td>
                       <div className="adm-btn-row">
                         <button className="adm-btn" onClick={() => window.open(`/content/${sub.id}`, '_blank')}>View</button>
+                        <button
+                          className={deleteArmed === sub.id ? 'adm-btn red' : 'adm-btn'}
+                          disabled={deleteBusy === sub.id}
+                          onClick={() => handleDelete(sub.id)}
+                          onBlur={() => { if (deleteArmed === sub.id) setDeleteArmed(null); }}
+                        >
+                          {deleteBusy === sub.id ? '…' : deleteArmed === sub.id ? 'Confirm?' : 'Delete'}
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -549,7 +579,7 @@ function SectionAuthors() {
   const [editName, setEditName] = useState({});
   const [editingStyle, setEditingStyle] = useState({});
   const [styleText, setStyleText] = useState({});
-  const [ingestMode, setIngestMode] = useState(null); // null | 'rss' | 'docx'
+  const [ingestMode, setIngestMode] = useState(null); // null | 'rss' | 'docx' | 'generate'
   const [rssUrl, setRssUrl] = useState('');
   const [authorName, setAuthorName] = useState('');
   const [ingesting, setIngesting] = useState(false);
@@ -557,6 +587,11 @@ function SectionAuthors() {
   const [ingestError, setIngestError] = useState('');
   const [docxFile, setDocxFile] = useState(null);
   const [savingAuthor, setSavingAuthor] = useState(false);
+  // Prompt-driven generation state
+  const [genDescription, setGenDescription] = useState('');
+  const [genVariations, setGenVariations] = useState(false);
+  const [genProfiles, setGenProfiles] = useState(null); // array of profile drafts
+  const [genEditing, setGenEditing] = useState({}); // idx → {name, bio, voice_guide}
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -599,6 +634,81 @@ function SectionAuthors() {
         await load();
       } else { setIngestError(d.error || 'Failed to save'); }
     } catch (e) { setIngestError(e.message); }
+    setSavingAuthor(false);
+  }
+
+  async function handleGenerate() {
+    if (!genDescription.trim()) return;
+    setIngesting(true); setIngestError(''); setGenProfiles(null); setGenEditing({});
+    try {
+      const d = await apiFetch('/authors/generate', {
+        method: 'POST',
+        body: JSON.stringify({ description: genDescription, variations: genVariations }),
+      });
+      if (d.error) { setIngestError(d.error); }
+      else if (genVariations && Array.isArray(d.profiles)) {
+        setGenProfiles(d.profiles);
+        const e = {}; d.profiles.forEach((p, i) => { e[i] = { ...p }; });
+        setGenEditing(e);
+      } else if (!genVariations && d.profile) {
+        setGenProfiles([d.profile]);
+        setGenEditing({ 0: { ...d.profile } });
+      } else {
+        setIngestError('Unexpected response');
+      }
+    } catch (e) { setIngestError(e.message); }
+    setIngesting(false);
+  }
+
+  async function saveGeneratedProfile(idx) {
+    const profile = genEditing[idx];
+    if (!profile || !profile.name) { setIngestError('Name is required'); return; }
+    if (!profile.voice_guide || !profile.voice_guide.trim()) {
+      setIngestError('Voice guide is required');
+      return;
+    }
+    setSavingAuthor(true); setIngestError('');
+    try {
+      // /api/admin/authors/save requires slug + name + style_guide. Derive
+      // slug from name (URL-safe, lowercased, whitespace → dash, punctuation stripped).
+      const slug = profile.name
+        .toLowerCase()
+        .trim()
+        .replace(/['"]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      if (!slug) {
+        setIngestError('Could not derive a slug from the name');
+        setSavingAuthor(false);
+        return;
+      }
+      const payload = {
+        slug,
+        name: profile.name,
+        style_guide: profile.voice_guide,
+        description: profile.bio || '',
+        keyword_themes: Array.isArray(profile.tone_tags) ? profile.tone_tags : [],
+        semantic_entities: [],
+        source_type: 'generated',
+        scope: 'user',
+      };
+      const d = await apiFetch('/authors/save', { method: 'POST', body: JSON.stringify(payload) });
+      if (d.success || d.ok) {
+        setGenProfiles(prev => prev.filter((_, i) => i !== idx));
+        setGenEditing(prev => {
+          const next = { ...prev };
+          delete next[idx];
+          return next;
+        });
+        await load();
+      } else {
+        setIngestError(d.error || 'Failed to save');
+        console.error('[authors/save] failed:', d);
+      }
+    } catch (e) {
+      setIngestError(e.message);
+      console.error('[authors/save] error:', e);
+    }
     setSavingAuthor(false);
   }
 
@@ -662,6 +772,9 @@ function SectionAuthors() {
           <button className="adm-btn" style={{ flex: 1, padding: '10px 0', fontSize: 12 }} onClick={() => setIngestMode(ingestMode === 'docx' ? null : 'docx')}>
             Ingest via DOCX
           </button>
+          <button className="adm-btn" style={{ flex: 1, padding: '10px 0', fontSize: 12 }} onClick={() => setIngestMode(ingestMode === 'generate' ? null : 'generate')}>
+            Generate
+          </button>
         </div>
 
         {ingestMode && (
@@ -684,7 +797,67 @@ function SectionAuthors() {
                 </button>
               </>
             )}
+            {ingestMode === 'generate' && (
+              <>
+                <textarea
+                  className="adm-textarea"
+                  placeholder="Describe the author you need. Example: A casual C-suite executive who works in the firearms industry and speaks plainly without jargon."
+                  value={genDescription}
+                  onChange={e => setGenDescription(e.target.value)}
+                  style={{ width: '100%', minHeight: 100, marginBottom: 8 }}
+                />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-mid)', fontFamily: 'sans-serif', marginBottom: 10 }}>
+                  <input type="checkbox" checked={genVariations} onChange={e => setGenVariations(e.target.checked)} />
+                  Give me 3 variations
+                </label>
+                <button className="adm-btn solid" onClick={handleGenerate} disabled={ingesting || !genDescription.trim()} style={{ width: '100%' }}>
+                  {ingesting ? 'Generating…' : 'Generate Author'}
+                </button>
+              </>
+            )}
             {ingestError && <div style={{ color: 'var(--error)', fontSize: 12, fontFamily: 'sans-serif', marginTop: 8 }}>{ingestError}</div>}
+          </div>
+        )}
+
+        {genProfiles && genProfiles.length > 0 && (
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {genProfiles.map((p, i) => {
+              const draft = genEditing[i] || p;
+              const set = (k, v) => setGenEditing(prev => ({ ...prev, [i]: { ...(prev[i] || p), [k]: v } }));
+              return (
+                <div key={i} className="adm-card">
+                  <div style={{ color: 'var(--amber)', fontSize: 11, fontFamily: 'sans-serif', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                    Generated Profile {genProfiles.length > 1 ? `${i + 1}` : ''}
+                  </div>
+                  <input className="adm-input" value={draft.name || ''} onChange={e => set('name', e.target.value)} placeholder="Name" style={{ width: '100%', marginBottom: 8 }} />
+                  <textarea className="adm-textarea" value={draft.bio || ''} onChange={e => set('bio', e.target.value)} placeholder="Bio" style={{ width: '100%', minHeight: 60, marginBottom: 8 }} />
+                  <textarea className="adm-textarea" value={draft.voice_guide || ''} onChange={e => set('voice_guide', e.target.value)} placeholder="Voice guide" style={{ width: '100%', minHeight: 140, marginBottom: 8 }} />
+                  {Array.isArray(draft.tone_tags) && draft.tone_tags.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                      {draft.tone_tags.map((t, j) => (
+                        <span key={j} style={{ fontSize: 10, background: 'var(--amber-light)', color: 'var(--amber-dim)', padding: '2px 8px', borderRadius: 100 }}>{t}</span>
+                      ))}
+                    </div>
+                  )}
+                  {Array.isArray(draft.sample_phrases) && draft.sample_phrases.length > 0 && (
+                    <div style={{ fontSize: 11, color: 'var(--text-mid)', marginBottom: 10, fontStyle: 'italic' }}>
+                      {draft.sample_phrases.slice(0, 3).map((s, j) => (
+                        <div key={j}>“{s}”</div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="adm-btn-row">
+                    <button className="adm-btn green" onClick={() => saveGeneratedProfile(i)} disabled={savingAuthor}>
+                      {savingAuthor ? 'Saving...' : 'Activate Author'}
+                    </button>
+                    <button className="adm-btn red" onClick={() => {
+                      setGenProfiles(prev => prev.filter((_, idx) => idx !== i));
+                      setGenEditing(prev => { const n = { ...prev }; delete n[i]; return n; });
+                    }}>Reject</button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -801,66 +974,587 @@ function SectionAuthors() {
 }
 
 // ---------------------------------------------------------------------------
-// Skill Versions section
+// Skill Versions section — living inventory of every skill / tool / feature in
+// the system, plus a static per-skill changelog. Add an entry here as part of
+// every deployment. This is a component constant, not a DB table.
 // ---------------------------------------------------------------------------
+const SKILLS_INVENTORY = [
+  {
+    id: 'comp-studio',
+    label: 'Comp Studio v2',
+    summary: 'Two-column accordion editor for HTML comps. Block detection, master prompt, locks, draft save, full copy replacement, ad unit sweep, AI image generation for photo blocks.',
+    status: 'active',
+    changelog: [
+      { version: '2.0.0', date: '2026-04-18', added: ['Two-column accordion layout', 'Master prompt flow with lock system', 'Full-draft copy replacement with mapping preview', 'AI image generation for photo blocks (not just ads)', 'Click-to-edit from canvas with connector', 'Human-readable block names', 'Ad unit sweep covering aside/sidebar/position:sticky', 'DB write confirmation on mount + first save'], removed: ['Right-rail tab layout', 'Raw tag-name block labels', '"CTA a" classification for card-grid anchors'] },
+      { version: '1.1.0', date: '2026-04-15', added: ['Draft auto-save every 3 minutes', 'Zoom override', '/comp-studio?draft=… load handler'], removed: [] },
+      { version: '1.0.0', date: '2026-04-10', added: ['Initial Comp Studio release', 'stripAndClean pipeline', 'AI ad creative generation', 'JPG export via Browser Rendering'], removed: [] },
+    ],
+  },
+  {
+    id: 'presentation-builder',
+    label: 'Presentation Builder',
+    summary: 'PPTX deck authoring. Template library, author style selector, audience + purpose fields, AI optimization pass before build.',
+    status: 'active',
+    changelog: [
+      { version: '1.2.0', date: '2026-04-18', added: ['Audience field', 'Purpose field', 'AI optimization pass before deck build'], removed: [] },
+      { version: '1.0.0', date: '2026-04-05', added: ['Template library', 'Author style selector', 'PPTX export pipeline'], removed: [] },
+    ],
+  },
+  {
+    id: 'email-builder',
+    label: 'Email Builder',
+    summary: 'Template library + OpenRouter optimization suite. Alt-text enforcement, email-client hardening, clean HTML export.',
+    status: 'active',
+    changelog: [
+      { version: '1.1.0', date: '2026-04-18', added: ['OpenRouter optimization suite', 'Alt-text enforcement', 'Email-client hardening'], removed: [] },
+      { version: '1.0.0', date: '2026-04-02', added: ['Initial release', 'Template library', 'Clean HTML export'], removed: [] },
+    ],
+  },
+  {
+    id: 'infographic-brief',
+    label: 'Infographic Brief',
+    summary: 'Research-first flow. 3-source minimum, full citations in output, DataforSEO SEO pass.',
+    status: 'active',
+    changelog: [
+      { version: '2.0.0', date: '2026-04-18', added: ['Research-first intent field', 'Find Data → OpenRouter research with web search', '3-source minimum gate', 'User-supplied source input', 'Broaden Topic rerun', 'Full citations in pipeline'], removed: ['One-step form flow', 'Theory-only brief'] },
+      { version: '1.0.0', date: '2026-04-01', added: ['Initial release with style template picker'], removed: [] },
+    ],
+  },
+  {
+    id: 'prompt-builder',
+    label: 'Prompt Builder',
+    summary: 'Model-first prompt engineering assistant. Output syntax adapts per target model.',
+    status: 'active',
+    changelog: [
+      { version: '2.0.0', date: '2026-04-18', added: ['Model selector as first step (Claude, GPT-4o, Gemini, Llama, Mistral, Other)', 'Model-specific structural guidance', 'Format note explaining structural choices'], removed: ['SubMoa option (handled by backend wrappers, not user-facing)'] },
+      { version: '1.0.0', date: '2026-03-28', added: ['Initial chat-driven prompt engineer'], removed: [] },
+    ],
+  },
+  {
+    id: 'author-admin',
+    label: 'Author Admin',
+    summary: 'Prompt-driven author generation alongside existing RSS and DOCX ingest paths.',
+    status: 'active',
+    changelog: [
+      { version: '1.2.0', date: '2026-04-18', added: ['Generate tab with freeform description textarea', '3-variation mode', 'Inline review / edit of generated profiles'], removed: [] },
+      { version: '1.1.0', date: '2026-04-10', added: ['DOCX ingest path'], removed: [] },
+      { version: '1.0.0', date: '2026-03-20', added: ['RSS ingest path'], removed: [] },
+    ],
+  },
+  {
+    id: 'html-templates-admin',
+    label: 'HTML Templates Admin',
+    summary: 'Editable HTML templates in R2. Dropdown selector + chat interface with picker mode.',
+    status: 'active',
+    changelog: [
+      { version: '1.2.0', date: '2026-04-18', added: ['Dropdown template selector (primary load path)', 'Chat panel with Claude Sonnet 4.5', 'Element picker mode (selector + computed styles)', '7 full-page seed templates'], removed: [] },
+      { version: '1.0.0', date: '2026-04-12', added: ['Initial release'], removed: [] },
+    ],
+  },
+  {
+    id: 'card-config',
+    label: 'Card Config System',
+    summary: 'Unified dashboard card actions. Condition-based rendering — dead links are impossible.',
+    status: 'active',
+    changelog: [
+      { version: '1.0.0', date: '2026-04-18', added: ['CARD_CONFIG with per-type actions', 'evalCondition helper supporting field/==/!=/AND/OR/NOT', 'CardActions component', 'Itinerary delete + request edits', 'card_config DB table seed'], removed: [] },
+    ],
+  },
+  {
+    id: 'planner',
+    label: 'Planner',
+    summary: 'Async queue-backed itinerary generator with building page + 3-step tracker.',
+    status: 'active',
+    changelog: [
+      { version: '1.1.0', date: '2026-04-14', added: ['Async queue generation', '/planner/building/:id progress page', 'Retry endpoint', 'Itinerary delete endpoint'], removed: [] },
+      { version: '1.0.0', date: '2026-03-25', added: ['Initial release', 'PDF export'], removed: [] },
+    ],
+  },
+  {
+    id: 'article-flagging',
+    label: 'Article Flagging',
+    summary: 'Selection-based flag UI. Fact-check, revision, review page workflow.',
+    status: 'active',
+    changelog: [
+      { version: '1.0.0', date: '2026-04-08', added: ['Initial release', 'Fact-check endpoint', 'Review page'], removed: [] },
+    ],
+  },
+  {
+    id: 'featured-image',
+    label: 'Featured Image',
+    summary: 'AI-generated 16:9 hero image via OpenRouter gemini-2.5-flash-image. Freeform direction field.',
+    status: 'active',
+    changelog: [
+      { version: '2.0.0', date: '2026-04-18', added: ['Single freeform "Image direction" textarea', 'image_prompt_direction column'], removed: ['Mood/Perspective/Setting/Style/Color Palette dropdowns (5 columns deprecated)'] },
+      { version: '1.0.0', date: '2026-04-06', added: ['Initial release', 'OpenRouter + R2 pipeline'], removed: [] },
+    ],
+  },
+  {
+    id: 'tts-voice',
+    label: 'TTS Voice Selection',
+    summary: '6 OpenAI voices. Dropdown appears only when Generate Audio is checked.',
+    status: 'active',
+    changelog: [
+      { version: '1.0.0', date: '2026-04-18', added: ['tts_voice_id column (default onyx)', '6 voices: alloy/echo/fable/nova/onyx/shimmer', 'Conditional dropdown'], removed: [] },
+    ],
+  },
+  {
+    id: 'audio-on-demand',
+    label: 'On-Demand Audio Request',
+    summary: 'User-triggered audio generation directly from dashboard cards.',
+    status: 'active',
+    changelog: [
+      { version: '1.0.0', date: '2026-04-16', added: ['/api/submissions/:id/request-audio', 'Generate Audio button on dashboard'], removed: [] },
+    ],
+  },
+  {
+    id: 'downloads',
+    label: 'Direct Downloads',
+    summary: 'Per-asset download endpoints: DOCX, MP3, infographic, featured image, planner PDF.',
+    status: 'active',
+    changelog: [
+      { version: '1.0.0', date: '2026-04-11', added: ['DOCX', 'MP3', 'Infographic', 'Featured image', 'Planner PDF'], removed: [] },
+    ],
+  },
+  {
+    id: 'share-links',
+    label: 'Public Share Links',
+    summary: 'No-auth public article links with 7-day expiry. Generate / copy / revoke.',
+    status: 'active',
+    changelog: [
+      { version: '1.0.0', date: '2026-04-09', added: ['7-day token', 'Share panel on dashboard'], removed: [] },
+    ],
+  },
+  {
+    id: 'image-seo',
+    label: 'Image SEO Pipeline',
+    summary: 'Auto SEO companion doc per submission. Rename, optimize, alt text, captions.',
+    status: 'ready-to-deploy',
+    changelog: [
+      { version: '1.0.0', date: '2026-04-17', added: ['Ready to deploy'], removed: [] },
+    ],
+  },
+  {
+    id: 'youtube-transcript',
+    label: 'YouTube Transcript Page',
+    summary: '/youtube-transcript — paste a URL, get raw transcript, AI summary, and optional blog draft.',
+    status: 'planned',
+    changelog: [
+      { version: '1.0.0', date: '2026-04-18', added: ['Planned this deployment'], removed: [] },
+    ],
+  },
+];
+
 function SectionSkill() {
-  const [skills, setSkills] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [viewing, setViewing] = useState(null);
-
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try { const d = await apiFetch('/skills'); setSkills(d.skills || []); }
-      catch (e) { console.error(e); }
-      setLoading(false);
-    }
-    load();
-  }, []);
-
-  if (loading) return <div className="adm-loading">Loading skill versions…</div>;
+  const [expanded, setExpanded] = useState({}); // { [id]: bool }
+  const toggle = (id) => setExpanded(p => ({ ...p, [id]: !p[id] }));
 
   return (
     <div>
       <div className="adm-page-title">Skill Versions</div>
-      <div className="adm-page-sub">Writing skill document history — read only</div>
+      <div className="adm-page-sub">Living inventory of every skill, tool, and feature. <strong style={{ color: 'var(--amber)' }}>Update this changelog as part of every deployment. Each feature change gets a version entry.</strong></div>
 
-      <div className="adm-card">
-        {skills.map(s => (
-          <div key={s.id} className="adm-skill-row">
-            <div>
-              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
-                <span style={{fontSize:14,color: s.active ? 'var(--text)' : 'var(--text-light)'}}>Version {s.version}</span>
-                {s.active && <span className="adm-pill active-p">Active</span>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+        {SKILLS_INVENTORY.map(sk => {
+          const isOpen = !!expanded[sk.id];
+          const latest = sk.changelog?.[0];
+          return (
+            <div key={sk.id} className="adm-card" style={{ padding: 12 }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
+                onClick={() => toggle(sk.id)}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{sk.label}</span>
+                    {latest && (
+                      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', background: 'var(--amber-light)', color: 'var(--amber-dim)', padding: '1px 6px', borderRadius: 100 }}>
+                        v{latest.version}
+                      </span>
+                    )}
+                    <span style={{
+                      fontSize: 10, padding: '1px 6px', borderRadius: 100,
+                      background: sk.status === 'active' ? 'var(--success-bg)' : sk.status === 'ready-to-deploy' ? 'var(--amber-light)' : 'var(--border)',
+                      color: sk.status === 'active' ? 'var(--success)' : sk.status === 'ready-to-deploy' ? 'var(--amber-dim)' : 'var(--text-mid)',
+                      textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600,
+                    }}>{sk.status}</span>
+                    {latest && (
+                      <span style={{ fontSize: 10, color: 'var(--text-light)', fontFamily: 'sans-serif' }}>
+                        {latest.date}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5 }}>{sk.summary}</div>
+                </div>
+                <span style={{ color: 'var(--text-light)', fontSize: 12, flexShrink: 0 }}>{isOpen ? '▲' : '▼'}</span>
               </div>
-              <div style={{fontSize:11,color: s.active ? 'var(--text-light)' : 'var(--text-light)',fontFamily:'sans-serif'}}>
-                {formatDate(s.updated_at)}
-                {s.notes ? ` · ${s.notes}` : ''}
+
+              {isOpen && Array.isArray(sk.changelog) && sk.changelog.length > 0 && (
+                <div style={{ marginTop: 12, borderTop: '1px solid var(--border-light)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {sk.changelog.map((entry, i) => (
+                    <div key={i} style={{ paddingLeft: 8, borderLeft: '2px solid var(--amber-border)' }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>
+                        v{entry.version} <span style={{ color: 'var(--text-light)', fontWeight: 400 }}>· {entry.date}</span>
+                      </div>
+                      {Array.isArray(entry.added) && entry.added.length > 0 && (
+                        <div style={{ marginTop: 4 }}>
+                          <div style={{ fontSize: 10, color: 'var(--success)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600, marginBottom: 2 }}>Added</div>
+                          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.6 }}>
+                            {entry.added.map((a, j) => <li key={j}>{a}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {Array.isArray(entry.removed) && entry.removed.length > 0 && (
+                        <div style={{ marginTop: 4 }}>
+                          <div style={{ fontSize: 10, color: 'var(--error)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600, marginBottom: 2 }}>Removed / Replaced</div>
+                          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.6 }}>
+                            {entry.removed.map((a, j) => <li key={j}>{a}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Danger Zone (super_admin only) — master delete by type + single delete by ID
+// ---------------------------------------------------------------------------
+const DANGER_TYPES = [
+  { id: 'submissions',        label: 'Submissions' },
+  { id: 'itineraries',        label: 'Itineraries' },
+  { id: 'comp_drafts',        label: 'Comp Drafts' },
+  { id: 'legislation',        label: 'Legislation' },
+  { id: 'legislative_briefs', label: 'Legislative Briefs' },
+  { id: 'html_templates',     label: 'HTML Templates' },
+];
+
+function SectionDangerZone() {
+  const [counts, setCounts] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(null); // id of type currently deleting
+  const [armed, setArmed] = useState(null); // {type, count} — first click armed delete
+  const [toast, setToast] = useState('');
+  const [singleType, setSingleType] = useState('submissions');
+  const [singleId, setSingleId] = useState('');
+  const [singleBusy, setSingleBusy] = useState(false);
+
+  const loadCounts = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const d = await apiFetch('/danger/counts');
+      setCounts(d.counts || {});
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadCounts(); }, [loadCounts]);
+
+  async function deleteAll(type, count) {
+    setBusy(type); setError('');
+    try {
+      const d = await apiFetch('/danger/delete-all', {
+        method: 'POST',
+        body: JSON.stringify({ content_type: type }),
+      });
+      setToast(`Deleted ${d.deleted ?? count} rows from ${type}.`);
+      setTimeout(() => setToast(''), 4000);
+      setArmed(null);
+      await loadCounts();
+    } catch (e) { setError(e.message); }
+    setBusy(null);
+  }
+
+  async function deleteSingle() {
+    if (!singleId.trim()) return;
+    setSingleBusy(true); setError('');
+    try {
+      const d = await apiFetch('/danger/delete-item', {
+        method: 'POST',
+        body: JSON.stringify({ content_type: singleType, id: singleId.trim() }),
+      });
+      if (d.success) {
+        setToast(`Deleted ${singleType} ${singleId}.`);
+        setSingleId('');
+        setTimeout(() => setToast(''), 4000);
+        await loadCounts();
+      } else {
+        setError(d.error || 'Delete failed');
+      }
+    } catch (e) { setError(e.message); }
+    setSingleBusy(false);
+  }
+
+  return (
+    <div>
+      <div className="adm-page-title" style={{ color: 'var(--error)' }}>⚠ Danger Zone</div>
+      <div className="adm-page-sub">
+        Super-admin only. Operations here are destructive and cannot be undone. Every delete is logged to <code>legislative_audit_log</code>.
+      </div>
+
+      {error && <div style={{ color: 'var(--error)', fontSize: 12, marginTop: 10, fontFamily: 'sans-serif' }}>{error}</div>}
+      {toast && <div style={{ color: 'var(--success)', fontSize: 12, marginTop: 10, fontFamily: 'sans-serif' }}>{toast}</div>}
+
+      {/* Per-type master delete */}
+      <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {DANGER_TYPES.map(t => {
+          const count = counts?.[t.id];
+          const notTracked = count === -1 || count === undefined;
+          const isArmed = armed?.type === t.id;
+          const isBusy = busy === t.id;
+          return (
+            <div key={t.id} className="adm-card" style={{ padding: 14, borderLeft: '3px solid var(--error)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{t.label}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-light)', fontFamily: 'monospace' }}>
+                    {loading ? '…' : notTracked ? 'Not tracked in this deployment' : `${count} row${count === 1 ? '' : 's'}`}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {!notTracked && !isArmed && (
+                    <button
+                      className="adm-btn red"
+                      disabled={count === 0 || isBusy}
+                      onClick={() => setArmed({ type: t.id, count })}
+                    >
+                      Delete All
+                    </button>
+                  )}
+                  {!notTracked && isArmed && (
+                    <>
+                      <button
+                        className="adm-btn red"
+                        disabled={isBusy}
+                        onClick={() => deleteAll(t.id, count)}
+                        style={{ background: 'var(--error)', color: '#fff', borderColor: 'var(--error)', fontWeight: 700 }}
+                      >
+                        {isBusy ? 'Deleting…' : `Confirm — permanently delete all ${count} ${t.label.toLowerCase()}`}
+                      </button>
+                      <button className="adm-btn" onClick={() => setArmed(null)} disabled={isBusy}>Cancel</button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-            <button className="adm-btn" style={s.active ? {} : {opacity:.5}} onClick={() => setViewing(s)}>View</button>
-          </div>
+          );
+        })}
+      </div>
+
+      {/* Single item delete */}
+      <div className="adm-card" style={{ padding: 14, marginTop: 20, borderLeft: '3px solid var(--error)' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--error)', marginBottom: 10 }}>
+          Delete Single Item
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr auto', gap: 8, alignItems: 'center' }}>
+          <select className="adm-input" value={singleType} onChange={(e) => setSingleType(e.target.value)}>
+            {DANGER_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+          <input
+            className="adm-input"
+            placeholder="Row id"
+            value={singleId}
+            onChange={(e) => setSingleId(e.target.value)}
+            style={{ fontFamily: 'monospace' }}
+          />
+          <button
+            className="adm-btn red"
+            disabled={singleBusy || !singleId.trim()}
+            onClick={deleteSingle}
+          >
+            {singleBusy ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Users & Access (super_admin only) — user list + access matrix
+// ---------------------------------------------------------------------------
+function SectionAccess() {
+  const [tab, setTab] = useState('users'); // 'users' | 'matrix'
+  const [data, setData] = useState(null);  // { users, grants, page_keys }
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selfId, setSelfId] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const d = await apiFetch('/access/matrix');
+      setData(d);
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+    // Fetch current user so we can guard "cannot demote self"
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(r => r.json()).then(d => setSelfId(d?.user?.id || '')).catch(() => {});
+  }, [load]);
+
+  async function toggleFlag(userId, flag, newValue) {
+    try {
+      await apiFetch('/access/toggle-flag', {
+        method: 'POST',
+        body: JSON.stringify({ user_id: userId, flag, value: newValue ? 1 : 0 }),
+      });
+      await load();
+    } catch (e) { setError(e.message); }
+  }
+
+  async function grant(userId, pageKey, actionKey) {
+    try {
+      await apiFetch('/access/grant', { method: 'POST', body: JSON.stringify({ user_id: userId, page_key: pageKey, action_key: actionKey }) });
+      await load();
+    } catch (e) { setError(e.message); }
+  }
+  async function revoke(userId, pageKey, actionKey) {
+    try {
+      await apiFetch('/access/revoke', { method: 'POST', body: JSON.stringify({ user_id: userId, page_key: pageKey, action_key: actionKey }) });
+      await load();
+    } catch (e) { setError(e.message); }
+  }
+
+  if (loading) return <div className="adm-loading">Loading access matrix…</div>;
+  if (!data) return <div className="adm-empty">No data.</div>;
+
+  const grantSet = new Set((data.grants || []).map(g => `${g.user_id}|${g.page_key}|${g.action_key}`));
+
+  return (
+    <div>
+      <div className="adm-page-title">Users & Access</div>
+      <div className="adm-page-sub">Super-admin only. Manage per-user flags and page/action grants.</div>
+
+      {error && <div style={{ color: 'var(--error)', fontSize: 12, marginTop: 10 }}>{error}</div>}
+
+      <div className="adm-tabs" style={{ marginTop: 12 }}>
+        {[['users', 'Users'], ['matrix', 'Access Matrix']].map(([id, label]) => (
+          <button key={id} className={`db-btn ${tab === id ? 'db-btn-accent' : ''}`} onClick={() => setTab(id)}>{label}</button>
         ))}
       </div>
 
-      <div style={{fontFamily:'sans-serif',fontSize:11,color:'var(--text-light)',marginTop:8}}>
-        To publish a new version — insert a new row into agent_skills with active = 1 and set previous row to active = 0.
-      </div>
+      {tab === 'users' && (
+        <div className="adm-table-wrap" style={{ marginTop: 14 }}>
+          <table className="adm-table">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Super Admin</th>
+                <th>Intel Access</th>
+                <th>Admin</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.users.map(u => {
+                const isSelf = u.id === selfId;
+                const isOtherSuper = Number(u.super_admin) === 1 && !isSelf;
+                return (
+                  <tr key={u.id}>
+                    <td style={{ fontSize: 12 }}>{u.email}</td>
+                    <td style={{ fontSize: 12 }}>{u.name}</td>
+                    <td style={{ fontSize: 11 }}>{u.role}</td>
+                    <td>
+                      {Number(u.super_admin) === 1 ? (
+                        <span style={{ fontSize: 11, background: 'var(--amber)', color: '#fff', padding: '2px 8px', borderRadius: 100 }}>★ Super Admin</span>
+                      ) : (
+                        <button className="adm-btn" style={{ fontSize: 10, padding: '2px 8px' }}
+                          disabled={isOtherSuper}
+                          onClick={() => toggleFlag(u.id, 'super_admin', true)}>Make Super</button>
+                      )}
+                    </td>
+                    <td>
+                      <button className="adm-btn" style={{ fontSize: 10, padding: '2px 8px' }}
+                        disabled={isOtherSuper}
+                        onClick={() => toggleFlag(u.id, 'intel_access', Number(u.intel_access) !== 1)}>
+                        {Number(u.intel_access) === 1 ? '● Yes' : '○ No'}
+                      </button>
+                    </td>
+                    <td>
+                      <button className="adm-btn" style={{ fontSize: 10, padding: '2px 8px' }}
+                        disabled={isOtherSuper}
+                        onClick={() => toggleFlag(u.id, 'admin', u.role !== 'admin' && u.role !== 'super_admin')}>
+                        {u.role === 'admin' || u.role === 'super_admin' ? '● Yes' : '○ No'}
+                      </button>
+                    </td>
+                    <td style={{ fontSize: 11, color: 'var(--text-light)' }}>{formatDate(u.created_at)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      {viewing && (
-        <div className="adm-modal-wrap" onClick={() => setViewing(null)}>
-          <div className="adm-modal" onClick={e => e.stopPropagation()}>
-            <div className="adm-modal-title">Version {viewing.version}</div>
-            <textarea
-              className="adm-textarea"
-              readOnly
-              value={viewing.content}
-              style={{minHeight:400}}
-            />
-            <div style={{marginTop:14,display:'flex',justifyContent:'flex-end'}}>
-              <button className="adm-btn" onClick={() => setViewing(null)}>Close</button>
-            </div>
-          </div>
+      {tab === 'matrix' && (
+        <div style={{ marginTop: 14, overflowX: 'auto' }}>
+          <table className="adm-table" style={{ minWidth: 1200 }}>
+            <thead>
+              <tr>
+                <th style={{ position: 'sticky', left: 0, background: 'var(--card)', zIndex: 1 }}>User</th>
+                {Object.entries(data.page_keys).flatMap(([page, actions]) =>
+                  page === 'admin-users' ? [] : (actions).map(act => (
+                    <th key={`${page}|${act}`} style={{ fontSize: 10, writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: 6, minWidth: 28 }}>
+                      {page}:{act}
+                    </th>
+                  ))
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {data.users.map(u => {
+                const isSuper = Number(u.super_admin) === 1;
+                return (
+                  <tr key={u.id}>
+                    <td style={{ fontSize: 11, position: 'sticky', left: 0, background: 'var(--card)', zIndex: 1 }}>
+                      {isSuper && '★ '}{u.email}
+                    </td>
+                    {Object.entries(data.page_keys).flatMap(([page, actions]) =>
+                      page === 'admin-users' ? [] : (actions).map(act => {
+                        const key = `${u.id}|${page}|${act}`;
+                        const granted = isSuper || grantSet.has(key);
+                        return (
+                          <td key={key} style={{ textAlign: 'center', padding: 4 }}>
+                            {isSuper ? (
+                              <span style={{ color: 'var(--amber)' }}>★</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => granted ? revoke(u.id, page, act) : grant(u.id, page, act)}
+                                style={{
+                                  width: 22, height: 22, borderRadius: 4,
+                                  background: granted ? 'var(--success)' : 'transparent',
+                                  border: `1px solid ${granted ? 'var(--success)' : 'var(--border)'}`,
+                                  color: granted ? '#fff' : 'var(--text-light)',
+                                  cursor: 'pointer', fontSize: 12, padding: 0,
+                                }}
+                              >
+                                {granted ? '✓' : ''}
+                              </button>
+                            )}
+                          </td>
+                        );
+                      })
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -1279,13 +1973,15 @@ export default function AdminDashboard() {
   const [badges, setBadges] = useState({ queue: 0, health: 0 });
   const [currentUserRole, setCurrentUserRole] = useState(null);
 
-  // Load current user role
+  // Load current user role. Treat super_admin flag as the authoritative source.
   useEffect(() => {
     async function loadRole() {
       try {
         const res = await fetch('/api/auth/me', { credentials: 'include' });
         const d = await res.json();
-        setCurrentUserRole(d.user?.role ?? 'admin');
+        const u = d.user || {};
+        const role = u.super_admin ? 'super_admin' : (u.role ?? 'admin');
+        setCurrentUserRole(role);
       } catch (e) {}
     }
     loadRole();
@@ -1315,11 +2011,14 @@ export default function AdminDashboard() {
     { id: 'skill',   label: 'Skill Versions', sec: 'Management', superAdminOnly: true },
     { id: 'users',   label: 'Users',          sec: 'Management' },
     { id: 'viewas',  label: 'View as User',   sec: 'Management' },
+    { id: 'templates', label: '⊞ HTML Templates', sec: 'Management' },
+    { id: 'access',  label: 'Users & Access',  sec: 'Management', superAdminOnly: true },
+    { id: 'danger',  label: '⚠ Danger Zone',  sec: 'System',     superAdminOnly: true },
   ];
 
   const renderSection = () => {
     // Guard super_admin-only sections
-    if ((section === 'skill' || section === 'invites') && currentUserRole !== 'super_admin') {
+    if ((section === 'skill' || section === 'invites' || section === 'danger' || section === 'access') && currentUserRole !== 'super_admin') {
       return <div className="adm-empty">Access restricted.</div>;
     }
     switch (section) {
@@ -1333,6 +2032,9 @@ export default function AdminDashboard() {
       case 'skill':    return <SectionSkill />;
       case 'users':    return <SectionUsers currentUserRole={currentUserRole} />;
       case 'viewas':   return <SectionViewAsUser />;
+      case 'templates':return <AdminTemplates />;
+      case 'danger':   return <SectionDangerZone />;
+      case 'access':   return <SectionAccess />;
       default:         return null;
     }
   };
@@ -1349,6 +2051,9 @@ export default function AdminDashboard() {
     skill:   'var(--leather-light)',
     users:   'var(--leather-light)',
     viewas:  'var(--amber)',
+    templates: 'var(--amber)',
+    danger:  'var(--error)',
+    access:  'var(--leather)',
   };
   const accent = SECTION_ACCENT[section] || 'var(--green)';
 

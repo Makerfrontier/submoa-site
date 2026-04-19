@@ -13,6 +13,17 @@ import EmailBrief from './pages/EmailBrief'
 import EmailPreview from './pages/EmailPreview'
 import PresentationBrief from './pages/PresentationBrief'
 import Planner, { PlannerDetail } from './pages/Planner'
+import PlannerBuilding from './pages/PlannerBuilding'
+import CompStudio from './pages/CompStudio'
+import YouTubeTranscript from './pages/YouTubeTranscript'
+import LegislativeIntelligence from './pages/LegislativeIntelligence'
+import PressRelease from './pages/PressRelease'
+import BriefBuilder from './pages/BriefBuilder'
+import AdminBrandBible from './pages/AdminBrandBible'
+import AdminFeatures from './pages/AdminFeatures'
+import AdminBugs from './pages/AdminBugs'
+import BrandBiblePreviewFrame from './pages/BrandBiblePreviewFrame'
+import SiteAgentPanel from './components/SiteAgentPanel.jsx'
 
 function ImpersonationBanner({ user, syncUser, navigate }) {
   const stop = async () => {
@@ -237,20 +248,43 @@ function Sidebar({ navigate, page, syncUser }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const closeMenu = () => setMenuOpen(false)
 
+  // Access grants for this user — fetched once, used to decide which items
+  // (like Legislative Intelligence) should render in the nav.
+  const [access, setAccess] = useState({ super_admin: false, all_access: false, grants: [] })
+  useEffect(() => {
+    if (!user) return
+    fetch('/api/access/my', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setAccess(d) })
+      .catch(() => {})
+  }, [user])
+
   const navTo = (path) => { navigate(path); closeMenu() }
   const isActive = (path) => page === path
 
   const initials = (user?.name || user?.email || '?').trim().charAt(0).toUpperCase()
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || user?.impersonating
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || user?.super_admin || user?.impersonating
 
+  const hasAccess = (pageKey, actionKey = 'view') => {
+    if (access.super_admin || access.all_access) return true
+    return (access.grants || []).some(g => g.page_key === pageKey && g.action_key === actionKey)
+  }
+
+  // `divider: true` entries emit a <div className="sidebar-divider" /> so the
+  // nav can have multiple grouped sections in one flat array.
   const items = [
-    { path: '/dashboard',          label: 'Dashboard',     icon: <SbIconDashboard /> },
-    { path: '/planner',            label: 'Planner',       icon: <span style={{ fontSize: 14 }}>◎</span> },
-    { path: '/author',             label: 'Build Article', icon: <SbIconArticle /> },
-    { path: '/brief/infographic',  label: 'Infographic',   icon: <SbIconInfographic /> },
+    { path: '/dashboard',          label: 'Dashboard',      icon: <SbIconDashboard /> },
+    { path: '/author',             label: 'Build Article',  icon: <SbIconArticle /> },
     { path: '/prompt-builder',     label: 'Prompt Builder', icon: <SbIconPrompt /> },
-    { path: '/brief/presentation', label: 'PowerPoint',    icon: <SbIconDeck /> },
-    { path: '/brief/email',        label: 'Email Builder', icon: <SbIconEmail /> },
+    { path: '/brief/presentation', label: 'PowerPoint',     icon: <SbIconDeck /> },
+    { path: '/brief/email',        label: 'Email Builder',  icon: <SbIconEmail /> },
+    { path: '/comp-studio',        label: 'Comp Studio',    icon: <span style={{ fontSize: 14 }}>⊞</span> },
+    { path: '/youtube-transcript', label: 'YouTube',        icon: <span style={{ fontSize: 14 }}>▶</span> },
+    { divider: true },
+    { path: '/planner',            label: 'Planner',        icon: <span style={{ fontSize: 14 }}>◎</span> },
+    { path: '/brief/infographic',  label: 'Infographic',    icon: <SbIconInfographic /> },
+    { path: '/press-release',      label: 'Press Release',  icon: <span style={{ fontSize: 14 }}>✦</span> },
+    { path: '/brief-builder',      label: 'Brief Builder',  icon: <span style={{ fontSize: 14 }}>◈</span> },
   ]
 
   const sidebarBody = (
@@ -259,7 +293,9 @@ function Sidebar({ navigate, page, syncUser }) {
       <div className="sidebar-logo">Sub Moa Content</div>
 
       <nav className="sidebar-nav" aria-label="Primary">
-        {items.map(it => (
+        {items.map((it, idx) => it.divider ? (
+          <div key={`div-${idx}`} className="sidebar-divider" />
+        ) : (
           <a
             key={it.path}
             href="#"
@@ -279,6 +315,42 @@ function Sidebar({ navigate, page, syncUser }) {
             <SbIconAdmin /><span>Admin</span>
           </a>
         )}
+        {isAdmin && (
+          <a
+            href="#"
+            className={`sidebar-link${isActive('/admin/brand-bible') ? ' active' : ''}`}
+            onClick={e => { e.preventDefault(); navTo('/admin/brand-bible') }}
+          >
+            <span style={{ fontSize: 14 }}>✦</span><span>Brand Bible</span>
+          </a>
+        )}
+        {isAdmin && (
+          <a
+            href="#"
+            className={`sidebar-link${isActive('/admin/features') ? ' active' : ''}`}
+            onClick={e => { e.preventDefault(); navTo('/admin/features') }}
+          >
+            <span style={{ fontSize: 14 }}>◈</span><span>Features</span>
+          </a>
+        )}
+        {isAdmin && (
+          <a
+            href="#"
+            className={`sidebar-link${isActive('/admin/bugs') ? ' active' : ''}`}
+            onClick={e => { e.preventDefault(); navTo('/admin/bugs') }}
+          >
+            <span style={{ fontSize: 14 }}>◎</span><span>Bugs</span>
+          </a>
+        )}
+        {hasAccess('legislative-intelligence') && (
+          <a
+            href="#"
+            className={`sidebar-link${isActive('/legislative-intelligence') ? ' active' : ''}`}
+            onClick={e => { e.preventDefault(); navTo('/legislative-intelligence') }}
+          >
+            <span style={{ fontSize: 14 }}>⚖</span><span>Legislative Intelligence</span>
+          </a>
+        )}
       </nav>
 
       <a
@@ -295,6 +367,27 @@ function Sidebar({ navigate, page, syncUser }) {
 
   return (
     <>
+      {/* Fixed mobile/tablet top bar — one element holding the hamburger and
+          the notification bell. Flush to viewport top via CSS (safe-area-inset
+          honoured). Hidden on desktop; on desktop the hamburger is also hidden
+          and the sidebar is always visible on the left. */}
+      <header className="app-mobile-topbar" role="banner">
+        <button
+          type="button"
+          className="app-mobile-topbar-hamburger"
+          onClick={() => setMenuOpen(true)}
+          aria-label="Open menu"
+        >
+          <svg width="22" height="18" viewBox="0 0 22 18" fill="none" aria-hidden="true">
+            <path d="M1 1h20M1 9h20M1 17h20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </button>
+        <NotificationBell syncUser={syncUser} />
+      </header>
+
+      {/* Legacy floating hamburger — hidden via CSS at mobile/tablet widths
+          now that the fixed top bar provides the toggle. Kept for any state
+          where the mobile top bar is unavailable. */}
       {!menuOpen && (
         <button
           className="sidebar-hamburger"
@@ -329,9 +422,17 @@ function SbIconAdmin() { return (<svg width="14" height="14" viewBox="0 0 14 14"
 // Determine whether a path uses the sidebar app shell (vs marketing/auth top nav).
 function isAppRoute(path) {
   if (!path) return false
-  if (path === '/dashboard' || path === '/author' || path === '/account' ||
+  if (path === '/' ||
+      path === '/dashboard' || path === '/author' || path === '/account' ||
       path === '/admin'     || path === '/writer' ||
-      path === '/prompt-builder') return true
+      path === '/admin/brand-bible' || path === '/admin/features' || path === '/admin/bugs' ||
+      path === '/prompt-builder' ||
+      path === '/comp-studio' ||
+      path === '/youtube-transcript' ||
+      path === '/legislative-intelligence' ||
+      path === '/press-release' ||
+      path === '/brief-builder') return true
+  if (path.match(/^\/briefs\/[^/]+\/edit$/)) return true
   if (path.startsWith('/brief/'))         return true
   if (path.startsWith('/content/'))       return true
   if (path.startsWith('/email-preview/')) return true
@@ -970,7 +1071,7 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
   const [authors, setAuthors] = useState([])
   const [authorProfile, setAuthorProfile] = useState(null)
   const [authorProfileExpanded, setAuthorProfileExpanded] = useState(false)
-  const [form, setForm] = useState({ author: '', topic: '', productLink: '', productDetailsManual: '', humanObservation: '', anecdotalStories: '', includeFaq: false, generateAudio: false, productImages: [], minWordCount: '', targetKeywords: '', articleFormat: 'blog-general', optimizationTarget: 'seo-search', tone_stance: 'neutral', vocalTone: '', youtube_url: '', use_youtube: false, relevantLinks: [], generateFeaturedImage: false, imageMood: 'natural-bright', imagePerspective: 'eye-level', imageSetting: 'outdoors' })
+  const [form, setForm] = useState({ author: '', topic: '', productLink: '', productDetailsManual: '', humanObservation: '', anecdotalStories: '', includeFaq: false, generateAudio: false, ttsVoiceId: 'onyx', productImages: [], minWordCount: '', targetKeywords: '', articleFormat: 'blog-general', optimizationTarget: 'seo-search', tone_stance: 'neutral', vocalTone: '', youtube_url: '', use_youtube: false, relevantLinks: [], generateFeaturedImage: false, imagePromptDirection: '' })
   const [sourceMode, setSourceMode] = useState('topic') // 'topic' | 'youtube'
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -1005,9 +1106,8 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
               includeFaq: !!editingDraft.include_faq,
               generateAudio: !!editingDraft.generate_audio,
               generateFeaturedImage: !!editingDraft.generate_featured_image,
-              imageMood: editingDraft.image_mood || 'natural-bright',
-              imagePerspective: editingDraft.image_perspective || 'eye-level',
-              imageSetting: editingDraft.image_setting || 'outdoors',
+              imagePromptDirection: editingDraft.image_prompt_direction || '',
+              ttsVoiceId: editingDraft.tts_voice_id || 'onyx',
               productImages: [],
               minWordCount: editingDraft.min_word_count || '',
               targetKeywords: editingDraft.target_keywords || '',
@@ -1110,9 +1210,8 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
           include_faq: form.includeFaq ? 1 : 0,
           generate_audio: form.generateAudio ? 1 : 0,
           generate_featured_image: form.generateFeaturedImage ? 1 : 0,
-          image_mood: form.imageMood || null,
-          image_perspective: form.imagePerspective || null,
-          image_setting: form.imageSetting || null,
+          image_prompt_direction: form.imagePromptDirection || null,
+          tts_voice_id: form.ttsVoiceId || 'onyx',
           has_images: form.productImages.length > 0 ? 1 : 0,
           email: form.email,
           youtube_url: form.youtube_url,
@@ -1432,34 +1531,16 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
           </div>
 
           {form.generateFeaturedImage && (
-            <div className="form-group" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-              <div>
-                <label className="form-label">Mood</label>
-                <select name="imageMood" className="form-input form-select" value={form.imageMood} onChange={handleChange}>
-                  <option value="natural-bright">Natural &amp; Bright</option>
-                  <option value="warm-intimate">Warm &amp; Intimate</option>
-                  <option value="dark-dramatic">Dark &amp; Dramatic</option>
-                  <option value="cool-clean">Cool &amp; Clean</option>
-                </select>
-              </div>
-              <div>
-                <label className="form-label">Perspective</label>
-                <select name="imagePerspective" className="form-input form-select" value={form.imagePerspective} onChange={handleChange}>
-                  <option value="eye-level">Eye Level</option>
-                  <option value="wide-shot">Wide Shot</option>
-                  <option value="close-up">Close Up</option>
-                  <option value="aerial">Aerial</option>
-                </select>
-              </div>
-              <div>
-                <label className="form-label">Setting</label>
-                <select name="imageSetting" className="form-input form-select" value={form.imageSetting} onChange={handleChange}>
-                  <option value="outdoors">Outdoors</option>
-                  <option value="wilderness">Wilderness</option>
-                  <option value="indoors">Indoors</option>
-                  <option value="urban">Urban</option>
-                </select>
-              </div>
+            <div className="form-group">
+              <label className="form-label">Image direction</label>
+              <textarea
+                name="imagePromptDirection"
+                className="form-input form-textarea"
+                rows={3}
+                placeholder="Describe the style, mood, setting, and color direction in your own words. Example: vintage editorial, warm amber tones, outdoor wilderness, high contrast graphic design."
+                value={form.imagePromptDirection}
+                onChange={handleChange}
+              />
             </div>
           )}
 
@@ -1504,6 +1585,20 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
             </label>
           </div>
 
+          {form.generateAudio && (
+            <div className="form-group">
+              <label className="form-label">TTS Voice</label>
+              <select name="ttsVoiceId" className="form-input form-select" value={form.ttsVoiceId} onChange={handleChange}>
+                <option value="onyx">Onyx — deep, measured, masculine</option>
+                <option value="alloy">Alloy — balanced, neutral</option>
+                <option value="echo">Echo — clear, resonant, masculine</option>
+                <option value="fable">Fable — warm, storytelling, British</option>
+                <option value="nova">Nova — bright, articulate, feminine</option>
+                <option value="shimmer">Shimmer — soft, intimate, feminine</option>
+              </select>
+            </div>
+          )}
+
           <div className="form-group">
             <label className="form-label">Product Link (optional)</label>
             <input type="url" name="productLink" className="form-input" placeholder="https://..." value={form.productLink} onChange={handleChange} />
@@ -1518,8 +1613,29 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
 
           {/* Submit row */}
           <div style={{ display: 'flex', gap: 10, marginTop: 24, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn-secondary" disabled={loading} onClick={(e) => { e.preventDefault(); handleSubmit(e, 'saved') }}>{loading ? 'Saving…' : 'Save as Draft'}</button>
-            <button type="submit" className="btn-primary" disabled={loading}>{loading ? 'Submitting…' : 'Build Article →'}</button>
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={loading}
+              onClick={(e) => { e.preventDefault(); handleSubmit(e, 'saved') }}
+              onTouchEnd={(e) => {
+                if (loading) return;
+                e.preventDefault();
+                if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
+                handleSubmit(e, 'saved');
+              }}
+            >{loading ? 'Saving…' : 'Save as Draft'}</button>
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={loading}
+              onTouchEnd={(e) => {
+                if (loading) return;
+                e.preventDefault();
+                if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
+                handleSubmit(e);
+              }}
+            >{loading ? 'Submitting…' : 'Build Article →'}</button>
           </div>
         </form>
       </div>
@@ -1894,7 +2010,21 @@ function NotificationBell({ syncUser }) {
     if (!user) return
     let mounted = true
     const poll = async () => {
-      if (!document.hasFocus()) return
+      if (document.visibilityState === 'hidden') return
+      // Prefer the dedicated notifications endpoint so we get the full shape
+      // (title/body/type/link/read). Fall back to the sync endpoint's inline
+      // summary when the direct call fails.
+      try {
+        const res = await fetch('/api/notifications', { credentials: 'include' })
+        if (res.ok) {
+          const d = await res.json()
+          if (mounted) {
+            setNotifs(d.notifications || d.items || [])
+            setCount(d.unread_count || 0)
+          }
+          return
+        }
+      } catch {}
       try {
         const data = await syncUser()
         if (mounted && data?.notifications) {
@@ -1905,7 +2035,9 @@ function NotificationBell({ syncUser }) {
     }
     poll()
     const interval = setInterval(poll, 30000)
-    return () => { mounted = false; clearInterval(interval) }
+    const onVis = () => { if (document.visibilityState === 'visible') poll() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { mounted = false; clearInterval(interval); document.removeEventListener('visibilitychange', onVis) }
   }, [user])
 
   useEffect(() => {
@@ -2962,6 +3094,33 @@ function Reset({ navigate }) {
   )
 }
 
+// ─── LegislativeGate ────────────────────────────────────────────────────────
+// Only super_admin or users with legislative-intelligence:view grant may reach
+// the page. Everyone else is bounced to /dashboard.
+function LegislativeGate({ navigate }) {
+  const { user } = useAuth()
+  const [allowed, setAllowed] = useState(null) // null = checking, true/false after
+  useEffect(() => {
+    if (!user) { setAllowed(false); return }
+    if (user.super_admin) { setAllowed(true); return }
+    fetch('/api/access/my', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) { setAllowed(false); return }
+        if (d.super_admin || d.all_access) { setAllowed(true); return }
+        const ok = (d.grants || []).some(g => g.page_key === 'legislative-intelligence' && g.action_key === 'view')
+        setAllowed(ok)
+      })
+      .catch(() => setAllowed(false))
+  }, [user])
+  useEffect(() => {
+    if (allowed === false) navigate('/dashboard')
+  }, [allowed, navigate])
+  if (allowed === null) return <div style={{ padding: 60, color: 'var(--text-light)', textAlign: 'center' }}>Checking access…</div>
+  if (!allowed) return null
+  return <LegislativeIntelligence navigate={navigate} />
+}
+
 // ─── AdminGuard ─────────────────────────────────────────────────────────────
 function AdminGuard({ children }) {
   const { user, loading } = useAuth();
@@ -3003,6 +3162,17 @@ export default function App() {
 
   const useSidebar = !!user && isAppRoute(page)
 
+  // Standalone preview frame — bypasses all app chrome so it can render
+  // cleanly inside the Brand Bible admin iframe. Must be checked before
+  // the main layout so sidebar/top-nav don't render on top of the preview.
+  if (page === '/admin/brand-bible/preview-frame') {
+    return (
+      <AuthContext.Provider value={authValue}>
+        {loading ? null : user ? <BrandBiblePreviewFrame /> : <Login navigate={navigate} />}
+      </AuthContext.Provider>
+    );
+  }
+
   return (
     <AuthContext.Provider value={authValue}>
       {user?.impersonating && <ImpersonationBanner user={user} syncUser={syncUser} navigate={navigate} />}
@@ -3024,6 +3194,9 @@ export default function App() {
         {page === '/account' && (loading ? null : user ? <Account navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/writer' && (loading ? null : user ? <Writer navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/admin' && (loading ? null : user ? <AdminGuard><AdminDashboard /></AdminGuard> : <Login navigate={navigate} />)}
+        {page === '/admin/brand-bible' && (loading ? null : user ? <AdminGuard><AdminBrandBible /></AdminGuard> : <Login navigate={navigate} />)}
+        {page === '/admin/features' && (loading ? null : user ? <AdminGuard><AdminFeatures /></AdminGuard> : <Login navigate={navigate} />)}
+        {page === '/admin/bugs' && (loading ? null : user ? <AdminGuard><AdminBugs /></AdminGuard> : <Login navigate={navigate} />)}
         {page.match(/^\/content\/[^/]+\/review$/) && (loading ? null : user ? <ReviewPage navigate={navigate} /> : <Login navigate={navigate} />)}
         {page.startsWith('/content/') && !page.match(/^\/content\/[^/]+\/review$/) && (loading ? null : user ? <ContentPage navigate={navigate} user={user} /> : <Login navigate={navigate} />)}
         {page === '/reset' && <Reset navigate={navigate} />}
@@ -3038,10 +3211,18 @@ export default function App() {
         {page.startsWith('/email-preview/') && (loading ? null : user ? <EmailPreview id={page.split('/')[2]} navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/brief/presentation' && (loading ? null : user ? <PresentationBrief navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/planner' && (loading ? null : user ? <Planner navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
-        {page.match(/^\/planner\/[^/]+$/) && (loading ? null : user ? <PlannerDetail navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/comp-studio' && (loading ? null : user ? <CompStudio /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/youtube-transcript' && (loading ? null : user ? <YouTubeTranscript navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/legislative-intelligence' && (loading ? null : user ? <LegislativeGate navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/press-release' && (loading ? null : user ? <PressRelease navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/brief-builder' && (loading ? null : user ? <BriefBuilder navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page.match(/^\/briefs\/[^/]+\/edit$/) && (loading ? null : user ? <BriefBuilder navigate={navigate} editId={page.split('/')[2]} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page.match(/^\/planner\/building\/[^/]+$/) && (loading ? null : user ? <PlannerBuilding navigate={navigate} id={page.split('/')[3]} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page.match(/^\/planner\/(?!building\/)[^/]+$/) && (loading ? null : user ? <PlannerDetail navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page.match(/^\/share\/[^/]+$/) && <ShareRedirect />}
         {page === '/' && <Landing navigate={navigate} />}
       </div>
+      {user && <SiteAgentPanel user={user} currentPage={page} />}
     </AuthContext.Provider>
   )
 }

@@ -9,8 +9,61 @@
 //
 // DATA INJECTION POINTS are marked with: // ← INJECT: [field name]
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import './Dashboard.css';
+import { CARD_CONFIG, evalCondition, renderTemplate } from '../card-config';
+
+// ---------------------------------------------------------------------------
+// CardActions — renders only the actions whose conditions pass. Dead buttons
+// never render — if the condition is false the action is omitted entirely.
+// ---------------------------------------------------------------------------
+function CardActions({ record, contentType, onAction, onPanel }) {
+  const cfg = CARD_CONFIG[contentType];
+  if (!cfg) return null;
+  const actions = cfg.actions.filter(a => evalCondition(a.condition, record));
+  if (actions.length === 0) return null;
+  return (
+    <div className="db-action-row">
+      {actions.map(a => {
+        const variant = a.variant || 'gold';
+        const className =
+          a.type === 'danger' ? 'db-btn-danger' :
+          variant === 'green' ? 'db-btn db-btn-green' :
+          variant === 'accent' ? 'db-btn db-btn-accent' :
+          variant === 'ghost' ? 'db-btn' :
+          variant === 'disabled' ? 'db-btn db-btn-disabled' :
+          'db-btn db-btn-gold';
+        const style = variant === 'ghost'
+          ? { background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-mid)' }
+          : undefined;
+
+        if (a.type === 'link' && a.href) {
+          const href = renderTemplate(a.href, record);
+          return (
+            <a key={a.id} className={className} href={href} style={style}
+               target={href.startsWith('/api/') && (a.id.startsWith('download') || a.id === 'image-seo') ? undefined : undefined}>
+              {a.label}
+            </a>
+          );
+        }
+        return (
+          <button
+            key={a.id}
+            type="button"
+            className={className}
+            style={style}
+            onClick={() => {
+              if (a.type === 'panel') onPanel?.(a, record);
+              else onAction?.(a, record);
+            }}
+          >
+            {a.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -305,6 +358,32 @@ function ActionRow({ submission, onView, onDownload, onPublishClick, onDelete, o
         </button>
       )}
 
+      {/* Requeue failed infographic — resets status to queued and re-enqueues */}
+      {submission.article_format === 'infographic'
+        && (status === 'generation_failed' || status === 'failed') && (
+        <button
+          className="db-btn db-btn-gold"
+          title="Reset status and re-run the infographic generation"
+          onClick={async () => {
+            try {
+              const res = await fetch('/api/infographic/requeue', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ submission_id: submission.id }),
+              });
+              const d = await res.json();
+              if (!res.ok) throw new Error(d?.error || `HTTP ${res.status}`);
+              window.location.reload();
+            } catch (e) {
+              alert('Requeue failed: ' + e.message);
+            }
+          }}
+        >
+          Requeue
+        </button>
+      )}
+
       {/* Share — public link to rendered article */}
       {(status === 'article_done' || status === 'published' || status === 'revision_applied')
         && submission.article_format !== 'email'
@@ -519,17 +598,76 @@ function SharePanel({ submissionId, onClose }) {
   );
 }
 
+// ─── Comp Studio draft card ─────────────────────────────────────────────────
+function CompDraftCard({ row, onDelete }) { // eslint-disable-line no-unused-vars
+  const accent = '#2A5A8A'; // slate blue
+  const ts = typeof row.updated_at === 'number' && row.updated_at < 1e12
+    ? row.updated_at * 1000
+    : (row.updated_at || Date.now());
+  const date = new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return (
+    <div style={{
+      background: 'var(--card)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      padding: '18px 22px',
+      marginBottom: 12,
+      boxShadow: 'var(--shadow-card)',
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(to right, ${accent}, transparent)`, pointerEvents: 'none' }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+        <div style={{ fontSize: 11, color: accent, letterSpacing: '.04em', textTransform: 'uppercase', fontWeight: 600 }}>
+          ⊞ Comp Studio · {date}
+        </div>
+        <span style={{
+          fontSize: 10, padding: '3px 10px', borderRadius: 100,
+          background: 'rgba(42,90,138,0.12)', color: accent,
+          border: '1px solid rgba(42,90,138,0.28)',
+          fontWeight: 600,
+        }}>Draft</span>
+      </div>
+      <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
+        {row.name || 'Untitled Comp'}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-light)', marginBottom: 12 }}>
+        {(row.category || 'general')} · Last saved {new Date(ts).toLocaleString()}
+      </div>
+      <CardActions
+        record={row}
+        contentType="comp_draft"
+        onAction={async (action, r) => {
+          if (action.type === 'danger' && action.endpoint) {
+            if (action.confirmMessage && !window.confirm(action.confirmMessage)) return;
+            const url = renderTemplate(action.endpoint, r);
+            await fetch(url, { method: action.method || 'DELETE', credentials: 'include' });
+            onDelete(r);
+          }
+        }}
+      />
+    </div>
+  );
+}
+
 // ─── Itinerary card ─────────────────────────────────────────────────────────
-function ItineraryCard({ row }) {
+function ItineraryCard({ row, onDelete }) {
   const accent = '#6A4A8A';
   const date = row.created_at ? new Date((typeof row.created_at === 'number' && row.created_at < 1e12 ? row.created_at * 1000 : row.created_at)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-  const status = row.status || 'draft';
+  const rawStatus = row.status || 'draft';
+  // Legacy rows (pre-queue-refactor) kept status='draft' even after the plan
+  // was generated. Treat draft+has_plan as plan_ready so the badge matches
+  // the actual state.
+  const status = (rawStatus === 'draft' && row.has_plan) ? 'plan_ready' : rawStatus;
   const badges = {
-    draft:          { label: 'Draft',          color: 'var(--text-mid)', bg: 'var(--border)' },
-    revision_ready: { label: 'Review Ready',   color: 'var(--amber)', bg: 'var(--amber-light)', pulse: true },
-    approved:       { label: 'Preparing PDF',  color: 'var(--amber)', bg: 'var(--amber-light)', pulse: true },
-    pdf_ready:      { label: 'PDF Ready',      color: 'var(--success)', bg: 'var(--success-bg)' },
-    pdf_failed:     { label: 'PDF Failed',     color: 'var(--error)', bg: 'var(--error-bg)' },
+    draft:              { label: 'Submitted',     color: 'var(--text-mid)', bg: 'var(--border)' },
+    generating:         { label: 'Building Plan', color: 'var(--amber)', bg: 'var(--amber-light)', pulse: true },
+    plan_ready:         { label: 'Plan Ready',    color: 'var(--success)', bg: 'var(--success-bg)' },
+    generation_failed:  { label: 'Generation Failed', color: 'var(--error)', bg: 'var(--error-bg)' },
+    revision_ready:     { label: 'Review Ready',  color: 'var(--amber)', bg: 'var(--amber-light)', pulse: true },
+    approved:           { label: 'Preparing PDF', color: 'var(--amber)', bg: 'var(--amber-light)', pulse: true },
+    pdf_ready:          { label: 'PDF Ready',     color: 'var(--success)', bg: 'var(--success-bg)' },
+    pdf_failed:         { label: 'PDF Failed',    color: 'var(--error)', bg: 'var(--error-bg)' },
   };
   const badge = badges[status] || badges.draft;
   return (
@@ -561,13 +699,18 @@ function ItineraryCard({ row }) {
       <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>
         {row.title || '—'}
       </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {status === 'pdf_ready' ? (
-          <a href={`/api/planner/${row.id}/download/pdf`} download
-            className="db-btn db-btn-green">Download PDF</a>
-        ) : null}
-        <a href={`/planner/${row.id}`} className="db-btn db-btn-gold" style={{ textDecoration: 'none' }}>View Plan →</a>
-      </div>
+      <CardActions
+        record={{ ...row, status, has_plan: !!row.has_plan }}
+        contentType="itinerary"
+        onAction={async (action, r) => {
+          if (action.type === 'danger' && action.endpoint) {
+            if (action.confirmMessage && !window.confirm(action.confirmMessage)) return;
+            const url = renderTemplate(action.endpoint, r);
+            const res = await fetch(url, { method: action.method || 'DELETE', credentials: 'include' });
+            if (res.ok) onDelete?.(r);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -627,6 +770,50 @@ function PresentationCard({ row }) {
       {status === 'failed' && (
         <div style={{ fontSize: 12, color: '#d45a5a' }}>Build failed — contact support</div>
       )}
+    </div>
+  );
+}
+
+// ─── Generic card (used for prompt-builder, press-release, brief-builder) ──
+function GenericCard({ accent, eyebrow, title, status, date, actions = [] }) {
+  const [armed, setArmed] = useState(null);
+  const ts = typeof date === 'number' && date < 1e12 ? date * 1000 : (date || Date.now());
+  const dateStr = new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return (
+    <div style={{
+      background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12,
+      padding: '16px 20px', marginBottom: 12, position: 'relative', overflow: 'hidden',
+      boxShadow: 'var(--shadow-card)',
+    }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(to right, ${accent}, transparent)` }} />
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10, letterSpacing: '.06em', textTransform: 'uppercase', color: accent, fontWeight: 700 }}>
+            {eyebrow} · {dateStr}
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {title}
+          </div>
+          {status && (
+            <div style={{ fontSize: 10, color: accent, marginTop: 4, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              {status}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="db-action-row" style={{ marginTop: 10 }}>
+        {actions.map((a, i) => (
+          <button key={i}
+            className={a.danger ? 'db-btn-danger' : 'db-btn db-btn-gold'}
+            onClick={a.danger && armed !== i
+              ? () => setArmed(i)
+              : async () => { await a.onClick(); setArmed(null); }}
+            onBlur={() => { if (armed === i) setArmed(null); }}
+          >
+            {a.danger && armed === i ? 'Confirm?' : a.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -913,8 +1100,47 @@ function AudioRow({ submission, onRequestAudio }) {
 // ---------------------------------------------------------------------------
 // Single card — one structure, always identical
 // ---------------------------------------------------------------------------
-function SubmissionCard({ submission, onView, onDownload, onPublishClick, onPublish, onDelete, onEdit, onDiscard, onRequestRevision, onRequestAudio, publishingId, publishUrl, setPublishUrl, revisionPanel, setRevisionPanel }) {
+const SETTLED_STATUSES = ['article_done', 'published', 'pdf_ready', 'approved', 'revision_applied', 'saved'];
+function isSettledStatus(s) { return SETTLED_STATUSES.includes(s); }
+
+function SubmissionCard({ submission, onView, onDownload, onPublishClick, onPublish, onDelete, onEdit, onDiscard, onRequestRevision, onRequestAudio, publishingId, publishUrl, setPublishUrl, revisionPanel, setRevisionPanel, expandOverride }) {
   const [shareOpen, setShareOpen] = useState(false);
+  // Collapse defaults: settled-status cards collapsed, everything else expanded.
+  const settled = isSettledStatus(submission.status);
+  const [collapsed, setCollapsed] = useState(settled);
+  // Expand all / Collapse all override from the dashboard header.
+  useEffect(() => {
+    if (expandOverride === 'expand') setCollapsed(false);
+    else if (expandOverride === 'collapse') setCollapsed(true);
+  }, [expandOverride]);
+  const [imgUploading, setImgUploading] = useState(false);
+  const [imgUploadError, setImgUploadError] = useState('');
+  const [imgCacheBust, setImgCacheBust] = useState(0);
+  const imgFileInputRef = useRef(null);
+
+  const handleReplaceImage = async (file) => {
+    if (!file) return;
+    setImgUploadError('');
+    setImgUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('featured_image', file);
+      const res = await fetch(`/api/submissions/${submission.id}/upload-featured-image`, {
+        method: 'POST',
+        credentials: 'include',
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setImgCacheBust(Date.now());
+    } catch (e) {
+      setImgUploadError(e.message);
+    } finally {
+      setImgUploading(false);
+      if (imgFileInputRef.current) imgFileInputRef.current.value = '';
+    }
+  };
+
   const {
     topic,               // ← INJECT: topic field
     article_format,      // ← INJECT: article_format field
@@ -929,6 +1155,7 @@ function SubmissionCard({ submission, onView, onDownload, onPublishClick, onPubl
     article_content,     // ← INJECT: article_content field (used to determine if view button is active)
     featured_image_filename,
     generated_image_key,
+    custom_featured_image_key,
     content_rating,
     llm_display_name,
   } = submission;
@@ -968,39 +1195,136 @@ function SubmissionCard({ submission, onView, onDownload, onPublishClick, onPubl
     ? <span className="db-badge-analysis">Analysis</span>
     : <span className="db-badge-brief">Brief</span>;
 
+  if (collapsed) {
+    return (
+      <div className={cardClass} style={{ cursor: 'pointer' }} onClick={() => setCollapsed(false)}>
+        <div className="db-card-top" style={{ marginBottom: 0 }}>
+          <div className="db-card-meta">
+            {formatDate(created_at)}
+            {article_format ? ` · ${formatLabel(article_format)}` : ''}
+            {llmBadge}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {badge}
+            <span style={{ color: 'var(--text-light)', fontSize: 12 }}>▼</span>
+          </div>
+        </div>
+        <div className="db-card-title" style={{ marginTop: 6, marginBottom: 0 }}>
+          {topic || '—'}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cardClass}>
 
-      {/* ── Card top: meta + badge ── */}
+      {/* ── Card top: meta + badge + collapse chevron ── */}
       <div className="db-card-top">
         <div className="db-card-meta">
           {formatDate(created_at)}
           {article_format ? ` · ${formatLabel(article_format)}` : ''}
           {llmBadge}
         </div>
-        {badge}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {badge}
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-light)', cursor: 'pointer', fontSize: 12, padding: 2 }}
+            title="Collapse card"
+          >▲</button>
+        </div>
       </div>
 
       {/* ── Featured image thumbnail ── */}
-      {(generated_image_key || featured_image_filename) && (
-        <div style={{
-          marginBottom: 12,
-          borderRadius: 6,
-          overflow: 'hidden',
-          border: '0.5px solid #1e3a1e',
-        }}>
-          <img
-            src={generated_image_key
-              ? `/api/submissions/${submission.id}/featured-image`
-              : `/api/submissions/${submission.id}/images/${featured_image_filename}`}
-            alt={topic || ''}
-            style={{
-              width: '100%',
-              height: 180,
-              objectFit: 'cover',
-              display: 'block',
-            }}
+      {(custom_featured_image_key || generated_image_key || featured_image_filename) && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{
+            borderRadius: 6,
+            overflow: 'hidden',
+            border: '0.5px solid #1e3a1e',
+            position: 'relative',
+          }}>
+            <img
+              src={(() => {
+                const base = (custom_featured_image_key || generated_image_key)
+                  ? `/api/submissions/${submission.id}/featured-image`
+                  : `/api/submissions/${submission.id}/images/${featured_image_filename}`;
+                return imgCacheBust ? `${base}?v=${imgCacheBust}` : base;
+              })()}
+              alt={topic || ''}
+              style={{
+                width: '100%',
+                height: 180,
+                objectFit: 'cover',
+                display: 'block',
+                opacity: imgUploading ? 0.4 : 1,
+                transition: 'opacity 0.15s',
+              }}
+            />
+            {imgUploading && (
+              <div style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(0,0,0,0.15)',
+              }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  border: '3px solid rgba(255,255,255,0.4)',
+                  borderTopColor: '#fff',
+                  animation: 'db-pulse 0.9s linear infinite',
+                }} />
+              </div>
+            )}
+          </div>
+          {(status === 'article_done' || status === 'published') && (
+            <div style={{ marginTop: 6 }}>
+              <input
+                ref={imgFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                style={{ display: 'none' }}
+                onChange={(e) => handleReplaceImage(e.target.files?.[0])}
+              />
+              <button
+                type="button"
+                className="db-btn"
+                onClick={() => imgFileInputRef.current?.click()}
+                disabled={imgUploading}
+                style={{ fontSize: 11, padding: '4px 10px' }}
+              >
+                {imgUploading ? 'Uploading…' : 'Replace image'}
+              </button>
+              {imgUploadError && (
+                <div style={{ fontSize: 11, color: 'var(--error)', marginTop: 4 }}>{imgUploadError}</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      {/* ── Add featured image (no image yet, only after article is done) ── */}
+      {!custom_featured_image_key && !generated_image_key && !featured_image_filename && (status === 'article_done' || status === 'published') && (
+        <div style={{ marginBottom: 12 }}>
+          <input
+            ref={imgFileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            style={{ display: 'none' }}
+            onChange={(e) => handleReplaceImage(e.target.files?.[0])}
           />
+          <button
+            type="button"
+            className="db-btn"
+            onClick={() => imgFileInputRef.current?.click()}
+            disabled={imgUploading}
+            style={{ fontSize: 11, padding: '4px 10px' }}
+          >
+            {imgUploading ? 'Uploading…' : 'Upload featured image'}
+          </button>
+          {imgUploadError && (
+            <div style={{ fontSize: 11, color: 'var(--error)', marginTop: 4 }}>{imgUploadError}</div>
+          )}
         </div>
       )}
 
@@ -1156,6 +1480,10 @@ export default function Dashboard() {
   const [presentationSubs, setPresentationSubs] = useState([]);
   const [prompts, setPrompts]         = useState([]);
   const [itineraries, setItineraries] = useState([]);
+  const [compDrafts, setCompDrafts]   = useState([]);
+  const [savedPrompts, setSavedPrompts] = useState([]);
+  const [pressReleases, setPressReleases] = useState([]);
+  const [briefs, setBriefs] = useState([]);
   const [filter, setFilter]           = useState('all');
   const [loading, setLoading]         = useState(true);
   const [user, setUser]               = useState(null); // ← INJECT: from GET /api/me or session
@@ -1165,17 +1493,27 @@ export default function Dashboard() {
   const [publishUrl, setPublishUrl] = useState('');
   const [pausePoll, setPausePoll] = useState(false);
   const [revisionPanel, setRevisionPanel] = useState(null); // { submissionId, ...fields }
+  const [expandOverride, setExpandOverride] = useState(null); // null | 'expand' | 'collapse'
 
   // ── Load submissions ──
   const load = useCallback(async () => {
     setLoading(true);
+    // Fire-and-forget: surface stuck infographic jobs as generation_failed so
+    // the requeue button becomes actionable instead of the card hanging in
+    // "Generating" forever. Any error is intentionally swallowed — this is
+    // best-effort maintenance.
+    fetch('/api/infographic/sweep-stuck', { method: 'POST', credentials: 'include' }).catch(() => {});
     try {
-      const [subRes, promptRes, emailRes, presRes, itinRes] = await Promise.all([
+      const [subRes, promptRes, emailRes, presRes, itinRes, draftRes, savedPromptRes, pressRes, briefRes] = await Promise.all([
         fetch('/api/submissions', { credentials: 'include' }),
         fetch('/api/prompts', { credentials: 'include' }),
         fetch('/api/email-submissions', { credentials: 'include' }),
         fetch('/api/presentation-submissions', { credentials: 'include' }),
         fetch('/api/planner/list', { credentials: 'include' }),
+        fetch('/api/comp-studio/drafts', { credentials: 'include' }),
+        fetch('/api/prompt-builder', { credentials: 'include' }),
+        fetch('/api/press-release', { credentials: 'include' }),
+        fetch('/api/brief-builder', { credentials: 'include' }),
       ]);
       const data = await subRes.json();
       setUser(data.user);
@@ -1195,6 +1533,22 @@ export default function Dashboard() {
       if (itinRes.ok) {
         const itinData = await itinRes.json();
         setItineraries(Array.isArray(itinData.itineraries) ? itinData.itineraries : []);
+      }
+      if (draftRes.ok) {
+        const draftData = await draftRes.json();
+        setCompDrafts(Array.isArray(draftData.drafts) ? draftData.drafts : []);
+      }
+      if (savedPromptRes?.ok) {
+        const d = await savedPromptRes.json();
+        setSavedPrompts(Array.isArray(d.prompts) ? d.prompts : []);
+      }
+      if (pressRes?.ok) {
+        const d = await pressRes.json();
+        setPressReleases(Array.isArray(d.press_releases) ? d.press_releases : []);
+      }
+      if (briefRes?.ok) {
+        const d = await briefRes.json();
+        setBriefs(Array.isArray(d.briefs) ? d.briefs : []);
       }
     } catch (e) {
       console.error('Failed to load dashboard:', e);
@@ -1307,6 +1661,20 @@ export default function Dashboard() {
     });
   }
 
+  async function handleDeleteCompDraft(row) {
+    setConfirmModal({
+      message: `Delete comp draft "${row.name || 'Untitled Comp'}"? This cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await fetch(`/api/comp-studio/drafts/${row.id}`, { method: 'DELETE', credentials: 'include' });
+          setCompDrafts(prev => prev.filter(d => d.id !== row.id));
+        } catch (e) {
+          setToast('Delete failed — ' + (e?.message || e));
+        }
+      },
+    });
+  }
+
   async function handleRequestAudio(id) {
     const res = await fetch(`/api/submissions/${id}/request-audio`, {
       method: 'POST',
@@ -1387,6 +1755,20 @@ export default function Dashboard() {
         }}>
           Dashboard
         </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
+          <button
+            type="button"
+            className="db-btn"
+            onClick={() => { setExpandOverride('expand'); setTimeout(() => setExpandOverride(null), 50); }}
+            style={{ fontSize: 11, padding: '4px 10px' }}
+          >Expand all</button>
+          <button
+            type="button"
+            className="db-btn"
+            onClick={() => { setExpandOverride('collapse'); setTimeout(() => setExpandOverride(null), 50); }}
+            style={{ fontSize: 11, padding: '4px 10px' }}
+          >Collapse all</button>
+        </div>
         <div className="db-stats-row">
           <div className="db-stat-item">
             <span className="db-stat-num" style={{ color: 'var(--green)' }}>{submissions.length}</span>
@@ -1440,7 +1822,7 @@ export default function Dashboard() {
         <div style={{ color: '#3a5a3a', fontFamily: 'sans-serif', fontSize: 13, padding: '20px 0' }}>
           Loading...
         </div>
-      ) : (filtered.length === 0 && emailSubs.length === 0 && presentationSubs.length === 0 && prompts.length === 0 && itineraries.length === 0) ? (
+      ) : (filtered.length === 0 && emailSubs.length === 0 && presentationSubs.length === 0 && prompts.length === 0 && itineraries.length === 0 && compDrafts.length === 0 && savedPrompts.length === 0 && pressReleases.length === 0 && briefs.length === 0) ? (
         <div className="db-empty">
           <span className="db-empty-icon">✦</span>
           <div className="db-empty-title">No articles yet.</div>
@@ -1449,12 +1831,26 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="db-cards-container">
+          {compDrafts.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: '#2A5A8A', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+                Comp Studio Drafts
+              </div>
+              {compDrafts.map(row => <CompDraftCard key={row.id} row={row} onDelete={handleDeleteCompDraft} />)}
+            </div>
+          )}
           {itineraries.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 11, color: '#6A4A8A', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 10 }}>
                 Itineraries
               </div>
-              {itineraries.map(row => <ItineraryCard key={row.id} row={row} />)}
+              {itineraries.map(row => (
+                <ItineraryCard
+                  key={row.id}
+                  row={row}
+                  onDelete={(r) => setItineraries(prev => prev.filter(x => x.id !== r.id))}
+                />
+              ))}
             </div>
           )}
           {presentationSubs.length > 0 && (
@@ -1481,6 +1877,62 @@ export default function Dashboard() {
               {prompts.map(p => <PromptCard key={p.id} prompt={p} />)}
             </div>
           )}
+          {savedPrompts.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: '#7A4A2A', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+                Prompt Builder
+              </div>
+              {savedPrompts.map(p => (
+                <GenericCard key={p.id} accent="#7A4A2A"
+                  eyebrow={`PROMPT BUILDER · ${p.target_model || ''}`}
+                  title={p.title || '(untitled prompt)'}
+                  date={p.created_at}
+                  actions={[
+                    { label: 'Copy', onClick: () => navigator.clipboard?.writeText(p.prompt_text) },
+                    { label: 'Delete', danger: true, onClick: async () => { await fetch(`/api/prompt-builder/${p.id}`, { method: 'DELETE', credentials: 'include' }); setSavedPrompts(prev => prev.filter(x => x.id !== p.id)); } },
+                  ]}
+                />
+              ))}
+            </div>
+          )}
+          {pressReleases.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: '#2A6B8A', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+                Press Releases
+              </div>
+              {pressReleases.map(pr => (
+                <GenericCard key={pr.id} accent="#2A6B8A"
+                  eyebrow="PRESS RELEASE"
+                  title={`${pr.business_name || ''}${pr.business_name ? ' · ' : ''}${(pr.product_or_news || '').slice(0, 60)}`}
+                  status={pr.status}
+                  date={pr.created_at}
+                  actions={[
+                    { label: 'View', onClick: () => { window.location.href = `/press-release?id=${pr.id}`; } },
+                    { label: 'Delete', danger: true, onClick: async () => { await fetch(`/api/press-release/${pr.id}`, { method: 'DELETE', credentials: 'include' }); setPressReleases(prev => prev.filter(x => x.id !== pr.id)); } },
+                  ]}
+                />
+              ))}
+            </div>
+          )}
+          {briefs.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: '#6B4A8A', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+                Briefs
+              </div>
+              {briefs.map(b => (
+                <GenericCard key={b.id} accent="#6B4A8A"
+                  eyebrow={`BRIEF BUILDER · ${String(b.brief_type || '').toUpperCase()}`}
+                  title={b.title || '(untitled brief)'}
+                  status={b.status}
+                  date={b.created_at}
+                  actions={[
+                    { label: 'View', onClick: () => { window.location.href = `/brief-builder?id=${b.id}`; } },
+                    { label: 'Delete', danger: true, onClick: async () => { await fetch(`/api/brief-builder/${b.id}`, { method: 'DELETE', credentials: 'include' }); setBriefs(prev => prev.filter(x => x.id !== b.id)); } },
+                  ]}
+                />
+              ))}
+            </div>
+          )}
           {filtered.map(sub => (
           <SubmissionCard
             key={sub.id}
@@ -1499,6 +1951,7 @@ export default function Dashboard() {
             setPublishUrl={setPublishUrl}
             revisionPanel={revisionPanel}
             setRevisionPanel={setRevisionPanel}
+            expandOverride={expandOverride}
           />
         ))}
         </div>

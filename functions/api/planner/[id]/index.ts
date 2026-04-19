@@ -1,4 +1,5 @@
-// GET /api/planner/:id — returns an itinerary (used by PlannerDetail).
+// GET    /api/planner/:id — returns an itinerary (used by PlannerDetail).
+// DELETE /api/planner/:id — removes an itinerary owned by the caller.
 
 import { json, getSessionUser } from '../../_utils';
 
@@ -10,7 +11,9 @@ function parseId(pathname: string): string | null {
 
 export async function onRequest(context: any) {
   const { request, env } = context;
-  if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+  if (request.method !== 'GET' && request.method !== 'DELETE') {
+    return json({ error: 'Method not allowed' }, 405);
+  }
 
   const user = await getSessionUser(request, env);
   if (!user) return json({ error: 'Not authenticated' }, 401);
@@ -24,6 +27,16 @@ export async function onRequest(context: any) {
     'SELECT * FROM itinerary_submissions WHERE id = ? AND account_id = ?'
   ).bind(id, account_id).first();
   if (!row) return json({ error: 'Not found' }, 404);
+
+  if (request.method === 'DELETE') {
+    if (row.pdf_r2_key) {
+      try { await env.SUBMOA_IMAGES.delete(row.pdf_r2_key); } catch {}
+    }
+    await env.submoacontent_db.prepare(
+      'DELETE FROM itinerary_submissions WHERE id = ? AND account_id = ?'
+    ).bind(id, account_id).run();
+    return json({ success: true });
+  }
 
   try { row.plan_json = row.plan_json ? JSON.parse(row.plan_json) : null; } catch {}
   try { row.revised_plan_json = row.revised_plan_json ? JSON.parse(row.revised_plan_json) : null; } catch {}

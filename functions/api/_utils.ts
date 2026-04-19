@@ -20,8 +20,11 @@ export interface Env {
   YOUTUBE_API_KEY: string;
   GENERATION_QUEUE: Queue;
   AI: Ai;
+  BROWSER?: Fetcher;
+  FALAI_API_KEY?: string;
   CRON_SECRET?: string;
   STAGING_BYPASS_TOKEN?: string;
+  CLAUDE_CODE_API_KEY?: string;
   hashPassword(password: string): Promise<string>;
 }
 
@@ -135,7 +138,9 @@ export async function getRealSessionUser(request: Request, env: Env): Promise<Us
   return {
     id: row.uid, email: row.email, name: row.name, password_hash: row.password_hash,
     role: row.role || 'user', created_at: row.created_at, updated_at: row.updated_at, account_id: row.account_id,
-  };
+    super_admin: Number(row.super_admin) === 1,
+    intel_access: Number(row.intel_access) === 1,
+  } as any;
 }
 
 function getImpersonateTarget(request: Request): string | null {
@@ -163,7 +168,7 @@ export async function getSessionUser(request: Request, env: Env): Promise<User |
   if (!token) return null;
 
   const sessions = await env.submoacontent_db
-    .prepare('SELECT s.*, u.id as uid, u.email, u.name, u.password_hash, u.role, u.created_at, u.updated_at, u.account_id FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = ? AND s.expires_at > ?')
+    .prepare('SELECT s.*, u.id as uid, u.email, u.name, u.password_hash, u.role, u.created_at, u.updated_at, u.account_id, u.super_admin, u.intel_access FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = ? AND s.expires_at > ?')
     .bind(token, Date.now())
     .all();
 
@@ -179,6 +184,9 @@ export async function getSessionUser(request: Request, env: Env): Promise<User |
     created_at: row.created_at,
     updated_at: row.updated_at,
     account_id: row.account_id,
+    // @ts-ignore — runtime additions read by the client nav
+    super_admin: Number(row.super_admin) === 1,
+    intel_access: Number(row.intel_access) === 1,
   };
 
   // Admin impersonation — if the real session user is admin/super_admin AND an
@@ -231,6 +239,40 @@ export function deleteSessionCookie() {
 
 export function requireAuth(request: Request, env: Env): Promise<User | null> {
   return getSessionUser(request, env);
+}
+
+// Super admin check — true for super_admin role OR super_admin=1 column OR impersonating session
+export function isSuperAdmin(user: User | null): boolean {
+  if (!user) return false;
+  // @ts-ignore — runtime fields
+  return user.role === 'super_admin' || user.super_admin === true || (user as any).super_admin === 1;
+}
+
+// Writeback auth — accepts either the super-admin session cookie OR an
+// Authorization: Bearer <CLAUDE_CODE_API_KEY> header. Used by endpoints that
+// Claude Code itself POSTs back to when running packaged tasks.
+export async function requireWritebackAuth(request: Request, env: Env): Promise<{ ok: true; via: 'session' | 'bearer'; user: User | null } | { ok: false; response: Response }> {
+  const auth = request.headers.get('Authorization') || '';
+  if (auth.startsWith('Bearer ') && env.CLAUDE_CODE_API_KEY) {
+    const token = auth.slice(7).trim();
+    if (token && token === env.CLAUDE_CODE_API_KEY) {
+      return { ok: true, via: 'bearer', user: null };
+    }
+  }
+  const user = await getSessionUser(request, env);
+  if (user && (isSuperAdmin(user) || isAdmin(user))) {
+    return { ok: true, via: 'session', user };
+  }
+  return { ok: false, response: json({ error: 'Unauthorized' }, 401) };
+}
+
+// Super-admin-only check — cookie session must be super_admin OR admin. Used by
+// admin UIs that don't need writeback-bearer support.
+export async function requireSuperAdmin(request: Request, env: Env): Promise<{ ok: true; user: User } | { ok: false; response: Response }> {
+  const user = await getSessionUser(request, env);
+  if (!user) return { ok: false, response: json({ error: 'Unauthorized' }, 401) };
+  if (!isSuperAdmin(user) && !isAdmin(user)) return { ok: false, response: json({ error: 'Forbidden' }, 403) };
+  return { ok: true, user };
 }
 
 export async function scrapeProductPage(url: string): Promise<string> {
