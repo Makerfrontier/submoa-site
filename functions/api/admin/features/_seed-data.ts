@@ -1,0 +1,86 @@
+// Feature slug definitions — seed data for /api/admin/features/seed-all.
+// Each entry is the minimal scaffold for a feature card. Descriptive fields
+// (what_it_does, how_its_built) are empty by default — the admin fills them
+// in via the UI or Site Agent.
+
+export interface FeatureSeed {
+  slug: string;
+  name: string;
+  status: 'active' | 'planned' | 'deprecated';
+  source_files: string[];
+  pending: string[];
+}
+
+export const FEATURE_SEEDS: FeatureSeed[] = [
+  { slug: 'comp-studio', name: 'Comp Studio', status: 'active',
+    source_files: ['src/pages/CompStudio.jsx', 'functions/api/comp-studio/'],
+    pending: [
+      'URL capture endpoint',
+      'Two-layer block highlight',
+      'Sub-block editing',
+      'Page takeover detection',
+      'Global redesign mode',
+      'Lock system',
+      'Full draft copy replacement',
+      'AI image generation for photo blocks',
+    ] },
+  { slug: 'admin-templates', name: 'Admin Templates', status: 'active',
+    source_files: ['src/pages/AdminTemplates.jsx', 'functions/api/admin/templates/'], pending: [] },
+  { slug: 'dashboard', name: 'Dashboard', status: 'active',
+    source_files: ['src/pages/Dashboard.jsx'], pending: [] },
+  { slug: 'build-article', name: 'Build Article', status: 'active',
+    source_files: ['src/pages/BuildArticle.jsx', 'src/queue-consumer.ts'], pending: [] },
+  { slug: 'prompt-builder', name: 'Prompt Builder', status: 'active',
+    source_files: ['src/pages/PromptBuilder.tsx', 'functions/api/prompts/', 'functions/api/prompt-builder/'], pending: [] },
+  { slug: 'press-release', name: 'Press Release', status: 'active',
+    source_files: ['src/pages/PressRelease.jsx', 'functions/api/press-release/'], pending: [] },
+  { slug: 'brief-builder', name: 'Brief Builder', status: 'active',
+    source_files: ['src/pages/BriefBuilder.jsx', 'functions/api/brief-builder/'], pending: [] },
+  { slug: 'email-builder', name: 'Email Builder', status: 'active',
+    source_files: ['src/pages/EmailBrief.tsx', 'functions/api/email/'],
+    pending: ['Bake 7 approved template baselines into generation pipeline'] },
+  { slug: 'powerpoint-builder', name: 'PowerPoint Builder', status: 'active',
+    source_files: ['src/pages/PresentationBrief.tsx', 'functions/api/presentations/'],
+    pending: ['Bake 9 approved template baselines into generation pipeline'] },
+  { slug: 'youtube-transcript', name: 'YouTube Transcript', status: 'active',
+    source_files: ['src/pages/YouTubeTranscript.jsx', 'functions/api/youtube/'], pending: [] },
+  { slug: 'planner', name: 'Planner', status: 'active',
+    source_files: ['src/pages/Planner.jsx', 'src/queue-consumer.ts'], pending: [] },
+  { slug: 'infographic', name: 'Infographic', status: 'active',
+    source_files: ['src/pages/InfographicBrief.tsx', 'src/queue-consumer.ts'], pending: [] },
+  { slug: 'notifications', name: 'Notifications', status: 'active',
+    source_files: ['functions/api/notifications/'], pending: [] },
+  { slug: 'article-flagging', name: 'Article Flagging', status: 'active',
+    source_files: ['functions/api/submissions/'], pending: [] },
+  { slug: 'share-links', name: 'Share Links', status: 'active',
+    source_files: ['functions/api/share/'], pending: [] },
+  { slug: 'direct-downloads', name: 'Direct Downloads', status: 'active',
+    source_files: ['functions/api/submissions/'], pending: [] },
+  { slug: 'photo-generation', name: 'Photo Generation', status: 'active',
+    source_files: ['src/queue-consumer.ts'], pending: [] },
+  { slug: 'tts-audio', name: 'TTS Audio', status: 'active',
+    source_files: ['src/queue-consumer.ts', 'functions/api/_tts.ts'], pending: [] },
+  { slug: 'congress-brief', name: 'Congress Brief', status: 'active',
+    source_files: ['functions/api/legislative/'],
+    pending: ['Wire DataforSEO party focus data'] },
+  { slug: 'openstates-config', name: 'OpenStates Config', status: 'planned',
+    source_files: [],
+    pending: ['Set OPENSTATES_API_KEY', 'Build state-level brief'] },
+  { slug: 'image-seo-pipeline', name: 'Image SEO Pipeline', status: 'planned',
+    source_files: [],
+    pending: ['Full deployment (prompt ready in CLAUDE_CODE_PROMPT_IMAGES.md)'] },
+  { slug: 'policing-agent', name: 'Policing Agent', status: 'planned',
+    source_files: [],
+    pending: ['Build src/policing-agent.ts from spec'] },
+  { slug: 'brand-bible', name: 'Brand Bible', status: 'active',
+    source_files: ['src/brand-bible.tsx', 'src/pages/AdminBrandBible.jsx', 'functions/api/admin/brand-bible/'], pending: [] },
+  { slug: 'feature-specs', name: 'Feature Specs', status: 'active',
+    source_files: ['src/pages/AdminFeatures.jsx', 'functions/api/admin/features/'], pending: [] },
+  { slug: 'bug-log', name: 'Bug Log', status: 'active',
+    source_files: ['src/pages/AdminBugs.jsx', 'functions/api/admin/bugs/'], pending: [] },
+  { slug: 'site-agent', name: 'Site Agent', status: 'active',
+    source_files: ['src/site-agent.ts', 'src/components/SiteAgentPanel.jsx', 'functions/api/admin/agent/'], pending: [] },
+  { slug: 'platform-state', name: 'Platform State', status: 'active',
+    source_files: ['schema.sql', 'wrangler.jsonc'],
+    pending: ['Atomic Engine AI architecture planning'] },
+];

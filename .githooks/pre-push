@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Heads-up that pushing to GitHub does NOT deploy this project.
+# Cloudflare Pages is not connected to git. Run `npm run deploy` after merge.
+
+cat <<'BANNER'
+────────────────────────────────────────────────────────────────────────
+⚠  Pushing to GitHub does NOT deploy SubMoa Content.
+   Cloudflare Pages is not connected to this repo.
+   After merge, run:    npm run deploy
+                        npm run deploy:consumer  (if consumer changed)
+                        npm run deploy:cron      (if cron changed)
+────────────────────────────────────────────────────────────────────────
+BANNER
+
+# Don't block the push — just warn.
+exit 0
