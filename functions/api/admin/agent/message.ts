@@ -1,6 +1,11 @@
 import { json, generateId } from '../../_utils';
 import { requireAgentAdmin, getOrCreateConversation, appendMessage } from './_shared';
 
+// The one and only correct production base URL. Sonnet is instructed to use
+// this verbatim and every output is regex-checked below to auto-correct any
+// 'submoa.com' slip. Do not change without coordinating a DNS switch.
+const PRODUCTION_BASE_URL = 'https://submoacontent.com';
+
 // POST /api/admin/agent/message
 // Body: { message, current_page, conversation_id? }
 //
@@ -130,6 +135,26 @@ ${bbPrefix}
 Then: numbered STEPs, explicit file paths, explicit bash commands, explicit test/verify steps.
 End with writeback contract instructions so Claude Code auto-closes bugs and updates specs.
 
+FEATURE CLASSIFICATION RULES:
+
+When assigning bugs to features for writeback PATCH instructions, follow this priority:
+1. If the bug already has feature_slug set, use it. Trust user assignment.
+2. If unassigned, infer from the file paths the fix will touch — match against
+   the feature spec whose source_files most closely overlap. NEVER infer from
+   keywords in the bug title alone ("popup" does not mean notifications).
+3. UI primitives under src/components/ consumed by multiple features belong to
+   the "shared-components" feature, not to whichever feature uses them first.
+4. If you cannot confidently assign a bug to one feature, attribute to
+   "general-uncategorized". Do NOT guess.
+5. NEVER PATCH a feature spec with content that doesn't accurately describe
+   that feature's actual behavior. The spec is the source of truth.
+
+WRITEBACK CONTRACT URL:
+
+All writeback endpoints use the base URL: ${PRODUCTION_BASE_URL}
+Do not abbreviate. Do not use submoa.com or any other variant. The production
+domain is submoacontent.com, period.
+
 Task id: ${taskId}
 Writeback contract to append at end:
 
@@ -141,24 +166,24 @@ This task has ID: ${taskId}
 Authenticate all POSTs below with header: Authorization: Bearer \${CLAUDE_CODE_API_KEY from .env.local}
 
 1. At the start of this work:
-   POST /api/admin/agent/tasks/${taskId}/start
+   POST ${PRODUCTION_BASE_URL}/api/admin/agent/tasks/${taskId}/start
 2. After each logical unit of work:
-   POST /api/admin/agent/tasks/${taskId}/progress
+   POST ${PRODUCTION_BASE_URL}/api/admin/agent/tasks/${taskId}/progress
    Body: { "message": "one-line description" }
 3. When closing a bug:
-   POST /api/admin/bugs/{bug_id}/close
+   POST ${PRODUCTION_BASE_URL}/api/admin/bugs/<actual-bug-id>/close
    Body: { "closed_in_task_id": "${taskId}", "notes": "how it was fixed" }
 4. When updating a feature spec:
-   PATCH /api/admin/features/{feature_slug}
+   PATCH ${PRODUCTION_BASE_URL}/api/admin/features/<actual-feature-slug>
    Body: { partial spec fields, last_updated_by: "claude_code" }
 5. When a decision is made:
-   POST /api/admin/decisions
+   POST ${PRODUCTION_BASE_URL}/api/admin/decisions
    Body: { summary, context, feature_slug }
 6. At the end of the task:
-   POST /api/admin/agent/tasks/${taskId}/complete
+   POST ${PRODUCTION_BASE_URL}/api/admin/agent/tasks/${taskId}/complete
    Body: { files_changed, bugs_closed, features_updated, summary }
 
-These writebacks are MANDATORY.`;
+These writebacks are MANDATORY. Fill every <placeholder> with the real id/slug — unfilled placeholders will be rejected.`;
       const sonnetRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -180,7 +205,25 @@ These writebacks are MANDATORY.`;
         }),
       });
       const sd: any = await sonnetRes.json();
-      const prompt = String(sd?.choices?.[0]?.message?.content || '').trim();
+      let prompt = String(sd?.choices?.[0]?.message?.content || '').trim();
+
+      // Safety net: auto-correct any 'submoa.com' slip to the real domain.
+      const wrongUrlPattern = /https?:\/\/(?:www\.)?submoa\.com/gi;
+      const wrongUrlHits = prompt.match(wrongUrlPattern);
+      if (wrongUrlHits && wrongUrlHits.length > 0) {
+        prompt = prompt.replace(wrongUrlPattern, PRODUCTION_BASE_URL);
+        console.warn(`[site-agent/package_prompt] corrected ${wrongUrlHits.length} bad URL(s) to ${PRODUCTION_BASE_URL} for task ${taskId}`);
+      }
+
+      // Hard reject: unfilled template placeholders mean the generated prompt
+      // would POST to literal '{bug_id}' and 404.
+      const placeholderPattern = /\{(bug_id|task_id|feature_slug)\}/g;
+      const leaks = prompt.match(placeholderPattern);
+      if (leaks && leaks.length > 0) {
+        reply = `Packager rejected: generated prompt contains unfilled placeholders (${leaks.join(', ')}). Ask me again with a more specific request so the model can fill them in.`;
+        prompt = '';
+      }
+
       if (prompt) {
         reply = prompt;
         actions = [{

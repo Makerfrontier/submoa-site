@@ -1,5 +1,11 @@
 import { json, generateId, requireWritebackAuth } from '../../_utils';
 
+// The one and only correct production base URL. Sonnet is instructed to use
+// this via the system prompt and every output is regex-checked below to
+// auto-correct any 'submoa.com' slip. Do not change without coordinating a DNS
+// switch — this string is load-bearing in every generated writeback contract.
+const PRODUCTION_BASE_URL = 'https://submoacontent.com';
+
 // POST /api/admin/bugs/package
 // Body: { bug_ids: string[], task_title?: string }
 // Returns: { prompt_text, task_id }
@@ -26,6 +32,35 @@ export async function onRequest(context: any) {
     .all();
   const bugs: any[] = bugsResult.results || [];
   if (bugs.length === 0) return json({ error: 'No bugs found for provided ids' }, 404);
+
+  // Catch-all for bugs that have no feature_slug (null/empty/unknown). Without
+  // this, the packager would emit a prompt with missing feature-spec context
+  // for orphaned bugs — or worse, error when building the features block.
+  // We ensure a 'general-uncategorized' row exists in the features table and
+  // reassign any orphaned bugs to it before assembling the prompt.
+  const GENERAL_SLUG = 'general-uncategorized';
+  const orphanIds = bugs.filter(b => !b.feature_slug || !String(b.feature_slug).trim()).map(b => b.id);
+  if (orphanIds.length > 0) {
+    const existing = await context.env.submoacontent_db
+      .prepare(`SELECT slug FROM features WHERE slug = ?`).bind(GENERAL_SLUG).first();
+    if (!existing) {
+      await context.env.submoacontent_db
+        .prepare(`
+          INSERT INTO features (slug, name, status, what_it_does, how_its_built, behavior, last_updated, last_updated_by, seeded)
+          VALUES (?, 'General / Uncategorized', 'active', ?, 'N/A', 'N/A', unixepoch(), 'claude_code', 1)
+        `)
+        .bind(GENERAL_SLUG, 'Catch-all feature for bugs that do not belong to a specific feature. Created automatically by the bug packager when an unassigned bug is selected.')
+        .run();
+    }
+    const orphanPlaceholders = orphanIds.map(() => '?').join(',');
+    await context.env.submoacontent_db
+      .prepare(`UPDATE bug_reports SET feature_slug = ? WHERE id IN (${orphanPlaceholders})`)
+      .bind(GENERAL_SLUG, ...orphanIds)
+      .run();
+    for (const b of bugs) {
+      if (orphanIds.includes(b.id)) b.feature_slug = GENERAL_SLUG;
+    }
+  }
 
   // Fetch unique feature specs
   const slugs = [...new Set(bugs.map((b: any) => b.feature_slug))];
@@ -96,17 +131,55 @@ Generate a complete Claude Code .md prompt following this structure:
 - An "Out of scope" section listing the other open bugs above (do NOT fix those)
 - Writeback contract at the bottom with task id ${taskId} and the exact bug ids to close`;
 
-  const systemPrompt = `You are packaging a Claude Code terminal prompt for the SubMoa Content platform. Output a complete .md prompt ready to paste into a terminal. Be specific about file paths. Be concrete about implementation. Do not invent features that aren't in the feature specs. Include the Brand Bible prefix verbatim. End with the writeback contract showing:
+  const systemPrompt = `You are packaging a Claude Code terminal prompt for the SubMoa Content platform. Output a complete .md prompt ready to paste into a terminal. Be specific about file paths. Be concrete about implementation. Do not invent features that aren't in the feature specs. Include the Brand Bible prefix verbatim.
 
-1. POST /api/admin/agent/tasks/{task_id}/start
-2. POST /api/admin/agent/tasks/{task_id}/progress per unit of work
-3. POST /api/admin/bugs/{bug_id}/close for each closed bug (include closed_in_task_id)
-4. PATCH /api/admin/features/{feature_slug} for each updated spec
-5. POST /api/admin/agent/tasks/{task_id}/complete at the end
+FEATURE CLASSIFICATION RULES:
+
+When assigning bugs to features for writeback PATCH instructions, follow this priority:
+
+1. If the bug already has feature_slug set, use it. Trust user assignment.
+
+2. If the bug is unassigned, infer from:
+   a. The actual file paths the fix will touch (provided in the bugs payload as
+      affected_source_files when known)
+   b. The feature spec whose source_files most closely match those paths
+   c. NEVER infer from keywords in the bug title alone — "popup" does not mean
+      notifications; "search" does not mean comp-studio.
+
+3. UI primitives that live under src/components/ and are consumed by multiple
+   features belong to the "shared-components" feature, not to the feature where
+   they happen to be used first.
+
+4. If you cannot confidently assign a bug to a single feature, attribute it to
+   "general-uncategorized" and let the user re-attribute manually. Do NOT guess.
+
+5. NEVER PATCH a feature spec with content that doesn't accurately describe the
+   feature's actual behavior. The feature spec is the user's source of truth —
+   misleading PATCHes degrade trust in the entire system.
+
+WRITEBACK CONTRACT URL:
+
+The writeback contract section of every generated prompt MUST use the exact base
+URL: ${PRODUCTION_BASE_URL}
+
+Do not abbreviate. Do not infer from "SubMoa" branding mentions. Do not use
+submoa.com or any other variant. The production domain is submoacontent.com,
+period.
+
+Use this exact URL prefix for all writeback POST/PATCH endpoints:
+  ${PRODUCTION_BASE_URL}/api/admin/...
+
+End with the writeback contract showing (absolute URLs):
+
+1. POST ${PRODUCTION_BASE_URL}/api/admin/agent/tasks/${taskId}/start
+2. POST ${PRODUCTION_BASE_URL}/api/admin/agent/tasks/${taskId}/progress per unit of work
+3. POST ${PRODUCTION_BASE_URL}/api/admin/bugs/<actual-bug-id>/close for each closed bug (include closed_in_task_id)
+4. PATCH ${PRODUCTION_BASE_URL}/api/admin/features/<actual-feature-slug> for each updated spec
+5. POST ${PRODUCTION_BASE_URL}/api/admin/agent/tasks/${taskId}/complete at the end
 
 All writebacks authenticate with: Authorization: Bearer \${CLAUDE_CODE_API_KEY from .env.local}
 
-Return only the .md prompt — no preamble, no code fences around the whole thing.`;
+Return only the .md prompt — no preamble, no code fences around the whole thing. Fill every {placeholder} with real values — unfilled placeholders will be rejected.`;
 
   try {
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -127,8 +200,30 @@ Return only the .md prompt — no preamble, no code fences around the whole thin
       }),
     });
     const data: any = await res.json();
-    const promptText = String(data?.choices?.[0]?.message?.content || '').trim();
+    let promptText = String(data?.choices?.[0]?.message?.content || '').trim();
     if (!promptText) return json({ error: 'Empty prompt from model' }, 502);
+
+    // Safety net: Sonnet has been observed to substitute 'submoa.com' for the
+    // real domain. Silently auto-correct rather than reject — the underlying
+    // packaging is fine, only the URL host is wrong.
+    const wrongUrlPattern = /https?:\/\/(?:www\.)?submoa\.com/gi;
+    const wrongUrlMatches = promptText.match(wrongUrlPattern);
+    if (wrongUrlMatches && wrongUrlMatches.length > 0) {
+      promptText = promptText.replace(wrongUrlPattern, PRODUCTION_BASE_URL);
+      console.warn(`[packager] Corrected ${wrongUrlMatches.length} bad URL(s) to ${PRODUCTION_BASE_URL} for task ${taskId}`);
+    }
+
+    // Hard reject: unfilled template placeholders mean the generated prompt
+    // is unusable (Claude Code would POST to literal '{bug_id}' and 404).
+    const placeholderPattern = /\{(bug_id|task_id|feature_slug)\}/g;
+    const leaks = promptText.match(placeholderPattern);
+    if (leaks && leaks.length > 0) {
+      return json({
+        error: 'Generated prompt contains unfilled placeholders. Re-package required.',
+        code: 'PACKAGER_PLACEHOLDER_LEAK',
+        placeholders_found: leaks,
+      }, 500);
+    }
 
     // Persist the task row
     await context.env.submoacontent_db
