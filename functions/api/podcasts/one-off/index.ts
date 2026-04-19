@@ -28,6 +28,15 @@ export async function onRequest(context: any) {
   const outroText = String(body?.outro_text || '');
   const hosts: any[] = Array.isArray(body?.hosts) ? body.hosts : [];
 
+  // Duration constraint (optional). If target_duration_seconds is provided,
+  // store it as target_length_minutes (rounded) on the episode so the later
+  // generate-script call picks it up and passes it to generatePodcastScript.
+  // variance_seconds is a generator-time parameter and is not persisted here;
+  // the default (120s) applies unless the generate-script call overrides.
+  const rawTargetSec = Number(body?.target_duration_seconds);
+  const targetDurationSeconds = Number.isFinite(rawTargetSec) && rawTargetSec > 0 ? rawTargetSec : null;
+  const targetLengthMinutes = targetDurationSeconds ? Math.max(1, Math.round(targetDurationSeconds / 60)) : null;
+
   const podcastId = generateId();
   const episodeId = generateId();
   const now = Math.floor(Date.now() / 1000);
@@ -46,10 +55,10 @@ export async function onRequest(context: any) {
     // episode row
     await context.env.submoacontent_db
       .prepare(`
-        INSERT INTO podcast_episodes (id, podcast_id, account_id, episode_number, topic, brief, status, created_at, updated_at)
-        VALUES (?, ?, ?, 1, ?, ?, 'script_draft', ?, ?)
+        INSERT INTO podcast_episodes (id, podcast_id, account_id, episode_number, topic, brief, status, target_length_minutes, created_at, updated_at)
+        VALUES (?, ?, ?, 1, ?, ?, 'script_draft', ?, ?, ?)
       `)
-      .bind(episodeId, podcastId, accountId, topic, brief, now, now)
+      .bind(episodeId, podcastId, accountId, topic, brief, targetLengthMinutes, now, now)
       .run();
 
     // episode_hosts — only if the user included any; order preserved.
