@@ -195,17 +195,57 @@ const INJECTED_SCRIPT = `
     var attrs = new Map();
     var cardParents = new Set();
 
-    // Extract the logo img from the first <header> as its own editable block.
-    // Registering the entire <header>/<nav>/<footer> as a single block caused
-    // dedup to drop every image/heading/link inside, leaving the user unable
-    // to swap the logo. Nav link editing is out of scope for now — leaf
-    // items inside nav/footer are simply not exposed as blocks.
+    // Logo detection — handles three shapes:
+    //   A) a real <img> (prefer logo/brand class/src hints, fall through to any img)
+    //   B) a CSS background-image on a logo-classed/ided element — check both
+    //      the element itself and its ::before pseudo so templates that paint
+    //      the mark via a pseudo layer still register.
+    // Whichever logo we find gets added to cardParents so the later <header>
+    // block registration doesn't dedup-drop it.
     var firstHeader = document.querySelector('header');
     if (firstHeader && !isExcludedChrome(firstHeader)) {
-      var logoImg = firstHeader.querySelector('img');
+      var logoImg = firstHeader.querySelector(
+        'img[class*="logo" i], img[class*="brand" i], img[src*="logo" i], img[src*="brand" i]'
+      ) || firstHeader.querySelector('img');
       if (logoImg && !candidates.has(logoImg)) {
         candidates.set(logoImg, { type: 'logo' });
+        cardParents.add(logoImg);
+      } else if (!logoImg) {
+        var logoHints = firstHeader.querySelectorAll(
+          '[class*="logo" i], [class*="brand" i], [id*="logo" i], [id*="brand" i]'
+        );
+        for (var li = 0; li < logoHints.length; li++) {
+          var hel = logoHints[li];
+          if (candidates.has(hel)) continue;
+          var csMain = null, csBefore = null;
+          try { csMain = window.getComputedStyle(hel); } catch (_) {}
+          try { csBefore = window.getComputedStyle(hel, '::before'); } catch (_) {}
+          var bgPick = '', bgIsBefore = false;
+          if (csMain && csMain.backgroundImage && csMain.backgroundImage !== 'none') {
+            bgPick = csMain.backgroundImage;
+          } else if (csBefore && csBefore.backgroundImage && csBefore.backgroundImage !== 'none') {
+            bgPick = csBefore.backgroundImage;
+            bgIsBefore = true;
+          }
+          if (!bgPick) continue;
+          var mUrl = bgPick.match(/url\\(["']?([^"')]+)["']?\\)/);
+          if (!mUrl) continue;
+          candidates.set(hel, { type: 'logo', isCssBg: true, cssUrl: mUrl[1], bgIsBefore: bgIsBefore });
+          cardParents.add(hel);
+          break;
+        }
       }
+    }
+
+    // Register the first <header> and <footer> as their own blocks so the
+    // user can swap them out with an uploaded screenshot. Logo candidates
+    // above were added to cardParents so they still survive dedup.
+    if (firstHeader && !isExcludedChrome(firstHeader) && !candidates.has(firstHeader)) {
+      candidates.set(firstHeader, { type: 'header' });
+    }
+    var firstFooter = document.querySelector('footer');
+    if (firstFooter && !isExcludedChrome(firstFooter) && !candidates.has(firstFooter)) {
+      candidates.set(firstFooter, { type: 'footer' });
     }
 
     // Ad placeholders — check rendered dimensions against IAB
@@ -260,6 +300,16 @@ const INJECTED_SCRIPT = `
       if (innerCards > 0) return;
       candidates.set(el, { type: 'card' });
       cardParents.add(el);
+    });
+
+    // Previously-swapped video placeholders — keep them as video blocks so
+    // the edit panel still acts on them across repeat collect() runs. Must
+    // run BEFORE the generic image detector so the img isn't picked up as
+    // a plain image block.
+    document.querySelectorAll('img[data-comp-video-placeholder]').forEach(function(el) {
+      if (el.closest('[data-comp-skip]') || isExcludedChrome(el)) return;
+      if (candidates.has(el)) return;
+      candidates.set(el, { type: 'video', videoPlaceholder: true });
     });
 
     // Video embeds — any iframe pointing at YouTube/Vimeo/Wistia, or a plain
@@ -419,13 +469,29 @@ const INJECTED_SCRIPT = `
         };
       }
       if (type === 'logo') {
-        block.imgW = c.el.naturalWidth || c.el.width || c.el.offsetWidth || 0;
-        block.imgH = c.el.naturalHeight || c.el.height || c.el.offsetHeight || 0;
-        block.currentSrc = c.el.getAttribute('src') || '';
+        if (c.info.isCssBg) {
+          block.imgW = c.el.offsetWidth || 0;
+          block.imgH = c.el.offsetHeight || 0;
+          block.currentSrc = c.info.cssUrl || '';
+          block.isCssBg = true;
+          block.bgIsBefore = !!c.info.bgIsBefore;
+        } else {
+          block.imgW = c.el.naturalWidth || c.el.width || c.el.offsetWidth || 0;
+          block.imgH = c.el.naturalHeight || c.el.height || c.el.offsetHeight || 0;
+          block.currentSrc = c.el.getAttribute('src') || '';
+          block.isCssBg = false;
+        }
       }
       if (type === 'video') {
-        block.videoTag = c.el.tagName.toUpperCase(); // 'IFRAME' or 'VIDEO'
-        block.videoSrc = c.el.getAttribute('src') || '';
+        if (c.info.videoPlaceholder || c.el.getAttribute('data-comp-video-placeholder') === '1') {
+          block.videoTag = 'IFRAME';
+          block.videoSrc = c.el.getAttribute('data-comp-video-src') || '';
+          block.videoPlaceholder = true;
+        } else {
+          block.videoTag = c.el.tagName.toUpperCase();
+          block.videoSrc = c.el.getAttribute('src') || '';
+          block.videoPlaceholder = false;
+        }
         block.videoW = c.el.offsetWidth || c.el.width || 0;
         block.videoH = c.el.offsetHeight || c.el.height || 0;
       }
@@ -444,10 +510,67 @@ const INJECTED_SCRIPT = `
       if (c.el.getAttribute('data-comp-locked') === '1') block.locked = true;
       blocks.push(block);
     });
+
+    // YouTube/Vimeo iframes hard-block cross-origin framing with X-Frame-Options
+    // which makes the canvas show a broken "content blocked" tile. Swap each
+    // video iframe for a clickable thumbnail img (YouTube mqdefault, or a
+    // generic SVG tile). The real iframe outerHTML is kept in
+    // data-comp-original-html and restored on serialize so exports still
+    // carry the player.
+    var VIDEO_PLACEHOLDER_SVG = 'data:image/svg+xml,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">' +
+      '<rect width="640" height="360" fill="#1a1a1a"/>' +
+      '<circle cx="320" cy="180" r="44" fill="none" stroke="#FAF7F2" stroke-width="3"/>' +
+      '<polygon points="308,156 308,204 346,180" fill="#FAF7F2"/>' +
+      '<text x="320" y="248" text-anchor="middle" fill="#B8872E" font-family="sans-serif" font-size="14" letter-spacing="2">VIDEO — CLICK TO EDIT</text>' +
+      '</svg>'
+    );
+    blocks.forEach(function(blk) {
+      if (blk.type !== 'video' || blk.videoPlaceholder) return;
+      var el = findById(blk.id);
+      if (!el || el.tagName !== 'IFRAME') return;
+      var src = el.getAttribute('src') || '';
+      var ytM = src.match(/(?:youtube\\.com\\/embed\\/|youtu\\.be\\/|youtube\\-nocookie\\.com\\/embed\\/)([A-Za-z0-9_-]{6,})/);
+      var thumb = ytM ? ('https://img.youtube.com/vi/' + ytM[1] + '/hqdefault.jpg') : VIDEO_PLACEHOLDER_SVG;
+      var w = el.offsetWidth || parseInt(el.getAttribute('width') || '0', 10) || 0;
+      var h = el.offsetHeight || parseInt(el.getAttribute('height') || '0', 10) || 0;
+      var img = document.createElement('img');
+      img.setAttribute('src', thumb);
+      img.setAttribute('data-comp-id', blk.id);
+      img.setAttribute('data-comp-video-placeholder', '1');
+      img.setAttribute('data-comp-video-src', src);
+      img.setAttribute('data-comp-original-html', encodeURIComponent(el.outerHTML));
+      img.style.display = 'block';
+      img.style.objectFit = 'cover';
+      img.style.cursor = 'pointer';
+      if (w) img.style.width = w + 'px';
+      if (h) img.style.height = h + 'px';
+      blk.videoPlaceholder = true;
+      if (el.parentNode) el.parentNode.replaceChild(img, el);
+    });
+
     parent.postMessage({ source: 'comp-studio', type: 'blocks', blocks: blocks }, '*');
   }
 
   function findById(id) { return document.querySelector('[data-comp-id="' + id + '"]'); }
+
+  // Walks a cloned DOM tree and replaces any img[data-comp-video-placeholder]
+  // with the real iframe markup captured in data-comp-original-html. Keeps
+  // the export fidelity intact while the canvas keeps showing thumbnails.
+  function restoreVideoPlaceholders(rootEl) {
+    if (!rootEl || typeof rootEl.querySelectorAll !== 'function') return;
+    rootEl.querySelectorAll('img[data-comp-video-placeholder]').forEach(function(img) {
+      var raw = img.getAttribute('data-comp-original-html') || '';
+      if (!raw) return;
+      try {
+        var decoded = decodeURIComponent(raw);
+        var tpl = document.createElement('template');
+        tpl.innerHTML = decoded;
+        var restored = tpl.content.firstElementChild;
+        if (restored) img.replaceWith(restored);
+      } catch (_) {}
+    });
+  }
 
   // Swap the source on an <img> without letting the browser load the old
   // CDN URL via srcset/sizes or a parent <picture><source srcset>. Preserves
@@ -597,9 +720,77 @@ const INJECTED_SCRIPT = `
       if (!newUrl) return;
       // Normalize YouTube watch/short URLs to the embed form so the iframe
       // still renders after the swap.
-      var ytM = newUrl.match(/(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/shorts\\/)([A-Za-z0-9_-]+)/i);
+      var ytM = newUrl.match(/(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/shorts\\/|youtube\\.com\\/embed\\/)([A-Za-z0-9_-]+)/i);
       var embedUrl = ytM ? ('https://www.youtube.com/embed/' + ytM[1]) : newUrl;
-      vEl.setAttribute('src', embedUrl);
+      if (vEl.getAttribute('data-comp-video-placeholder') === '1') {
+        // Placeholder img — update the thumbnail AND the stored iframe HTML
+        // so export restores with the new URL.
+        if (ytM) vEl.setAttribute('src', 'https://img.youtube.com/vi/' + ytM[1] + '/hqdefault.jpg');
+        vEl.setAttribute('data-comp-video-src', embedUrl);
+        var raw = vEl.getAttribute('data-comp-original-html') || '';
+        if (raw) {
+          try {
+            var decoded = decodeURIComponent(raw);
+            decoded = decoded.replace(/\\ssrc\\s*=\\s*(["'])[^"']*\\1/i, ' src="' + embedUrl + '"');
+            vEl.setAttribute('data-comp-original-html', encodeURIComponent(decoded));
+          } catch (_) {}
+        }
+      } else {
+        vEl.setAttribute('src', embedUrl);
+      }
+      collect();
+      return;
+    }
+    if (m.type === 'applyLogoEdit') {
+      var lEl = findById(m.id);
+      if (!lEl) return;
+      var newSrc = String(m.newSrc || '').trim();
+      if (!newSrc) return;
+      if (lEl.tagName === 'IMG') {
+        swapImgSrc(lEl, newSrc);
+      } else {
+        // CSS-background logo — paint the new URL inline on the element AND
+        // inject a scoped style to override the ::before pseudo in case the
+        // original mark was painted there.
+        lEl.style.backgroundImage = 'url("' + newSrc + '")';
+        if (!lEl.style.backgroundSize)     lEl.style.backgroundSize = 'contain';
+        if (!lEl.style.backgroundPosition) lEl.style.backgroundPosition = 'center';
+        if (!lEl.style.backgroundRepeat)   lEl.style.backgroundRepeat = 'no-repeat';
+        var styleId = 'comp-logo-override-' + m.id;
+        var existing = document.getElementById(styleId);
+        if (existing) existing.remove();
+        var safeId = String(m.id).replace(/"/g, '\\\\"');
+        var styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        styleEl.setAttribute('data-comp-skip', '1');
+        styleEl.textContent =
+          '[data-comp-id="' + safeId + '"]::before, [data-comp-id="' + safeId + '"]:before {' +
+          ' background-image: url("' + newSrc + '") !important;' +
+          ' background-size: contain !important;' +
+          ' background-position: center !important;' +
+          ' background-repeat: no-repeat !important;' +
+          '}';
+        document.head.appendChild(styleEl);
+      }
+      collect();
+      return;
+    }
+    if (m.type === 'replaceHeaderFooterWithScreenshot') {
+      var hfEl = findById(m.id);
+      if (!hfEl) return;
+      var dataUrl = String(m.dataUrl || '').trim();
+      if (!dataUrl) return;
+      var ow = hfEl.offsetWidth || 0;
+      var hfImg = document.createElement('img');
+      hfImg.setAttribute('src', dataUrl);
+      hfImg.setAttribute('data-comp-id', m.id);
+      hfImg.setAttribute('data-comp-hfs-screenshot', '1');
+      hfImg.setAttribute('data-comp-hfs-type', String(m.blockType || ''));
+      hfImg.setAttribute('data-comp-original-html', encodeURIComponent(hfEl.outerHTML));
+      hfImg.style.display = 'block';
+      hfImg.style.width = '100%';
+      if (ow) hfImg.style.maxWidth = ow + 'px';
+      if (hfEl.parentNode) hfEl.parentNode.replaceChild(hfImg, hfEl);
       collect();
       return;
     }
@@ -681,13 +872,16 @@ const INJECTED_SCRIPT = `
       return;
     }
     if (m.type === 'serialize') {
-      parent.postMessage({ source: 'comp-studio', type: 'serialized', html: '<!DOCTYPE html>\\n' + document.documentElement.outerHTML }, '*');
+      var sClone = document.documentElement.cloneNode(true);
+      restoreVideoPlaceholders(sClone);
+      parent.postMessage({ source: 'comp-studio', type: 'serialized', html: '<!DOCTYPE html>\\n' + sClone.outerHTML }, '*');
       return;
     }
     if (m.type === 'serializeStripped') {
       // Serialize the DOM with locked blocks replaced by placeholders so the
       // master prompt never rewrites locked regions. Parent re-injects them.
       var cloneRoot = document.documentElement.cloneNode(true);
+      restoreVideoPlaceholders(cloneRoot);
       var locked = cloneRoot.querySelectorAll('[data-comp-locked="1"]');
       locked.forEach(function(el) {
         var placeholder = cloneRoot.ownerDocument.createElement('div');
@@ -825,6 +1019,8 @@ function BlockRow({ block, selected, onSelect, onToggleLock, onAction, category,
             <CardEditPanel block={block} onAction={onAction} setToast={setToast} />
           ) : block.type === 'video' ? (
             <VideoEditPanel block={block} onAction={onAction} />
+          ) : block.type === 'header' || block.type === 'footer' ? (
+            <HeaderFooterEditPanel block={block} onAction={onAction} setToast={setToast} />
           ) : (
             <TextEditPanel block={block} category={category} onAction={onAction} setToast={setToast} rawHtml={rawHtml} />
           )}
@@ -1161,6 +1357,89 @@ function VideoEditPanel({ block, onAction }) {
   );
 }
 
+// ─── Header / Footer edit panel ────────────────────────────────────────────
+// The header/footer regions of a saved page are structurally dense (nav,
+// search, logo, icons, banners, etc). Editing individual elements inside
+// rarely matches the user's mental model — they typically want a clean
+// screenshot of the desired header/footer from the live site. Upload the
+// screenshot and we replace the entire region with an <img> at the same
+// slot, preserving the original markup in data-comp-original-html for
+// later export or restore.
+function HeaderFooterEditPanel({ block, onAction, setToast }) {
+  const [preview, setPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const label = block.type === 'header' ? 'Header' : 'Footer';
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const mime = file.type || 'image/png';
+      const b64 = btoa(Array.from(new Uint8Array(buf)).map(c => String.fromCharCode(c)).join(''));
+      const dataUrl = `data:${mime};base64,${b64}`;
+      setPreview(dataUrl);
+      onAction({
+        type: 'replaceHeaderFooterWithScreenshot',
+        id: block.id,
+        dataUrl,
+        blockType: block.type,
+        label: block.name,
+      });
+      setToast && setToast(`${label} replaced with screenshot.`);
+    } catch (e) {
+      setToast && setToast('Upload failed: ' + (e?.message || e));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '.08em',
+        textTransform: 'uppercase', color: 'var(--text-mid)',
+      }}>
+        {label} — replace with screenshot
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5 }}>
+        Screenshot the {label.toLowerCase()} from the live site, then upload it
+        here. The {label.toLowerCase()} will be replaced with your image in
+        the comp preview. Original markup is kept for export.
+      </div>
+      {preview && (
+        <img
+          src={preview}
+          alt=""
+          style={{
+            width: '100%', maxHeight: 180, objectFit: 'contain',
+            borderRadius: 4, border: '1px solid var(--border)',
+            background: 'var(--bg)',
+          }}
+        />
+      )}
+      <label style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        gap: 8, padding: '10px 16px', borderRadius: 6,
+        border: '1.5px dashed var(--border)', cursor: 'pointer',
+        fontSize: 13, color: 'var(--text-mid)', background: 'var(--bg)',
+      }}>
+        {uploading ? 'Uploading…' : `Upload ${label.toLowerCase()} screenshot`}
+        <input
+          type="file" accept="image/*" style={{ display: 'none' }}
+          onChange={(e) => handleFile(e.target.files?.[0])}
+        />
+      </label>
+      <button
+        className="btn-danger-sm"
+        onClick={() => onAction({ type: 'delete', id: block.id, label: block.name, preview: block.preview })}
+      >
+        Delete {label.toLowerCase()}
+      </button>
+    </div>
+  );
+}
+
 // ─── Logo edit panel ───────────────────────────────────────────────────────
 // Minimal single-field panel for the site logo. Reuses the replaceImage
 // iframe handler so srcset/sizes are cleared and dimensions are locked.
@@ -1180,19 +1459,30 @@ function LogoEditPanel({ block, onAction, setToast }) {
 
   const apply = () => {
     if (!url.trim()) return;
-    onAction({
-      type: 'replaceImage',
-      id: block.id,
-      url: url.trim(),
-      label: block.name,
-      dimensions: `${block.imgW || 0}x${block.imgH || 0}`,
-    });
+    if (block.isCssBg) {
+      onAction({
+        type: 'applyLogoEdit',
+        id: block.id,
+        newSrc: url.trim(),
+        isCssBg: true,
+        label: block.name,
+        dimensions: `${block.imgW || 0}x${block.imgH || 0}`,
+      });
+    } else {
+      onAction({
+        type: 'replaceImage',
+        id: block.id,
+        url: url.trim(),
+        label: block.name,
+        dimensions: `${block.imgW || 0}x${block.imgH || 0}`,
+      });
+    }
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ fontSize: 12, color: 'var(--text-mid)' }}>
-        Logo — {block.imgW || '?'}×{block.imgH || '?'}
+        Logo{block.isCssBg ? ' (CSS background)' : ''} — {block.imgW || '?'}×{block.imgH || '?'}
       </div>
       {url && (
         <img
@@ -1486,6 +1776,13 @@ export default function CompStudio() {
       postToIframe({ type: 'replaceAdWithImage', id: action.id, url: action.url, alt: action.alt });
       setSessionChanges(sc => [...sc, { action: 'ad', adSize: action.adSize, adLabel: action.adLabel, method: 'creative applied' }]);
       setToast('Creative applied.');
+    } else if (action.type === 'applyLogoEdit') {
+      postToIframe({ type: 'applyLogoEdit', id: action.id, newSrc: action.newSrc, isCssBg: !!action.isCssBg });
+      setSessionChanges(sc => [...sc, { action: 'image', label: action.label, dimensions: action.dimensions }]);
+      setToast('Logo updated.');
+    } else if (action.type === 'replaceHeaderFooterWithScreenshot') {
+      postToIframe({ type: 'replaceHeaderFooterWithScreenshot', id: action.id, dataUrl: action.dataUrl, blockType: action.blockType });
+      setSessionChanges(sc => [...sc, { action: 'image', label: action.label, dimensions: action.blockType || '' }]);
     } else if (action.type === 'replaceVideoSrc') {
       postToIframe({ type: 'replaceVideoSrc', id: action.id, url: action.url });
       setSessionChanges(sc => [...sc, { action: 'text', label: action.label, original: '(video src)', updated: action.url }]);
