@@ -74,6 +74,31 @@ function UrlField({ fieldDef, value, onChange }) {
 }
 
 function ImageField({ fieldDef, value, onChange }) {
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState('');
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    setUploading(true); setErr('');
+    try {
+      // Fix 0: upload to R2 via /api/atomic/comp/upload-image instead of
+      // inlining base64 into blocks_json (which blew the D1 row limit
+      // after a handful of images).
+      const form = new FormData();
+      form.append('image', file);
+      const res = await fetch('/api/atomic/comp/upload-image', {
+        method: 'POST', credentials: 'include', body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.url) throw new Error(data?.error || `HTTP ${res.status}`);
+      onChange(data.url);
+    } catch (e) {
+      setErr(String(e?.message || e));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <div>
       <label style={LABEL_STYLE}>{fieldDef.label}</label>
@@ -99,21 +124,18 @@ function ImageField({ fieldDef, value, onChange }) {
       </div>
       <label style={{
         display: 'inline-block', marginTop: 8, fontSize: 11,
-        color: 'var(--amber)', cursor: 'pointer',
+        color: uploading ? 'var(--text-mid)' : 'var(--amber)',
+        cursor: uploading ? 'default' : 'pointer',
         fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
       }}>
-        Upload file
+        {uploading ? 'Uploading…' : 'Upload file'}
         <input
           type="file" accept="image/*" style={{ display: 'none' }}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = () => onChange(String(reader.result));
-            reader.readAsDataURL(file);
-          }}
+          disabled={uploading}
+          onChange={(e) => handleFile(e.target.files?.[0])}
         />
       </label>
+      {err && <div style={{ fontSize: 11, color: '#a03030', marginTop: 4 }}>{err}</div>}
     </div>
   );
 }

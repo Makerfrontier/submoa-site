@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { BLOCK_REGISTRY, BLOCK_CATEGORIES, getBlockDef } from '../blocks';
 import { FieldEditor } from './fields';
+import { BrandPanel } from './BrandPanel';
 
 const LABEL_UPPER = {
   fontSize: 11, fontWeight: 600, letterSpacing: '0.08em',
@@ -248,13 +249,41 @@ function BlockPickerDrawer({ onSelect, onClose }) {
   );
 }
 
+function TabButton({ active, label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flex: 1,
+        background: active ? 'var(--bg)' : 'transparent',
+        border: 'none',
+        borderBottom: active ? '2px solid var(--amber)' : '2px solid transparent',
+        padding: '10px 0',
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        color: active ? 'var(--text)' : 'var(--text-mid)',
+        fontFamily: 'DM Sans, sans-serif',
+        cursor: 'pointer',
+      }}
+    >{label}</button>
+  );
+}
+
 export function EditPanel({
   blocks, selectedId, brand,
   onSelectBlock, onUpdateField, onAddBlock,
   onDeleteBlock, onToggleLock, onReorder,
+  onBrandUpdate,
 }) {
   const selectedBlock = blocks.find((b) => b.id === selectedId);
   const [showPicker, setShowPicker] = useState(false);
+  const [activeTab, setActiveTab] = useState('blocks'); // 'blocks' | 'brand'
+
+  // Selecting a block forces us back to the Blocks tab so field editors show.
+  const showTabs = !selectedBlock;
+  const tab = selectedBlock ? 'blocks' : activeTab;
 
   return (
     <div style={{
@@ -265,6 +294,16 @@ export function EditPanel({
       display: 'flex', flexDirection: 'column',
       position: 'relative',
     }}>
+      {showTabs && (
+        <div style={{
+          display: 'flex',
+          borderBottom: '1px solid var(--border)',
+        }}>
+          <TabButton active={tab === 'blocks'} label="Blocks" onClick={() => setActiveTab('blocks')} />
+          <TabButton active={tab === 'brand'}  label="Brand"  onClick={() => setActiveTab('brand')} />
+        </div>
+      )}
+
       <div style={{
         padding: '14px 16px 12px',
         borderBottom: '1px solid var(--border)',
@@ -278,11 +317,13 @@ export function EditPanel({
               {getBlockDef(selectedBlock.type)?.label || selectedBlock.type}
             </span>
           </>
-        ) : (
+        ) : tab === 'blocks' ? (
           <>
             <span style={LABEL_UPPER}>Blocks ({blocks.length})</span>
             <button onClick={() => setShowPicker(true)} style={BTN_AMBER}>+ Add</button>
           </>
+        ) : (
+          <span style={LABEL_UPPER}>Brand config</span>
         )}
       </div>
 
@@ -295,8 +336,10 @@ export function EditPanel({
             onDelete={() => onDeleteBlock(selectedBlock.id)}
             onToggleLock={() => onToggleLock(selectedBlock.id)}
           />
-        ) : (
+        ) : tab === 'blocks' ? (
           <BlockList blocks={blocks} onSelect={onSelectBlock} onReorder={onReorder} />
+        ) : (
+          <BrandPanel brand={brand} onBrandUpdate={onBrandUpdate} />
         )}
       </div>
 

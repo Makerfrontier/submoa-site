@@ -165,6 +165,15 @@ export default function AtomicComp({ navigate }) {
     });
   };
 
+  const updateBrand = (key, value) => {
+    setComp((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, brand: { ...(prev.brand || {}), [key]: value } };
+      scheduleAutoSave(next);
+      return next;
+    });
+  };
+
   const reorderBlocks = (draggingId, targetId) => {
     setComp((prev) => {
       if (!prev) return prev;
@@ -247,6 +256,7 @@ export default function AtomicComp({ navigate }) {
           onDeleteBlock={deleteBlock}
           onToggleLock={toggleLock}
           onReorder={reorderBlocks}
+          onBrandUpdate={updateBrand}
         />
 
         <div style={{
