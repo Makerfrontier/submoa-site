@@ -15,6 +15,8 @@ import PresentationBrief from './pages/PresentationBrief'
 import Planner, { PlannerDetail } from './pages/Planner'
 import PlannerBuilding from './pages/PlannerBuilding'
 import CompStudio from './pages/CompStudio'
+import AtomicComp from './pages/AtomicComp'
+import AtomicCompShare from './pages/AtomicCompShare'
 import YouTubeTranscript from './pages/YouTubeTranscript'
 import LegislativeIntelligence from './pages/LegislativeIntelligence'
 import PressRelease from './pages/PressRelease'
@@ -23,6 +25,10 @@ import AdminBrandBible from './pages/AdminBrandBible'
 import AdminFeatures from './pages/AdminFeatures'
 import AdminBugs from './pages/AdminBugs'
 import BrandBiblePreviewFrame from './pages/BrandBiblePreviewFrame'
+import AdminHosts from './pages/AdminHosts'
+import TTSStudio from './pages/TTSStudio'
+import PodcastStudio from './pages/PodcastStudio'
+import QuickPodcast from './pages/QuickPodcast'
 import SiteAgentPanel from './components/SiteAgentPanel.jsx'
 
 function ImpersonationBanner({ user, syncUser, navigate }) {
@@ -280,6 +286,9 @@ function Sidebar({ navigate, page, syncUser }) {
     { path: '/brief/email',        label: 'Email Builder',  icon: <SbIconEmail /> },
     { path: '/comp-studio',        label: 'Comp Studio',    icon: <span style={{ fontSize: 14 }}>⊞</span> },
     { path: '/youtube-transcript', label: 'YouTube',        icon: <span style={{ fontSize: 14 }}>▶</span> },
+    { path: '/tts',                label: 'TTS Studio',     icon: <span style={{ fontSize: 14 }}>♪</span> },
+    { path: '/listen',             label: 'Listen',         icon: <span style={{ fontSize: 14 }}>▷</span> },
+    { path: '/podcast-studio',     label: 'Podcast Studio', icon: <span style={{ fontSize: 14 }}>◉</span> },
     { divider: true },
     { path: '/planner',            label: 'Planner',        icon: <span style={{ fontSize: 14 }}>◎</span> },
     { path: '/brief/infographic',  label: 'Infographic',    icon: <SbIconInfographic /> },
@@ -340,6 +349,15 @@ function Sidebar({ navigate, page, syncUser }) {
             onClick={e => { e.preventDefault(); navTo('/admin/bugs') }}
           >
             <span style={{ fontSize: 14 }}>◎</span><span>Bugs</span>
+          </a>
+        )}
+        {isAdmin && (
+          <a
+            href="#"
+            className={`sidebar-link${isActive('/admin/hosts') ? ' active' : ''}`}
+            onClick={e => { e.preventDefault(); navTo('/admin/hosts') }}
+          >
+            <span style={{ fontSize: 14 }}>☺</span><span>Hosts</span>
           </a>
         )}
         {hasAccess('legislative-intelligence') && (
@@ -426,8 +444,11 @@ function isAppRoute(path) {
       path === '/dashboard' || path === '/author' || path === '/account' ||
       path === '/admin'     || path === '/writer' ||
       path === '/admin/brand-bible' || path === '/admin/features' || path === '/admin/bugs' ||
+      path === '/admin/hosts' || path === '/tts' ||
+      path === '/podcast-studio' || path.startsWith('/podcast-studio/') ||
       path === '/prompt-builder' ||
       path === '/comp-studio' ||
+      path === '/atomic/comp' || path.startsWith('/atomic/comp/') ||
       path === '/youtube-transcript' ||
       path === '/legislative-intelligence' ||
       path === '/press-release' ||
@@ -1071,7 +1092,7 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
   const [authors, setAuthors] = useState([])
   const [authorProfile, setAuthorProfile] = useState(null)
   const [authorProfileExpanded, setAuthorProfileExpanded] = useState(false)
-  const [form, setForm] = useState({ author: '', topic: '', productLink: '', productDetailsManual: '', humanObservation: '', anecdotalStories: '', includeFaq: false, generateAudio: false, ttsVoiceId: 'onyx', productImages: [], minWordCount: '', targetKeywords: '', articleFormat: 'blog-general', optimizationTarget: 'seo-search', tone_stance: 'neutral', vocalTone: '', youtube_url: '', use_youtube: false, relevantLinks: [], generateFeaturedImage: false, imagePromptDirection: '' })
+  const [form, setForm] = useState({ author: '', topic: '', productLink: '', productDetailsManual: '', humanObservation: '', anecdotalStories: '', includeFaq: false, generateAudio: false, ttsVoiceId: 'eve', productImages: [], minWordCount: '', targetKeywords: '', articleFormat: 'blog-general', optimizationTarget: 'seo-search', tone_stance: 'neutral', vocalTone: '', youtube_url: '', use_youtube: false, relevantLinks: [], generateFeaturedImage: false, imagePromptDirection: '' })
   const [sourceMode, setSourceMode] = useState('topic') // 'topic' | 'youtube'
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -1107,7 +1128,7 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
               generateAudio: !!editingDraft.generate_audio,
               generateFeaturedImage: !!editingDraft.generate_featured_image,
               imagePromptDirection: editingDraft.image_prompt_direction || '',
-              ttsVoiceId: editingDraft.tts_voice_id || 'onyx',
+              ttsVoiceId: editingDraft.tts_voice_id || 'eve',
               productImages: [],
               minWordCount: editingDraft.min_word_count || '',
               targetKeywords: editingDraft.target_keywords || '',
@@ -1211,7 +1232,7 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
           generate_audio: form.generateAudio ? 1 : 0,
           generate_featured_image: form.generateFeaturedImage ? 1 : 0,
           image_prompt_direction: form.imagePromptDirection || null,
-          tts_voice_id: form.ttsVoiceId || 'onyx',
+          tts_voice_id: form.ttsVoiceId || 'eve',
           has_images: form.productImages.length > 0 ? 1 : 0,
           email: form.email,
           youtube_url: form.youtube_url,
@@ -1589,12 +1610,11 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
             <div className="form-group">
               <label className="form-label">TTS Voice</label>
               <select name="ttsVoiceId" className="form-input form-select" value={form.ttsVoiceId} onChange={handleChange}>
-                <option value="onyx">Onyx — deep, measured, masculine</option>
-                <option value="alloy">Alloy — balanced, neutral</option>
-                <option value="echo">Echo — clear, resonant, masculine</option>
-                <option value="fable">Fable — warm, storytelling, British</option>
-                <option value="nova">Nova — bright, articulate, feminine</option>
-                <option value="shimmer">Shimmer — soft, intimate, feminine</option>
+                <option value="eve">Eve — energetic, upbeat, conversational (feminine)</option>
+                <option value="ara">Ara — warm, friendly, approachable (feminine)</option>
+                <option value="rex">Rex — confident, professional, measured (masculine)</option>
+                <option value="sal">Sal — smooth, versatile, narrative (masculine)</option>
+                <option value="leo">Leo — authoritative, strong, declarative (masculine)</option>
               </select>
             </div>
           )}
@@ -3173,6 +3193,27 @@ export default function App() {
     );
   }
 
+  // Atomic Comp share view — public, no auth, no chrome. The recipient of
+  // a share link should see only the comp.
+  if (page.startsWith('/c/')) {
+    return (
+      <AuthContext.Provider value={authValue}>
+        <AtomicCompShare />
+      </AuthContext.Provider>
+    );
+  }
+
+  // Quick Podcast — also standalone (no sidebar). Structurally separable
+  // for the future product spinout; treated like a different app that
+  // happens to share auth.
+  if (page === '/listen') {
+    return (
+      <AuthContext.Provider value={authValue}>
+        {loading ? null : user ? <QuickPodcast navigate={navigate} /> : <Login navigate={navigate} />}
+      </AuthContext.Provider>
+    );
+  }
+
   return (
     <AuthContext.Provider value={authValue}>
       {user?.impersonating && <ImpersonationBanner user={user} syncUser={syncUser} navigate={navigate} />}
@@ -3197,6 +3238,9 @@ export default function App() {
         {page === '/admin/brand-bible' && (loading ? null : user ? <AdminGuard><AdminBrandBible /></AdminGuard> : <Login navigate={navigate} />)}
         {page === '/admin/features' && (loading ? null : user ? <AdminGuard><AdminFeatures /></AdminGuard> : <Login navigate={navigate} />)}
         {page === '/admin/bugs' && (loading ? null : user ? <AdminGuard><AdminBugs /></AdminGuard> : <Login navigate={navigate} />)}
+        {page === '/admin/hosts' && (loading ? null : user ? <AdminGuard><AdminHosts /></AdminGuard> : <Login navigate={navigate} />)}
+        {page === '/tts' && (loading ? null : user ? <TTSStudio /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {(page === '/podcast-studio' || page.startsWith('/podcast-studio/')) && (loading ? null : user ? <PodcastStudio page={page} navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page.match(/^\/content\/[^/]+\/review$/) && (loading ? null : user ? <ReviewPage navigate={navigate} /> : <Login navigate={navigate} />)}
         {page.startsWith('/content/') && !page.match(/^\/content\/[^/]+\/review$/) && (loading ? null : user ? <ContentPage navigate={navigate} user={user} /> : <Login navigate={navigate} />)}
         {page === '/reset' && <Reset navigate={navigate} />}
@@ -3212,6 +3256,7 @@ export default function App() {
         {page === '/brief/presentation' && (loading ? null : user ? <PresentationBrief navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/planner' && (loading ? null : user ? <Planner navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/comp-studio' && (loading ? null : user ? <CompStudio /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {(page === '/atomic/comp' || page.startsWith('/atomic/comp/')) && (loading ? null : user ? <AtomicComp navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/youtube-transcript' && (loading ? null : user ? <YouTubeTranscript navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/legislative-intelligence' && (loading ? null : user ? <LegislativeGate navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/press-release' && (loading ? null : user ? <PressRelease navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
