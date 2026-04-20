@@ -1,9 +1,10 @@
-// fal.ai cover art generation for podcast episodes and feeds.
-// flux-schnell: ~$0.003/image, ~1-3s at 4 inference steps, 1024-1400 square.
-// Output is fetched as ArrayBuffer so the caller can store directly to R2.
+// Cover art generation via OpenRouter (Google Nano Banana / Gemini 2.5 Flash
+// Image Preview). Replaces prior fal.ai flux-schnell implementation.
+// Signature preserved — callers (queue consumer, regenerate/upload endpoints)
+// remain unchanged.
 
 interface GenEnv {
-  FALAI_API_KEY?: string;
+  OPENROUTER_API_KEY?: string;
 }
 
 export async function generateCoverArt(
@@ -11,36 +12,58 @@ export async function generateCoverArt(
   prompt: string,
   options: { width?: number; height?: number } = {},
 ): Promise<{ imageBuffer: ArrayBuffer; contentType: string }> {
-  if (!env.FALAI_API_KEY) throw new Error('FALAI_API_KEY not configured');
-  const width = options.width ?? 1400;
-  const height = options.height ?? 1400;
+  if (!env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY not configured');
+  // options.width/height reserved for future sizing hints; Nano Banana accepts
+  // aspect_ratio only and always outputs 1024px. Square podcast covers only.
+  void options;
 
-  const res = await fetch('https://fal.run/fal-ai/flux/schnell', {
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Key ${env.FALAI_API_KEY}`,
+      'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
       'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://submoacontent.com',
+      'X-Title': 'SubMoa Quick Podcast - Cover Art',
     },
     body: JSON.stringify({
-      prompt,
-      image_size: { width, height },
-      num_inference_steps: 4,
-      enable_safety_checker: true,
-      num_images: 1,
+      model: 'google/gemini-2.5-flash-image',
+      messages: [{ role: 'user', content: prompt }],
+      modalities: ['image', 'text'],
+      image_config: { aspect_ratio: '1:1' },
     }),
   });
   if (!res.ok) {
     const errText = await res.text().catch(() => res.statusText);
-    throw new Error(`fal.ai cover gen failed ${res.status}: ${errText.slice(0, 300)}`);
+    throw new Error(`OpenRouter cover gen failed ${res.status}: ${errText.slice(0, 300)}`);
   }
-  const data: any = await res.json();
-  const imageUrl = data?.images?.[0]?.url;
-  if (!imageUrl) throw new Error('fal.ai returned no image URL');
 
-  const imgRes = await fetch(imageUrl);
-  if (!imgRes.ok) throw new Error(`Failed to fetch generated image: ${imgRes.status}`);
-  const imageBuffer = await imgRes.arrayBuffer();
-  const contentType = imgRes.headers.get('content-type') ?? 'image/png';
+  const data: any = await res.json();
+  const imageUrl: string | null =
+    data?.choices?.[0]?.message?.images?.[0]?.image_url?.url ??
+    (Array.isArray(data?.choices?.[0]?.message?.content)
+      ? data.choices[0].message.content.find((c: any) => c?.type === 'image_url')?.image_url?.url
+      : null) ??
+    null;
+  if (!imageUrl) {
+    throw new Error(`OpenRouter response had no image. Body: ${JSON.stringify(data).slice(0, 500)}`);
+  }
+
+  let imageBuffer: ArrayBuffer;
+  let contentType = 'image/png';
+  if (imageUrl.startsWith('data:')) {
+    const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) throw new Error('Could not parse data URL from Nano Banana response');
+    contentType = match[1];
+    const binary = atob(match[2]);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    imageBuffer = bytes.buffer;
+  } else {
+    const imgRes = await fetch(imageUrl);
+    if (!imgRes.ok) throw new Error(`Failed to fetch generated image: ${imgRes.status}`);
+    imageBuffer = await imgRes.arrayBuffer();
+    contentType = imgRes.headers.get('content-type') ?? 'image/png';
+  }
   return { imageBuffer, contentType };
 }
 

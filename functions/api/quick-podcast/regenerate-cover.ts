@@ -10,7 +10,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
   if (context.request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   const user = await getSessionUser(context.request, context.env);
   if (!user) return json({ error: 'Unauthorized' }, 401);
-  if (!context.env.FALAI_API_KEY) return json({ error: 'FALAI_API_KEY not configured' }, 500);
+  if (!context.env.OPENROUTER_API_KEY) return json({ error: 'OPENROUTER_API_KEY not configured' }, 500);
 
   try {
     const prompt = feedCoverPrompt(user.name);
