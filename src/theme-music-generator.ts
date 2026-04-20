@@ -178,8 +178,8 @@ export async function generateThemeMusic(
     throw new Error(`All Lyria model candidates failed. Last: ${lastError}`);
   }
 
-  const introResult = cutMp3AtTime(sourceBuffer, 10000);
-  const outroResult = cutMp3Range(sourceBuffer, 20000, 30000);
+  const introResult = cutMp3AtTime(sourceBuffer, 5000);
+  const outroResult = cutMp3Range(sourceBuffer, 25000, 30000);
 
   console.log(
     `[theme-music] cuts: intro=${introResult.actualDurationMs}ms (${introResult.frameCount} frames), ` +

@@ -10,19 +10,33 @@ import { generateThemeMusic, DEFAULT_THEME_MUSIC_PROMPT } from '../../../../src/
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const UPLOAD_TYPES = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav']);
 
+// Theme music is account-wide. Storage key is the oldest user in the account —
+// the same row the queue consumer resolves via
+// `WHERE account_id = ? ORDER BY created_at ASC LIMIT 1`. Without this,
+// non-primary-user regenerations land on a row the consumer never reads,
+// so podcasts generate silently missing their intro/outro.
+async function resolvePrimaryUserId(env: Env, accountId: string | undefined): Promise<string | null> {
+  if (!accountId) return null;
+  const row: any = await env.submoacontent_db.prepare(
+    `SELECT id FROM users WHERE account_id = ? ORDER BY created_at ASC LIMIT 1`
+  ).bind(accountId).first();
+  return row?.id ?? null;
+}
+
 export async function onRequestGet(context: { request: Request; env: Env }) {
   const user = await getSessionUser(context.request, context.env);
   if (!user) return json({ error: 'Unauthorized' }, 401);
+  const primaryId = (await resolvePrimaryUserId(context.env, user.account_id)) || user.id;
   const row: any = await context.env.submoacontent_db.prepare(
     `SELECT theme_music_r2_key_intro, theme_music_r2_key_outro, theme_music_r2_key_source, theme_music_prompt, theme_music_is_custom, theme_music_generated_at FROM users WHERE id = ?`
-  ).bind(user.id).first();
+  ).bind(primaryId).first();
   const base = new URL(context.request.url).origin;
   const has = !!row?.theme_music_r2_key_intro;
   return json({
     has_music: has,
-    intro_url: has ? `${base}/api/quick-podcast/theme-music/preview/${user.id}/intro.mp3` : null,
-    outro_url: has ? `${base}/api/quick-podcast/theme-music/preview/${user.id}/outro.mp3` : null,
-    source_url: has ? `${base}/api/quick-podcast/theme-music/preview/${user.id}/source.mp3` : null,
+    intro_url: has ? `${base}/api/quick-podcast/theme-music/preview/${primaryId}/intro.mp3` : null,
+    outro_url: has ? `${base}/api/quick-podcast/theme-music/preview/${primaryId}/outro.mp3` : null,
+    source_url: has ? `${base}/api/quick-podcast/theme-music/preview/${primaryId}/source.mp3` : null,
     prompt: row?.theme_music_prompt ?? null,
     is_custom: Boolean(row?.theme_music_is_custom),
     generated_at: row?.theme_music_generated_at ?? null,
@@ -40,18 +54,19 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
     ? body.prompt.trim().slice(0, 4000)
     : DEFAULT_THEME_MUSIC_PROMPT;
 
+  const primaryId = (await resolvePrimaryUserId(context.env, user.account_id)) || user.id;
   try {
     const result = await generateThemeMusic(context.env, prompt);
-    const introKey = `users/${user.id}/theme-music/intro.mp3`;
-    const outroKey = `users/${user.id}/theme-music/outro.mp3`;
-    const sourceKey = `users/${user.id}/theme-music/source.mp3`;
+    const introKey = `users/${primaryId}/theme-music/intro.mp3`;
+    const outroKey = `users/${primaryId}/theme-music/outro.mp3`;
+    const sourceKey = `users/${primaryId}/theme-music/source.mp3`;
     await (context.env as any).SUBMOA_IMAGES.put(introKey, result.introBuffer, { httpMetadata: { contentType: 'audio/mpeg' } });
     await (context.env as any).SUBMOA_IMAGES.put(outroKey, result.outroBuffer, { httpMetadata: { contentType: 'audio/mpeg' } });
     await (context.env as any).SUBMOA_IMAGES.put(sourceKey, result.sourceBuffer, { httpMetadata: { contentType: 'audio/mpeg' } });
     const now = Math.floor(Date.now() / 1000);
     await context.env.submoacontent_db.prepare(
       `UPDATE users SET theme_music_r2_key_intro = ?, theme_music_r2_key_outro = ?, theme_music_r2_key_source = ?, theme_music_prompt = ?, theme_music_is_custom = 0, theme_music_generated_at = ? WHERE id = ?`
-    ).bind(introKey, outroKey, sourceKey, prompt, now, user.id).run();
+    ).bind(introKey, outroKey, sourceKey, prompt, now, primaryId).run();
     return json({
       ok: true,
       is_custom: false,
@@ -80,17 +95,18 @@ export async function onRequestPut(context: { request: Request; env: Env }) {
   if (!UPLOAD_TYPES.has(ct)) return json({ error: 'Only MP3 or WAV accepted' }, 415);
 
   const buf = await file.arrayBuffer();
+  const primaryId = (await resolvePrimaryUserId(context.env, user.account_id)) || user.id;
   // Custom upload: the user gave us their clip as-is — store it for all three
   // variants. Intro/outro endpoints just return the user's full audio.
-  const introKey = `users/${user.id}/theme-music/intro.mp3`;
-  const outroKey = `users/${user.id}/theme-music/outro.mp3`;
-  const sourceKey = `users/${user.id}/theme-music/source.mp3`;
+  const introKey = `users/${primaryId}/theme-music/intro.mp3`;
+  const outroKey = `users/${primaryId}/theme-music/outro.mp3`;
+  const sourceKey = `users/${primaryId}/theme-music/source.mp3`;
   await (context.env as any).SUBMOA_IMAGES.put(introKey, buf, { httpMetadata: { contentType: ct } });
   await (context.env as any).SUBMOA_IMAGES.put(outroKey, buf, { httpMetadata: { contentType: ct } });
   await (context.env as any).SUBMOA_IMAGES.put(sourceKey, buf, { httpMetadata: { contentType: ct } });
   const now = Math.floor(Date.now() / 1000);
   await context.env.submoacontent_db.prepare(
     `UPDATE users SET theme_music_r2_key_intro = ?, theme_music_r2_key_outro = ?, theme_music_r2_key_source = ?, theme_music_prompt = NULL, theme_music_is_custom = 1, theme_music_generated_at = ? WHERE id = ?`
-  ).bind(introKey, outroKey, sourceKey, now, user.id).run();
+  ).bind(introKey, outroKey, sourceKey, now, primaryId).run();
   return json({ ok: true, is_custom: true, generated_at: now, size_bytes: buf.byteLength });
 }
