@@ -203,7 +203,9 @@ const INJECTED_SCRIPT = `
     // subsequent detectors via the img[data-comp-video-placeholder]
     // match on line ~310.
     (function prePassVideoSwap() {
-      var PRE_VIDEO_HOST_RE = /(youtube\\.com|youtu\\.be|youtube-nocookie\\.com|vimeo\\.com|wistia\\.(?:com|net)|fast\\.wistia)/i;
+      var PRE_VIDEO_HOST_RE = /(youtube\\.com|youtu\\.be|youtube-nocookie\\.com|vimeo\\.com|player\\.vimeo|wistia\\.(?:com|net)|fast\\.wistia|ytimg\\.com|googlevideo\\.com|embedly)/i;
+      var swapCount = 0;
+      var iframeInventory = [];
       function slotSvg(w, h) {
         return 'data:image/svg+xml,' + encodeURIComponent(
           '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
@@ -245,13 +247,23 @@ const INJECTED_SCRIPT = `
         if (existingId) img.setAttribute('data-comp-id', existingId);
         return img;
       }
-      // Direct video iframes
+      // Direct video iframes — check src, data-src, srcdoc (SingleFile often
+      // inlines YouTube as srcdoc), and a handful of ancestor/class hints.
       Array.prototype.slice.call(document.querySelectorAll('iframe')).forEach(function(el) {
         if (!el.parentNode) return;
         if (el.closest && el.closest('[data-comp-skip]')) return;
         var rawSrc = el.getAttribute('src') || el.getAttribute('data-src') || el.getAttribute('data-lazy-src') || '';
-        if (!rawSrc || !PRE_VIDEO_HOST_RE.test(rawSrc)) return;
-        el.parentNode.replaceChild(buildPlaceholder(el, rawSrc), el);
+        var srcdoc = el.getAttribute('srcdoc') || '';
+        var title  = (el.getAttribute('title') || '').toLowerCase();
+        var cls    = (typeof el.className === 'string' ? el.className : '').toLowerCase();
+        var anyHint = PRE_VIDEO_HOST_RE.test(rawSrc)
+                   || PRE_VIDEO_HOST_RE.test(srcdoc)
+                   || /youtube|vimeo|wistia|video|player/i.test(title)
+                   || /youtube|vimeo|wistia|video|player/i.test(cls);
+        iframeInventory.push({ src: rawSrc.slice(0, 120), hasSrcdoc: !!srcdoc, title: title.slice(0, 60), cls: cls.slice(0, 80), matched: anyHint });
+        if (!anyHint) return;
+        el.parentNode.replaceChild(buildPlaceholder(el, rawSrc || ('youtube-embed:' + title)), el);
+        swapCount++;
       });
       // <video> elements — keep as-is (they don't cross-origin-block) but
       // still wrap behind an editable placeholder so the user can upload a
@@ -279,7 +291,46 @@ const INJECTED_SCRIPT = `
         var synthSrc = ytId ? ('https://www.youtube.com/embed/' + ytId) : dsrc;
         if (!synthSrc) return;
         el.parentNode.replaceChild(buildPlaceholder(el, synthSrc), el);
+        swapCount++;
       });
+      // Generic video-thumb shells — a div/a/button with a class hint and a
+      // background-image or child poster img that's in a 16:9-ish aspect.
+      // Catches sites that render a "click to play" tile that later injects
+      // an iframe via JS (those scripts are stripped on import).
+      Array.prototype.slice.call(document.querySelectorAll(
+        '[class*="video" i], [class*="player" i], [class*="embed" i], ' +
+        '[data-comp-skip]:not(*)' // harmless no-op guard so the selector list is never empty
+      )).forEach(function(el) {
+        if (!el.parentNode) return;
+        if (el.closest && el.closest('[data-comp-skip]')) return;
+        if (el.tagName === 'IFRAME' || el.tagName === 'VIDEO') return; // handled above
+        // Must be sized like a video.
+        var w = el.offsetWidth || 0;
+        var h = el.offsetHeight || 0;
+        if (w < 300 || h < 160) return;
+        var aspect = w / h;
+        if (aspect < 1.3 || aspect > 2.2) return;
+        // Must *look* like a video — has a play-button descendant or a
+        // background-image with recognizable keywords.
+        var hasPlayHint = !!el.querySelector('[class*="play" i], svg[class*="play" i], [aria-label*="play" i]');
+        var bg = '';
+        try { bg = (window.getComputedStyle(el).backgroundImage || '').toLowerCase(); } catch (_) {}
+        var bgHint = /youtube|ytimg|vimeo|player|embed/.test(bg);
+        if (!hasPlayHint && !bgHint) return;
+        var ytHrefAttr = el.getAttribute('data-yt-href') || el.getAttribute('data-video-url') || '';
+        el.parentNode.replaceChild(buildPlaceholder(el, ytHrefAttr || ('video-thumb:' + (el.className || ''))), el);
+        swapCount++;
+      });
+      // One-shot diagnostic: parent window gets a summary it can surface via
+      // console. Helps narrow down "still showing the real player" reports.
+      try {
+        parent.postMessage({
+          source: 'comp-studio',
+          type: 'debug',
+          note: 'pre-pass video swap: swapped=' + swapCount + ' iframes=' + iframeInventory.length,
+          inventory: iframeInventory,
+        }, '*');
+      } catch (_) {}
     })();
 
     // Logo detection — handles three shapes:
@@ -1878,6 +1929,9 @@ export default function CompStudio() {
       const m = ev.data || {};
       if (!m || m.source !== 'comp-studio') return;
       if (m.type === 'blocks') setBlocks(m.blocks || []);
+      if (m.type === 'debug') {
+        console.log('[comp-studio/iframe]', m.note, m.inventory || '');
+      }
       if (m.type === 'inlineEdited') {
         setSessionChanges(sc => [...sc, { action: 'text', label: m.id, updated: m.text }]);
       }
