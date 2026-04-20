@@ -6,11 +6,14 @@ import puppeteer from '@cloudflare/puppeteer';
 // Renders the supplied HTML via Cloudflare Browser Rendering and returns
 // a JPEG screenshot. export_type selects the viewport.
 const VIEWPORTS: Record<string, { width: number; height: number }> = {
-  full:   { width: 1280, height: 900 },
+  full:   { width: 1440, height: 900 },
   mobile: { width: 390,  height: 844 },
   social: { width: 1200, height: 630 },
   hero:   { width: 1200, height: 400 },
 };
+// Retina-equivalent render so comps look sharp on high-DPI displays.
+// Doubles the pixel output without changing the CSS viewport.
+const DEVICE_SCALE_FACTOR = 2;
 
 export async function onRequest(context: { request: Request; env: Env }) {
   const { request, env } = context;
@@ -45,9 +48,9 @@ export async function onRequest(context: { request: Request; env: Env }) {
   try {
     browser = await puppeteer.launch(env.BROWSER as any);
     const page = await browser.newPage();
-    await page.setViewport(viewport);
+    await page.setViewport({ ...viewport, deviceScaleFactor: DEVICE_SCALE_FACTOR });
     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 20000 });
-    const screenshot = await page.screenshot({ type: 'jpeg', quality: 92, fullPage: exportType === 'full' });
+    const screenshot = await page.screenshot({ type: 'jpeg', quality: 95, fullPage: exportType === 'full' });
     await browser.close();
 
     return new Response(screenshot as BodyInit, {

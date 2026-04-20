@@ -2393,7 +2393,10 @@ export default function CompStudio() {
   // ─── Export handlers ─────────────────────────────────────────────────────
   const downloadJpg = async (type) => {
     try {
-      const html = await serializeIframe();
+      // Read the iframe DOM directly — postMessage-based serializeIframe()
+      // has a 2s timeout that falls back to rawHtml on any hiccup, which
+      // meant exports silently shipped the pre-edit HTML even after a save.
+      const html = serializeLiveHtml();
       const res = await fetch('/api/comp-studio/export-jpg', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -2412,7 +2415,7 @@ export default function CompStudio() {
   };
   const downloadHtml = async () => {
     try {
-      const html = await serializeIframe();
+      const html = serializeLiveHtml();
       const safe = stripAndClean(html);
       const blob = new Blob([safe], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
@@ -2422,7 +2425,7 @@ export default function CompStudio() {
     } catch (err) { setToast('Download failed: ' + (err?.message || err)); }
   };
 
-  const [includePrompt, setIncludePrompt] = useState(true);
+  const [includePrompt, setIncludePrompt] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportModalContent, setExportModalContent] = useState('');
 
