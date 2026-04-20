@@ -312,16 +312,51 @@ const INJECTED_SCRIPT = `
       candidates.set(el, { type: 'video', videoPlaceholder: true });
     });
 
-    // Video embeds — any iframe pointing at YouTube/Vimeo/Wistia, or a plain
-    // <video> element. Surfaces as type:'video' so the edit panel can offer
-    // a URL swap or a "replace with image" escape hatch.
-    var VIDEO_HOST_RE = /(youtube\\.com\\/embed|youtu\\.be|youtube\\-nocookie\\.com|vimeo\\.com|player\\.vimeo\\.com|wistia\\.|fast\\.wistia\\.)/i;
+    // Video embeds — match any iframe or lazy-embed element pointing at
+    // YouTube/Vimeo/Wistia, or a plain <video>. Loosened from strict
+    // "/embed/" path matching to cover SingleFile captures where the
+    // lazy-load script has been stripped and only a thumbnail shell
+    // remains, plus watch-style URLs and data-src lazy attributes.
+    var VIDEO_HOST_RE = /(youtube\\.com|youtu\\.be|youtube-nocookie\\.com|vimeo\\.com|wistia\\.(?:com|net)|fast\\.wistia)/i;
+    function getVideoSrcFromAttrs(el) {
+      var raw = el.getAttribute('src')
+        || el.getAttribute('data-src')
+        || el.getAttribute('data-lazy-src')
+        || el.getAttribute('data-url')
+        || el.getAttribute('data-embed-url')
+        || '';
+      return String(raw);
+    }
     document.querySelectorAll('iframe').forEach(function(el) {
       if (el.closest('[data-comp-skip]') || isExcludedChrome(el)) return;
       if (candidates.has(el)) return;
-      var src = (el.getAttribute('src') || '').toLowerCase();
-      if (!VIDEO_HOST_RE.test(src)) return;
-      candidates.set(el, { type: 'video' });
+      var src = getVideoSrcFromAttrs(el).toLowerCase();
+      if (!src || !VIDEO_HOST_RE.test(src)) return;
+      candidates.set(el, { type: 'video', videoSrc: src });
+    });
+    // Lazy-load "shell" elements — common on SingleFile captures where the
+    // real iframe is never injected. Match lite-youtube web components,
+    // youtube-player divs, and any element carrying a data-youtube-id /
+    // data-video-id / data-yt-id marker.
+    document.querySelectorAll(
+      'lite-youtube, [class*="lite-youtube" i], [class*="youtube-player" i], [class*="yt-lite" i], ' +
+      '[data-youtube-id], [data-video-id], [data-yt-id], [data-ytid], [data-src*="youtube" i], [data-src*="youtu.be" i]'
+    ).forEach(function(el) {
+      if (el.closest('[data-comp-skip]') || isExcludedChrome(el)) return;
+      if (candidates.has(el)) return;
+      var ytId = el.getAttribute('data-youtube-id')
+              || el.getAttribute('data-video-id')
+              || el.getAttribute('data-yt-id')
+              || el.getAttribute('data-ytid')
+              || '';
+      var dsrc = getVideoSrcFromAttrs(el);
+      if (!ytId && dsrc) {
+        var m0 = dsrc.match(/(?:youtube(?:-nocookie)?\\.com\\/embed\\/|youtu\\.be\\/|youtube\\.com\\/watch\\?v=)([A-Za-z0-9_-]{8,})/i);
+        if (m0) ytId = m0[1];
+      }
+      var synthSrc = ytId ? ('https://www.youtube.com/embed/' + ytId) : dsrc;
+      if (!synthSrc) return;
+      candidates.set(el, { type: 'video', videoSrc: synthSrc, isLazyShell: true });
     });
     document.querySelectorAll('video').forEach(function(el) {
       if (el.closest('[data-comp-skip]') || isExcludedChrome(el)) return;
@@ -513,10 +548,9 @@ const INJECTED_SCRIPT = `
 
     // YouTube/Vimeo iframes hard-block cross-origin framing with X-Frame-Options
     // which makes the canvas show a broken "content blocked" tile. Swap each
-    // video iframe for a clickable thumbnail img (YouTube mqdefault, or a
-    // generic SVG tile). The real iframe outerHTML is kept in
-    // data-comp-original-html and restored on serialize so exports still
-    // carry the player.
+    // video candidate (iframe or lazy-shell) for a clickable thumbnail img.
+    // The real iframe outerHTML is kept in data-comp-original-html and
+    // restored on serialize so exports still carry the player.
     var VIDEO_PLACEHOLDER_SVG = 'data:image/svg+xml,' + encodeURIComponent(
       '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">' +
       '<rect width="640" height="360" fill="#1a1a1a"/>' +
@@ -525,26 +559,68 @@ const INJECTED_SCRIPT = `
       '<text x="320" y="248" text-anchor="middle" fill="#B8872E" font-family="sans-serif" font-size="14" letter-spacing="2">VIDEO — CLICK TO EDIT</text>' +
       '</svg>'
     );
+    // Match a real 11-char YouTube video ID; reject playlist "videoseries"
+    // and oembed-style aliases that would 404 the thumbnail endpoint.
+    var YT_ID_RE = /(?:youtube(?:-nocookie)?\\.com\\/embed\\/|youtu\\.be\\/|youtube\\.com\\/watch\\?v=|youtube\\.com\\/shorts\\/)([A-Za-z0-9_-]{11})(?:[?&#/]|$)/;
+    function getYouTubeThumb(srcOrId) {
+      if (!srcOrId) return '';
+      if (/^[A-Za-z0-9_-]{11}$/.test(srcOrId)) return 'https://img.youtube.com/vi/' + srcOrId + '/hqdefault.jpg';
+      var m = String(srcOrId).match(YT_ID_RE);
+      return m ? ('https://img.youtube.com/vi/' + m[1] + '/hqdefault.jpg') : '';
+    }
     blocks.forEach(function(blk) {
       if (blk.type !== 'video' || blk.videoPlaceholder) return;
       var el = findById(blk.id);
-      if (!el || el.tagName !== 'IFRAME') return;
-      var src = el.getAttribute('src') || '';
-      var ytM = src.match(/(?:youtube\\.com\\/embed\\/|youtu\\.be\\/|youtube\\-nocookie\\.com\\/embed\\/)([A-Za-z0-9_-]{6,})/);
-      var thumb = ytM ? ('https://img.youtube.com/vi/' + ytM[1] + '/hqdefault.jpg') : VIDEO_PLACEHOLDER_SVG;
+      if (!el) return;
+      // Accept iframes, lazy shells, and any non-<video> element that was
+      // registered as a video candidate. <video> elements already render
+      // fine in the canvas — skip swapping them.
+      if (el.tagName === 'VIDEO') return;
+      var src = blk.videoSrc || el.getAttribute('src')
+              || el.getAttribute('data-src') || el.getAttribute('data-embed-url') || '';
+      var thumb = getYouTubeThumb(src) || VIDEO_PLACEHOLDER_SVG;
+      // Dimensions: measured first, then width/height attrs, then the
+      // offset of the nearest sized ancestor, finally a 640×360 default so
+      // lazy shells with 0 measured size still render a visible tile.
       var w = el.offsetWidth || parseInt(el.getAttribute('width') || '0', 10) || 0;
       var h = el.offsetHeight || parseInt(el.getAttribute('height') || '0', 10) || 0;
+      if (!w || !h) {
+        var anc = el.parentElement, steps = 0;
+        while (anc && steps < 4 && (!w || !h)) {
+          if (!w) w = anc.offsetWidth || 0;
+          if (!h && w) h = Math.round(w * 9 / 16);
+          anc = anc.parentElement; steps++;
+        }
+      }
+      if (!w) w = 640;
+      if (!h) h = Math.round(w * 9 / 16);
+
       var img = document.createElement('img');
       img.setAttribute('src', thumb);
+      // Onerror fallback to the branded SVG tile — hqdefault 404s on a
+      // handful of videos (and on anything non-YouTube we fell through for).
+      img.setAttribute(
+        'onerror',
+        "this.onerror=null;this.src='" + VIDEO_PLACEHOLDER_SVG + "';"
+      );
       img.setAttribute('data-comp-id', blk.id);
       img.setAttribute('data-comp-video-placeholder', '1');
       img.setAttribute('data-comp-video-src', src);
-      img.setAttribute('data-comp-original-html', encodeURIComponent(el.outerHTML));
+      // Preserve the original markup for serialize() to restore. Lazy shells
+      // don't have a real iframe, so synthesize one from the resolved src.
+      var origHtml = el.outerHTML;
+      if (blk.type === 'video' && /data-comp-video-placeholder/.test(origHtml) === false && el.tagName !== 'IFRAME') {
+        origHtml = '<iframe src="' + (src || '') + '" width="' + w + '" height="' + h + '" frameborder="0" allowfullscreen></iframe>';
+      }
+      img.setAttribute('data-comp-original-html', encodeURIComponent(origHtml));
       img.style.display = 'block';
       img.style.objectFit = 'cover';
       img.style.cursor = 'pointer';
-      if (w) img.style.width = w + 'px';
-      if (h) img.style.height = h + 'px';
+      img.style.background = '#1a1a1a';
+      img.style.width = w + 'px';
+      img.style.height = h + 'px';
+      // Subtle affordance so the user knows the tile is clickable.
+      img.style.boxShadow = 'inset 0 0 0 2px rgba(184,135,46,0.35)';
       blk.videoPlaceholder = true;
       if (el.parentNode) el.parentNode.replaceChild(img, el);
     });
