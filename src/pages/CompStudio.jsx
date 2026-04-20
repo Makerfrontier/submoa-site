@@ -861,24 +861,35 @@ const INJECTED_SCRIPT = `
       if (!vEl2) return;
       var imgUrl = String(m.url || '').trim();
       if (!imgUrl) return;
-      var vw = vEl2.offsetWidth || vEl2.width || 0;
-      var vh = vEl2.offsetHeight || vEl2.height || 0;
-      var vStyle = vEl2.getAttribute('style') || '';
-      var vCls = vEl2.getAttribute('class') || '';
+      // Capture dimensions from whatever the placeholder/iframe reports,
+      // falling back to a 16:9 slot so an in-flight layout doesn't collapse
+      // the new image to 0×0.
+      var vw = vEl2.offsetWidth
+            || parseInt(vEl2.getAttribute('width') || '0', 10)
+            || vEl2.width || 0;
+      var vh = vEl2.offsetHeight
+            || parseInt(vEl2.getAttribute('height') || '0', 10)
+            || vEl2.height || 0;
+      if (!vw) vw = 640;
+      if (!vh) vh = Math.round(vw * 9 / 16);
+      var existingId = vEl2.getAttribute('data-comp-id');
       var parent = vEl2.parentElement;
       var img = document.createElement('img');
       img.setAttribute('src', imgUrl);
-      if (vw) img.setAttribute('width', String(vw));
-      if (vh) img.setAttribute('height', String(vh));
-      if (vStyle) img.setAttribute('style', vStyle);
-      if (vCls) img.setAttribute('class', vCls);
-      // Preserve the data-comp-id so the React selection doesn't drop off.
-      var existingId = vEl2.getAttribute('data-comp-id');
+      img.setAttribute('width', String(vw));
+      img.setAttribute('height', String(vh));
       if (existingId) img.setAttribute('data-comp-id', existingId);
+      // Explicit inline styles — don't copy the placeholder's whole style
+      // blob (which can carry a background or fixed cursor that looks odd
+      // on a photo). Width:100% + pixel height reproduces the original
+      // layout slot across breakpoints.
+      img.style.display = 'block';
+      img.style.width = '100%';
+      img.style.height = vh + 'px';
+      img.style.maxWidth = vw + 'px';
+      img.style.objectFit = 'cover';
       if (parent) parent.replaceChild(img, vEl2);
-      // New element is an <img> — run the same size-lock helper so any
-      // responsive styling on the parent slot still applies cleanly.
-      swapImgSrc(img, imgUrl);
+      console.log('[comp-studio] video → image swap:', { id: m.id, vw: vw, vh: vh, size: (imgUrl.length / 1024 | 0) + 'KB' });
       collect();
       return;
     }
@@ -934,16 +945,20 @@ const INJECTED_SCRIPT = `
       return;
     }
     if (m.type === 'serialize') {
-      var sClone = document.documentElement.cloneNode(true);
-      restoreVideoPlaceholders(sClone);
-      parent.postMessage({ source: 'comp-studio', type: 'serialized', html: '<!DOCTYPE html>\\n' + sClone.outerHTML }, '*');
+      // Export serializes the comp AS THE USER SEES IT. That means we keep
+      // the video-slot placeholder imgs (or whatever the user uploaded in
+      // their place) instead of restoring the original iframes. Restoring
+      // the iframe on export caused Puppeteer to render a cross-origin
+      // blocked YouTube frame and the user saw "original html" in the JPEG.
+      parent.postMessage({ source: 'comp-studio', type: 'serialized', html: '<!DOCTYPE html>\\n' + document.documentElement.outerHTML }, '*');
       return;
     }
     if (m.type === 'serializeStripped') {
       // Serialize the DOM with locked blocks replaced by placeholders so the
       // master prompt never rewrites locked regions. Parent re-injects them.
+      // Video placeholders are left in place so the master prompt sees the
+      // same visual the user sees rather than the original iframe.
       var cloneRoot = document.documentElement.cloneNode(true);
-      restoreVideoPlaceholders(cloneRoot);
       var locked = cloneRoot.querySelectorAll('[data-comp-locked="1"]');
       locked.forEach(function(el) {
         var placeholder = cloneRoot.ownerDocument.createElement('div');
@@ -1378,10 +1393,17 @@ function VideoEditPanel({ block, onAction, setToast }) {
     if (!file) return;
     setUploading(true);
     try {
-      const buf = await file.arrayBuffer();
-      const mime = file.type || 'image/png';
-      const b64 = btoa(Array.from(new Uint8Array(buf)).map(c => String.fromCharCode(c)).join(''));
-      apply(`data:${mime};base64,${b64}`);
+      // FileReader.readAsDataURL handles large images correctly; the prior
+      // btoa(Array.from(Uint8Array)...) pattern OOMs / silently corrupts
+      // payloads past a few MB, which manifested as "nothing happened" when
+      // replacing a video with an uploaded image.
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error || new Error('Read failed'));
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+      apply(String(dataUrl));
     } catch (e) {
       setToast && setToast('Upload failed: ' + (e?.message || e));
     } finally {
