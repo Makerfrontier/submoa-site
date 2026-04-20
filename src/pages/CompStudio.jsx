@@ -195,6 +195,93 @@ const INJECTED_SCRIPT = `
     var attrs = new Map();
     var cardParents = new Set();
 
+    // Pre-pass — swap every video iframe / lazy shell for a neutral
+    // placeholder BEFORE any other detection runs. This keeps the real
+    // iframe from being buried by a parent card/article/ad candidate
+    // during dedup, and it guarantees the user never sees the live
+    // YouTube embed in the canvas. The placeholder img survives
+    // subsequent detectors via the img[data-comp-video-placeholder]
+    // match on line ~310.
+    (function prePassVideoSwap() {
+      var PRE_VIDEO_HOST_RE = /(youtube\\.com|youtu\\.be|youtube-nocookie\\.com|vimeo\\.com|wistia\\.(?:com|net)|fast\\.wistia)/i;
+      function slotSvg(w, h) {
+        return 'data:image/svg+xml,' + encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
+          '<rect width="' + w + '" height="' + h + '" fill="#FAF7F2"/>' +
+          '<rect x="1" y="1" width="' + (w - 2) + '" height="' + (h - 2) + '" fill="none" stroke="#B8872E" stroke-width="2" stroke-dasharray="10 6"/>' +
+          '<circle cx="' + (w / 2) + '" cy="' + (h / 2 - 14) + '" r="28" fill="none" stroke="#2B4030" stroke-width="2.5"/>' +
+          '<polygon points="' + (w / 2 - 10) + ',' + (h / 2 - 28) + ' ' + (w / 2 - 10) + ',' + (h / 2) + ' ' + (w / 2 + 14) + ',' + (h / 2 - 14) + '" fill="#2B4030"/>' +
+          '<text x="' + (w / 2) + '" y="' + (h / 2 + 28) + '" text-anchor="middle" fill="#2B4030" font-family="sans-serif" font-size="14" font-weight="600">VIDEO SLOT — ' + w + ' × ' + h + '</text>' +
+          '<text x="' + (w / 2) + '" y="' + (h / 2 + 50) + '" text-anchor="middle" fill="#6B5744" font-family="sans-serif" font-size="12">Click to upload replacement image</text>' +
+          '</svg>'
+        );
+      }
+      function buildPlaceholder(el, src) {
+        var w = el.offsetWidth || parseInt(el.getAttribute('width') || '0', 10) || 0;
+        var h = el.offsetHeight || parseInt(el.getAttribute('height') || '0', 10) || 0;
+        if (!w || !h) {
+          var anc = el.parentElement, steps = 0;
+          while (anc && steps < 4 && (!w || !h)) {
+            if (!w) w = anc.offsetWidth || 0;
+            if (!h && w) h = Math.round(w * 9 / 16);
+            anc = anc.parentElement; steps++;
+          }
+        }
+        if (!w) w = 640;
+        if (!h) h = Math.round(w * 9 / 16);
+        var img = document.createElement('img');
+        img.setAttribute('src', slotSvg(w, h));
+        img.setAttribute('data-comp-video-placeholder', '1');
+        img.setAttribute('data-comp-video-src', src || '');
+        img.setAttribute('data-comp-original-html', encodeURIComponent(el.outerHTML));
+        img.style.display = 'block';
+        img.style.cursor = 'pointer';
+        img.style.width = w + 'px';
+        img.style.height = h + 'px';
+        img.style.maxWidth = '100%';
+        // Carry over a data-comp-id if the element already had one (stable
+        // selection across collect() runs).
+        var existingId = el.getAttribute && el.getAttribute('data-comp-id');
+        if (existingId) img.setAttribute('data-comp-id', existingId);
+        return img;
+      }
+      // Direct video iframes
+      Array.prototype.slice.call(document.querySelectorAll('iframe')).forEach(function(el) {
+        if (!el.parentNode) return;
+        if (el.closest && el.closest('[data-comp-skip]')) return;
+        var rawSrc = el.getAttribute('src') || el.getAttribute('data-src') || el.getAttribute('data-lazy-src') || '';
+        if (!rawSrc || !PRE_VIDEO_HOST_RE.test(rawSrc)) return;
+        el.parentNode.replaceChild(buildPlaceholder(el, rawSrc), el);
+      });
+      // <video> elements — keep as-is (they don't cross-origin-block) but
+      // still wrap behind an editable placeholder so the user can upload a
+      // poster instead. Skipping the swap for now keeps HTML5 videos intact.
+      // Lazy-load shells — lite-youtube, youtube-player divs, elements with
+      // data-youtube-id / data-video-id. Scripts that would normally inject
+      // the iframe have been stripped on import, so we synthesize an iframe
+      // src and swap in a placeholder.
+      Array.prototype.slice.call(document.querySelectorAll(
+        'lite-youtube, [class*="lite-youtube" i], [class*="youtube-player" i], [class*="yt-lite" i], ' +
+        '[data-youtube-id], [data-video-id], [data-yt-id], [data-ytid], ' +
+        '[data-src*="youtube" i], [data-src*="youtu.be" i], [data-src*="vimeo" i]'
+      )).forEach(function(el) {
+        if (!el.parentNode) return;
+        if (el.closest && el.closest('[data-comp-skip]')) return;
+        var ytId = el.getAttribute('data-youtube-id')
+                || el.getAttribute('data-video-id')
+                || el.getAttribute('data-yt-id')
+                || el.getAttribute('data-ytid') || '';
+        var dsrc = el.getAttribute('data-src') || el.getAttribute('data-lazy-src') || el.getAttribute('data-url') || '';
+        if (!ytId && dsrc) {
+          var m0 = dsrc.match(/(?:youtube(?:-nocookie)?\\.com\\/embed\\/|youtu\\.be\\/|youtube\\.com\\/watch\\?v=)([A-Za-z0-9_-]{8,})/i);
+          if (m0) ytId = m0[1];
+        }
+        var synthSrc = ytId ? ('https://www.youtube.com/embed/' + ytId) : dsrc;
+        if (!synthSrc) return;
+        el.parentNode.replaceChild(buildPlaceholder(el, synthSrc), el);
+      });
+    })();
+
     // Logo detection — handles three shapes:
     //   A) a real <img> (prefer logo/brand class/src hints, fall through to any img)
     //   B) a CSS background-image on a logo-classed/ided element — check both
@@ -302,14 +389,16 @@ const INJECTED_SCRIPT = `
       cardParents.add(el);
     });
 
-    // Previously-swapped video placeholders — keep them as video blocks so
-    // the edit panel still acts on them across repeat collect() runs. Must
-    // run BEFORE the generic image detector so the img isn't picked up as
-    // a plain image block.
+    // Video placeholders — catches both the pre-pass swap (iframes / lazy
+    // shells replaced at the top of collect()) and anything saved from a
+    // prior session. Must run BEFORE the generic image detector so the img
+    // isn't classified as a plain image block. Added to cardParents so an
+    // enclosing article/card doesn't dedup-drop it.
     document.querySelectorAll('img[data-comp-video-placeholder]').forEach(function(el) {
       if (el.closest('[data-comp-skip]') || isExcludedChrome(el)) return;
       if (candidates.has(el)) return;
       candidates.set(el, { type: 'video', videoPlaceholder: true });
+      cardParents.add(el);
     });
 
     // Video embeds — match any iframe or lazy-embed element pointing at
