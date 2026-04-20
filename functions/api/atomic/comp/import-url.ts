@@ -64,6 +64,12 @@ For each block: { "type": "block-type", "fields": { ...field values matching the
 Rules:
 - Extract REAL text content from the HTML — actual headlines, body copy, nav labels.
 - For images, use actual src URLs from the HTML (make them absolute).
+- If you cannot find a real image URL in the HTML for a given field,
+  use a Picsum seeded placeholder: https://picsum.photos/seed/{word}/{w}/{h}
+  Pick a seed word that matches the content theme (e.g. "racing", "trail",
+  "team", "product", "event"). Picsum URLs always resolve.
+  NEVER generate images.unsplash.com URLs — they require real photo IDs
+  and will 404 if invented.
 - card-grid and article-grid: extract the grid's cards/articles as a JSON string in the "cards" or "articles" field.
 - nav: "links" field is a JSON string of [{text,url}].
 - footer: "columns" field is a JSON string of [{heading, links:[{text,url}]}].

@@ -84,8 +84,21 @@ Available block types: ${BLOCK_TYPES_LIST}
 Generate a "blocks" array with one block per requested section, in the requested order.
 Write REAL, compelling copy — not placeholder text, not "Lorem ipsum". Write as if a professional copywriter is launching this page.
 
-Image fields: use https://images.unsplash.com/photo-{id}?w=1200&auto=format&fit=crop
-Pick thematically appropriate Unsplash photos for the site's subject.
+Image fields: use Picsum placeholder URLs with thematically relevant seed
+words so they always resolve. Format: https://picsum.photos/seed/{word}/{w}/{h}
+
+Choose seeds that match the content theme:
+- Hero backgrounds (1200x600): racing, motorsport, outdoors, adventure, sport, team
+- Card images (800x600): vehicle, product, sponsor, event, action, gear
+- Avatar/portrait (200x200): person, portrait, team
+
+Examples:
+- Racing hero: https://picsum.photos/seed/racing/1200/600
+- Sponsor card: https://picsum.photos/seed/sponsor/800/500
+- Team photo: https://picsum.photos/seed/team/800/600
+
+NEVER use images.unsplash.com URLs — they require specific valid photo IDs
+and Claude-generated IDs will 404. Picsum returns real photos per seed.
 For card-grid and article-grid: generate 3-4 realistic cards/articles with full fields.
 For stats: use plausible, impressive numbers specific to the industry.
 For nav.links, footer.columns, testimonial-grid.testimonials etc. (JSON-string fields):

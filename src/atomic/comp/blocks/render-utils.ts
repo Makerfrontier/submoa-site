@@ -4,8 +4,22 @@
 
 import type { BrandConfig } from '../brand/BrandConfig';
 
-export function escapeHtml(s: unknown): string {
+// Strips `<tag ...>` fragments that Claude occasionally leaks into plain
+// text fields. Standalone "<" or ">" (as in "A > B" comparisons) survive
+// because the regex requires both delimiters to form a tag.
+export function stripHtml(s: unknown): string {
   return String(s ?? '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function escapeHtml(s: unknown): string {
+  // stripHtml first — covers existing dirty drafts where a text field
+  // contains "<h1 style="...">Headline" strings that would otherwise
+  // render as visible tag text once escaped.
+  return stripHtml(s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')

@@ -58,20 +58,54 @@ const BLOCK_TYPES = new Set([
   'video','sponsor-grid','divider','footer','raw-html',
 ]);
 
+// Fields that must NOT be persisted from import — they override the brand
+// panel if they carry a value. Leaving them empty lets every render fall
+// through to brand.* so brand-panel edits actually drive the canvas.
+const BRAND_DERIVED_FIELDS = new Set(['textColor', 'bgColor']);
+
+// Field keys that legitimately carry HTML markup (raw-html escape hatch).
+// Don't strip tags from these — everything else is plain text and should
+// have HTML tags removed so Claude-hallucinated <h1 style="..."> fragments
+// don't render as literal text.
+const HTML_SAFE_FIELDS = new Set(['html']);
+
+// Tag stripper. Keeps punctuation like ">" on its own (regex requires both
+// "<" and ">" to form a tag) so "A > B" comparison text survives.
+function stripHtmlTags(s: string): string {
+  if (!s) return '';
+  return s
+    .replace(/<[^>]*>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function normalizeBlocks(raw: any[], cap = 20): Block[] {
   const arr = Array.isArray(raw) ? raw : [];
   return arr.slice(0, cap).map((b: any) => {
     const type = typeof b?.type === 'string' && BLOCK_TYPES.has(b.type) ? b.type : 'raw-html';
     const fields = (b && typeof b.fields === 'object' && b.fields) ? b.fields : {};
-    // Coerce all field values to strings — the client's field editors
-    // assume strings. Arrays/objects are JSON-stringified so a card-grid
-    // that came back with a real array still hydrates cleanly.
     const normFields: Record<string, string> = {};
     for (const k of Object.keys(fields)) {
+      if (BRAND_DERIVED_FIELDS.has(k)) continue; // skip — derive from brand
       const v = fields[k];
-      if (typeof v === 'string') normFields[k] = v;
-      else if (v == null) normFields[k] = '';
-      else normFields[k] = JSON.stringify(v);
+      let asString: string;
+      if (typeof v === 'string') asString = v;
+      else if (v == null) asString = '';
+      else asString = JSON.stringify(v);
+      // Keep raw-html's html field untouched (it's the intentional
+      // escape hatch). Strip HTML tags from every other plain-text /
+      // richtext field so we don't persist `<h1 style="...">Headline`
+      // strings that then render as visible tag text.
+      if (!HTML_SAFE_FIELDS.has(k) && type !== 'raw-html') {
+        asString = stripHtmlTags(asString);
+      }
+      normFields[k] = asString;
     }
     return { id: genId(), type, fields: normFields, locked: false };
   });

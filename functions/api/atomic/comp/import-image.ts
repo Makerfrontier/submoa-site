@@ -56,7 +56,11 @@ Return a JSON object:
 
 Rules:
 - Write REAL content based on what you can read in the image — actual headlines, copy, nav labels.
-- For images you can't extract: use https://images.unsplash.com/photo-{relevant-id}?w=1200&auto=format&fit=crop
+- For images you can't extract: use a Picsum seeded placeholder
+  https://picsum.photos/seed/{word}/{w}/{h} where {word} matches the
+  content theme (e.g. racing, trail, team, product). Picsum URLs always
+  resolve. NEVER use images.unsplash.com URLs — they require real photo
+  IDs and will 404 if invented.
 - Pick brand colors from what's actually visible in the design.
 - Limit to 12 blocks. Skip cookie banners and popups.
 - For fields that expect a JSON string (nav.links, card-grid.cards, footer.columns, testimonial-grid.testimonials),
