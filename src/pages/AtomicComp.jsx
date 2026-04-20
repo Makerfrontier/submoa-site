@@ -1,89 +1,357 @@
 // Atomic Comp System — builder page.
-// Phase 1: foundation placeholder. The full builder (start screen, canvas,
-// edit panel, import flows) ships in Phases 2-5.
+// Phase 2: full manual block-assembly editor. Left panel (block list + edit
+// panel), scrollable canvas, auto-save, Share button. Creation flows other
+// than Start Blank are Phase 3.
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { EditPanel } from '../atomic/comp/panels/EditPanel';
+import { BlockCanvas } from '../atomic/comp/canvas/BlockCanvas';
+import { StartScreen } from '../atomic/comp/panels/StartScreen';
+import { createBlock } from '../atomic/comp/blocks';
+import { DEFAULT_BRAND, normalizeBrand } from '../atomic/comp/brand/BrandConfig';
+
+function readIdFromPath() {
+  if (typeof window === 'undefined') return null;
+  const m = window.location.pathname.match(/^\/atomic\/comp\/([^/?#]+)/);
+  return m ? m[1] : null;
+}
 
 export default function AtomicComp({ navigate }) {
-  const pathId = typeof window !== 'undefined'
-    ? (window.location.pathname.match(/^\/atomic\/comp\/([^/?#]+)/) || [])[1] || null
-    : null;
+  const [comp, setComp] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState('');
+  const saveTimer = useRef(null);
+  const pendingCompRef = useRef(null); // latest state for debounced save
+  const compIdRef = useRef(null);      // newest known id (survives async saves)
 
-  const [compId] = useState(pathId);
-  const [apiStatus, setApiStatus] = useState('checking');
-
+  // Load existing comp on mount if the URL has an id.
   useEffect(() => {
-    // Light health check so the placeholder shows the endpoints are live.
-    // Phase 2 replaces this with real data loading.
+    const id = readIdFromPath();
+    if (!id) { setComp(null); return; }
     let cancelled = false;
+    setLoading(true);
     (async () => {
       try {
-        const res = await fetch('/api/atomic/comp', { credentials: 'include' });
+        const res = await fetch(`/api/atomic/comp/${id}`, { credentials: 'include' });
+        const data = await res.json().catch(() => ({}));
         if (cancelled) return;
-        setApiStatus(res.ok ? 'ready' : `error-${res.status}`);
-      } catch {
-        if (!cancelled) setApiStatus('error-network');
+        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        const blocks = Array.isArray(data.blocks) ? data.blocks
+          : (typeof data.blocks_json === 'string' ? safeParse(data.blocks_json, []) : []);
+        const brand = normalizeBrand(data.brand || (typeof data.brand_json === 'string' ? safeParse(data.brand_json, {}) : {}));
+        compIdRef.current = data.id || id;
+        setComp({
+          id: data.id || id,
+          name: data.name || 'Untitled Comp',
+          source_url: data.source_url || null,
+          share_token: data.share_token || null,
+          share_enabled: !!data.share_enabled,
+          blocks, brand,
+        });
+      } catch (e) {
+        if (!cancelled) setToast('Load failed: ' + String(e?.message || e));
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  const sectionBullet = {
-    display: 'flex', alignItems: 'baseline', gap: 10,
-    fontSize: 13, color: 'var(--text-mid)', lineHeight: 1.65,
+  const scheduleAutoSave = (next) => {
+    pendingCompRef.current = next;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => { void saveComp(pendingCompRef.current); }, 1500);
   };
-  const dot = {
-    display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
-    background: 'var(--amber)', transform: 'translateY(-2px)', flexShrink: 0,
+
+  const saveComp = useCallback(async (toSave) => {
+    if (!toSave) return;
+    setSaving(true);
+    try {
+      const body = {
+        name: toSave.name,
+        blocks: toSave.blocks,
+        brand:  toSave.brand,
+        source_url: toSave.source_url || null,
+      };
+      const id = compIdRef.current;
+      if (!id) {
+        // No id yet — this path is exercised only if the user skipped the
+        // StartScreen POST (shouldn't happen). Keep it for safety.
+        const res = await fetch('/api/atomic/comp', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...body, blocks_json: JSON.stringify(body.blocks), brand_json: JSON.stringify(body.brand) }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        const newId = data?.comp?.id;
+        if (newId) {
+          compIdRef.current = newId;
+          setComp((prev) => prev ? { ...prev, id: newId } : prev);
+          window.history.replaceState({}, '', `/atomic/comp/${newId}`);
+        }
+      } else {
+        const res = await fetch(`/api/atomic/comp/${id}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error || `HTTP ${res.status}`);
+        }
+      }
+    } catch (e) {
+      setToast('Save failed: ' + String(e?.message || e));
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  // Block operations
+  const updateField = (blockId, key, value) => {
+    setComp((prev) => {
+      if (!prev) return prev;
+      const next = {
+        ...prev,
+        blocks: prev.blocks.map((b) =>
+          b.id === blockId ? { ...b, fields: { ...(b.fields || {}), [key]: value } } : b
+        ),
+      };
+      scheduleAutoSave(next);
+      return next;
+    });
   };
+
+  const addBlock = (type) => {
+    try {
+      const newBlock = createBlock(type);
+      setComp((prev) => {
+        if (!prev) return prev;
+        const idx = prev.blocks.findIndex((b) => b.id === selectedId);
+        const blocks = [...prev.blocks];
+        blocks.splice(idx === -1 ? blocks.length : idx + 1, 0, newBlock);
+        const next = { ...prev, blocks };
+        scheduleAutoSave(next);
+        return next;
+      });
+      setSelectedId(newBlock.id);
+    } catch (e) {
+      setToast('Add failed: ' + String(e?.message || e));
+    }
+  };
+
+  const deleteBlock = (blockId) => {
+    setComp((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, blocks: prev.blocks.filter((b) => b.id !== blockId) };
+      scheduleAutoSave(next);
+      return next;
+    });
+    if (selectedId === blockId) setSelectedId(null);
+  };
+
+  const toggleLock = (blockId) => {
+    setComp((prev) => {
+      if (!prev) return prev;
+      const next = {
+        ...prev,
+        blocks: prev.blocks.map((b) => b.id === blockId ? { ...b, locked: !b.locked } : b),
+      };
+      scheduleAutoSave(next);
+      return next;
+    });
+  };
+
+  const reorderBlocks = (draggingId, targetId) => {
+    setComp((prev) => {
+      if (!prev) return prev;
+      const blocks = [...prev.blocks];
+      const fromIdx = blocks.findIndex((b) => b.id === draggingId);
+      const toIdx = blocks.findIndex((b) => b.id === targetId);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const [moved] = blocks.splice(fromIdx, 1);
+      blocks.splice(toIdx, 0, moved);
+      const next = { ...prev, blocks };
+      scheduleAutoSave(next);
+      return next;
+    });
+  };
+
+  const handleShare = async () => {
+    const id = compIdRef.current;
+    if (!id) { setToast('Save first'); return; }
+    try {
+      const res = await fetch(`/api/atomic/comp/${id}/share`, { method: 'POST', credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      if (data.share_url) {
+        try { await navigator.clipboard.writeText(data.share_url); } catch {}
+        setComp((prev) => prev ? { ...prev, share_token: data.token, share_enabled: true } : prev);
+        setToast('Share link copied — ' + data.share_url);
+      }
+    } catch (e) {
+      setToast('Share failed: ' + String(e?.message || e));
+    }
+  };
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(''), 3600);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Start screen when no comp loaded
+  if (!comp) {
+    if (loading) return <LoadingState />;
+    return <StartScreen onCompCreated={(c) => {
+      const blocks = Array.isArray(c.blocks) ? c.blocks : [];
+      const brand = normalizeBrand(c.brand || DEFAULT_BRAND);
+      compIdRef.current = c.id;
+      setComp({
+        id: c.id, name: c.name || 'Untitled Comp',
+        source_url: c.source_url || null,
+        share_token: c.share_token || null,
+        share_enabled: !!c.share_enabled,
+        blocks, brand,
+      });
+      window.history.pushState({}, '', `/atomic/comp/${c.id}`);
+    }} />;
+  }
 
   return (
-    <div style={{ padding: '48px 32px', maxWidth: 760, margin: '0 auto' }}>
-      <div style={{
-        fontSize: 10, fontWeight: 700, letterSpacing: '.12em',
-        textTransform: 'uppercase', color: 'var(--amber)',
-      }}>
-        ✦ Atomic Comp System
-      </div>
-      <h1 style={{
-        fontFamily: 'var(--font-heading, "DM Sans")',
-        fontSize: 32, fontWeight: 700, color: 'var(--text)',
-        margin: '6px 0 8px',
-      }}>
-        Foundation shipped — builder lands in Phase 2
-      </h1>
-      <p style={{ fontSize: 14, color: 'var(--text-mid)', lineHeight: 1.6, margin: 0 }}>
-        The DB table, API endpoints, block/brand type system, and routes are
-        live. The virtual canvas, block renderers, and creation flows are
-        staged for the next session.
-      </p>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
+      <TopBar
+        comp={comp}
+        saving={saving}
+        onNameChange={(name) => setComp((prev) => {
+          const next = { ...prev, name };
+          scheduleAutoSave(next);
+          return next;
+        })}
+        onShare={handleShare}
+        navigate={navigate}
+      />
 
-      <div style={{
-        marginTop: 28, padding: 18, borderRadius: 10,
-        background: 'var(--card)', border: '1px solid var(--border)',
-      }}>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <EditPanel
+          blocks={comp.blocks}
+          selectedId={selectedId}
+          brand={comp.brand}
+          onSelectBlock={setSelectedId}
+          onUpdateField={updateField}
+          onAddBlock={addBlock}
+          onDeleteBlock={deleteBlock}
+          onToggleLock={toggleLock}
+          onReorder={reorderBlocks}
+        />
+
         <div style={{
-          fontSize: 11, fontWeight: 700, letterSpacing: '.08em',
-          textTransform: 'uppercase', color: 'var(--text-mid)', marginBottom: 10,
+          flex: 1, overflowY: 'auto', padding: 24,
+          background: '#EFECE5',
         }}>
-          Phase 1 Status
-        </div>
-        <div style={sectionBullet}><span style={dot} />D1 table <code>atomic_comp_drafts</code> created</div>
-        <div style={sectionBullet}><span style={dot} />API: <code>GET/POST /api/atomic/comp</code> — <strong>{apiStatus}</strong></div>
-        <div style={sectionBullet}><span style={dot} />API: <code>GET/PUT/DELETE /api/atomic/comp/:id</code></div>
-        <div style={sectionBullet}><span style={dot} />API: <code>POST /api/atomic/comp/:id/share</code> → <code>/c/{'{'}token{'}'}</code></div>
-        <div style={sectionBullet}><span style={dot} />API: <code>GET /api/atomic/comp/share/:token</code> (public)</div>
-        <div style={sectionBullet}><span style={dot} />Types: <code>Block</code>, <code>BlockDef</code>, <code>BrandConfig</code>, <code>compStore</code></div>
-        {compId && (
-          <div style={{ ...sectionBullet, color: 'var(--amber)' }}>
-            <span style={dot} />Comp id from URL: <code>{compId}</code> (hydration deferred to Phase 2)
+          <div style={{
+            maxWidth: 1280, margin: '0 auto',
+            background: '#fff',
+            boxShadow: '0 8px 40px rgba(0,0,0,0.12)',
+            borderRadius: 10, overflow: 'hidden',
+            minHeight: 600,
+          }}>
+            <BlockCanvas
+              blocks={comp.blocks}
+              brand={comp.brand}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onReorder={reorderBlocks}
+            />
           </div>
-        )}
+        </div>
       </div>
 
-      <div style={{ marginTop: 20, fontSize: 12, color: 'var(--text-light, var(--text-mid))' }}>
-        The original Comp Studio remains untouched at <a href="/comp-studio" onClick={(e) => { e.preventDefault(); navigate && navigate('/comp-studio'); }}>/comp-studio</a>.
+      {toast && (
+        <div
+          onClick={() => setToast('')}
+          style={{
+            position: 'fixed', bottom: 24, left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'var(--green-dark)',
+            color: '#fff', padding: '12px 24px',
+            borderRadius: 8, fontSize: 14,
+            fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
+            zIndex: 999, boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+            maxWidth: 600, cursor: 'pointer',
+          }}
+        >{toast}</div>
+      )}
+    </div>
+  );
+}
+
+function TopBar({ comp, saving, onNameChange, onShare, navigate }) {
+  return (
+    <div style={{
+      flexShrink: 0,
+      height: 52,
+      background: 'var(--card)',
+      borderBottom: '1px solid var(--border)',
+      display: 'flex', alignItems: 'center',
+      padding: '0 16px', gap: 16,
+    }}>
+      <button
+        onClick={() => navigate ? navigate('/dashboard') : (window.location.href = '/dashboard')}
+        style={{
+          background: 'transparent', border: 'none', padding: '6px 10px',
+          borderRadius: 6, cursor: 'pointer',
+          fontSize: 11, fontWeight: 700,
+          letterSpacing: '0.12em', textTransform: 'uppercase',
+          color: 'var(--amber)', fontFamily: 'DM Sans, sans-serif',
+        }}
+      >✦ Atomic Comp</button>
+
+      <input
+        value={comp.name}
+        onChange={(e) => onNameChange(e.target.value)}
+        style={{
+          background: 'transparent', border: 'none',
+          fontSize: 15, fontWeight: 500,
+          color: 'var(--text)', fontFamily: 'DM Sans, sans-serif',
+          outline: 'none', flex: 1, minWidth: 0, padding: '6px 4px',
+        }}
+      />
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        {saving && (
+          <span style={{ fontSize: 12, color: 'var(--text-mid)', fontFamily: 'DM Sans, sans-serif' }}>Saving…</span>
+        )}
+        {!saving && comp.share_enabled && (
+          <span style={{ fontSize: 12, color: 'var(--green-dark)', fontFamily: 'DM Sans, sans-serif' }}>● Shared</span>
+        )}
+        <button
+          onClick={onShare}
+          style={{
+            background: 'var(--green-dark)', color: '#fff',
+            border: 'none', borderRadius: 6,
+            padding: '8px 18px', fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
+          }}
+        >Share</button>
       </div>
     </div>
   );
 }
+
+function LoadingState() {
+  return (
+    <div style={{
+      minHeight: '100vh',
+      display: 'grid', placeItems: 'center',
+      background: 'var(--bg)',
+      fontFamily: 'DM Sans, sans-serif', color: 'var(--text-mid)',
+    }}>Loading comp…</div>
+  );
+}
+
+function safeParse(s, fb) { try { return JSON.parse(s); } catch { return fb; } }

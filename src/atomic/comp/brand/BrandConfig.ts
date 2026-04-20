@@ -18,16 +18,16 @@ export interface BrandConfig {
 }
 
 export const DEFAULT_BRAND: BrandConfig = {
-  primary:     '#2B4030',
+  primary:     '#2A5A6A',
   secondary:   '#B8872E',
-  background:  '#FAFAF7',
-  surface:     '#FFFFFF',
-  text:        '#1A1A1A',
-  textLight:   '#6B6B6B',
-  headingFont: '"DM Sans", system-ui, -apple-system, sans-serif',
+  background:  '#FFFFFF',
+  surface:     '#F6F4EF',
+  text:        '#1A1613',
+  textLight:   '#65625E',
+  headingFont: 'Georgia, "DM Serif Display", serif',
   bodyFont:    '"DM Sans", system-ui, -apple-system, sans-serif',
   logoUrl:     '',
-  siteName:    '',
+  siteName:    'My Comp',
   source:      'default',
 };
 

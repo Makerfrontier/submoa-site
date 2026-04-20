@@ -448,7 +448,6 @@ function isAppRoute(path) {
       path === '/podcast-studio' || path.startsWith('/podcast-studio/') ||
       path === '/prompt-builder' ||
       path === '/comp-studio' ||
-      path === '/atomic/comp' || path.startsWith('/atomic/comp/') ||
       path === '/youtube-transcript' ||
       path === '/legislative-intelligence' ||
       path === '/press-release' ||
@@ -3203,6 +3202,17 @@ export default function App() {
     );
   }
 
+  // Atomic Comp builder — standalone full-viewport editor. Bypasses the
+  // sidebar shell so the two-column layout (edit panel + canvas) gets the
+  // full viewport height without fighting the app chrome.
+  if (page === '/atomic/comp' || page.startsWith('/atomic/comp/')) {
+    return (
+      <AuthContext.Provider value={authValue}>
+        {loading ? null : user ? <AtomicComp navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />}
+      </AuthContext.Provider>
+    );
+  }
+
   // Quick Podcast — also standalone (no sidebar). Structurally separable
   // for the future product spinout; treated like a different app that
   // happens to share auth.
@@ -3256,7 +3266,6 @@ export default function App() {
         {page === '/brief/presentation' && (loading ? null : user ? <PresentationBrief navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/planner' && (loading ? null : user ? <Planner navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/comp-studio' && (loading ? null : user ? <CompStudio /> : <Login navigate={navigate} syncUser={syncUser} />)}
-        {(page === '/atomic/comp' || page.startsWith('/atomic/comp/')) && (loading ? null : user ? <AtomicComp navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/youtube-transcript' && (loading ? null : user ? <YouTubeTranscript navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/legislative-intelligence' && (loading ? null : user ? <LegislativeGate navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/press-release' && (loading ? null : user ? <PressRelease navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
