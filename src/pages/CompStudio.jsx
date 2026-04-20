@@ -546,39 +546,28 @@ const INJECTED_SCRIPT = `
       blocks.push(block);
     });
 
-    // YouTube/Vimeo iframes hard-block cross-origin framing with X-Frame-Options
-    // which makes the canvas show a broken "content blocked" tile. Swap each
-    // video candidate (iframe or lazy-shell) for a clickable thumbnail img.
-    // The real iframe outerHTML is kept in data-comp-original-html and
-    // restored on serialize so exports still carry the player.
-    var VIDEO_PLACEHOLDER_SVG = 'data:image/svg+xml,' + encodeURIComponent(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">' +
-      '<rect width="640" height="360" fill="#1a1a1a"/>' +
-      '<circle cx="320" cy="180" r="44" fill="none" stroke="#FAF7F2" stroke-width="3"/>' +
-      '<polygon points="308,156 308,204 346,180" fill="#FAF7F2"/>' +
-      '<text x="320" y="248" text-anchor="middle" fill="#B8872E" font-family="sans-serif" font-size="14" letter-spacing="2">VIDEO — CLICK TO EDIT</text>' +
-      '</svg>'
-    );
-    // Match a real 11-char YouTube video ID; reject playlist "videoseries"
-    // and oembed-style aliases that would 404 the thumbnail endpoint.
-    var YT_ID_RE = /(?:youtube(?:-nocookie)?\\.com\\/embed\\/|youtu\\.be\\/|youtube\\.com\\/watch\\?v=|youtube\\.com\\/shorts\\/)([A-Za-z0-9_-]{11})(?:[?&#/]|$)/;
-    function getYouTubeThumb(srcOrId) {
-      if (!srcOrId) return '';
-      if (/^[A-Za-z0-9_-]{11}$/.test(srcOrId)) return 'https://img.youtube.com/vi/' + srcOrId + '/hqdefault.jpg';
-      var m = String(srcOrId).match(YT_ID_RE);
-      return m ? ('https://img.youtube.com/vi/' + m[1] + '/hqdefault.jpg') : '';
+    // Every video candidate (iframe, lazy shell, <video>) is swapped for a
+    // neutral image-upload slot at the captured dimensions. Intentionally
+    // NOT a YouTube thumbnail — the user wants an empty placeholder they
+    // can fill with their own image. The original markup is kept in
+    // data-comp-original-html for serialize() restoration if needed later.
+    function buildVideoSlotSvg(w, h) {
+      var label = w + ' × ' + h;
+      return 'data:image/svg+xml,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
+        '<rect width="' + w + '" height="' + h + '" fill="#FAF7F2"/>' +
+        '<rect x="1" y="1" width="' + (w - 2) + '" height="' + (h - 2) + '" fill="none" stroke="#B8872E" stroke-width="2" stroke-dasharray="10 6"/>' +
+        '<circle cx="' + (w / 2) + '" cy="' + (h / 2 - 14) + '" r="28" fill="none" stroke="#2B4030" stroke-width="2.5"/>' +
+        '<polygon points="' + (w / 2 - 10) + ',' + (h / 2 - 28) + ' ' + (w / 2 - 10) + ',' + (h / 2) + ' ' + (w / 2 + 14) + ',' + (h / 2 - 14) + '" fill="#2B4030"/>' +
+        '<text x="' + (w / 2) + '" y="' + (h / 2 + 28) + '" text-anchor="middle" fill="#2B4030" font-family="sans-serif" font-size="14" font-weight="600">VIDEO SLOT — ' + label + '</text>' +
+        '<text x="' + (w / 2) + '" y="' + (h / 2 + 50) + '" text-anchor="middle" fill="#6B5744" font-family="sans-serif" font-size="12">Click to upload replacement image</text>' +
+        '</svg>'
+      );
     }
     blocks.forEach(function(blk) {
       if (blk.type !== 'video' || blk.videoPlaceholder) return;
       var el = findById(blk.id);
       if (!el) return;
-      // Accept iframes, lazy shells, and any non-<video> element that was
-      // registered as a video candidate. <video> elements already render
-      // fine in the canvas — skip swapping them.
-      if (el.tagName === 'VIDEO') return;
-      var src = blk.videoSrc || el.getAttribute('src')
-              || el.getAttribute('data-src') || el.getAttribute('data-embed-url') || '';
-      var thumb = getYouTubeThumb(src) || VIDEO_PLACEHOLDER_SVG;
       // Dimensions: measured first, then width/height attrs, then the
       // offset of the nearest sized ancestor, finally a 640×360 default so
       // lazy shells with 0 measured size still render a visible tile.
@@ -595,33 +584,30 @@ const INJECTED_SCRIPT = `
       if (!w) w = 640;
       if (!h) h = Math.round(w * 9 / 16);
 
+      var src = blk.videoSrc || el.getAttribute('src')
+              || el.getAttribute('data-src') || el.getAttribute('data-embed-url') || '';
+      var slotSvg = buildVideoSlotSvg(w, h);
       var img = document.createElement('img');
-      img.setAttribute('src', thumb);
-      // Onerror fallback to the branded SVG tile — hqdefault 404s on a
-      // handful of videos (and on anything non-YouTube we fell through for).
-      img.setAttribute(
-        'onerror',
-        "this.onerror=null;this.src='" + VIDEO_PLACEHOLDER_SVG + "';"
-      );
+      img.setAttribute('src', slotSvg);
       img.setAttribute('data-comp-id', blk.id);
       img.setAttribute('data-comp-video-placeholder', '1');
       img.setAttribute('data-comp-video-src', src);
-      // Preserve the original markup for serialize() to restore. Lazy shells
-      // don't have a real iframe, so synthesize one from the resolved src.
+      // Preserve the original markup for serialize(). Lazy shells have no
+      // real iframe — synthesize one from the resolved src so exports still
+      // round-trip to a working embed.
       var origHtml = el.outerHTML;
-      if (blk.type === 'video' && /data-comp-video-placeholder/.test(origHtml) === false && el.tagName !== 'IFRAME') {
+      if (el.tagName !== 'IFRAME' && el.tagName !== 'VIDEO') {
         origHtml = '<iframe src="' + (src || '') + '" width="' + w + '" height="' + h + '" frameborder="0" allowfullscreen></iframe>';
       }
       img.setAttribute('data-comp-original-html', encodeURIComponent(origHtml));
       img.style.display = 'block';
-      img.style.objectFit = 'cover';
       img.style.cursor = 'pointer';
-      img.style.background = '#1a1a1a';
       img.style.width = w + 'px';
       img.style.height = h + 'px';
-      // Subtle affordance so the user knows the tile is clickable.
-      img.style.boxShadow = 'inset 0 0 0 2px rgba(184,135,46,0.35)';
+      img.style.maxWidth = '100%';
       blk.videoPlaceholder = true;
+      blk.videoW = w;
+      blk.videoH = h;
       if (el.parentNode) el.parentNode.replaceChild(img, el);
     });
 
@@ -1094,7 +1080,7 @@ function BlockRow({ block, selected, onSelect, onToggleLock, onAction, category,
           ) : block.type === 'card' ? (
             <CardEditPanel block={block} onAction={onAction} setToast={setToast} />
           ) : block.type === 'video' ? (
-            <VideoEditPanel block={block} onAction={onAction} />
+            <VideoEditPanel block={block} onAction={onAction} setToast={setToast} />
           ) : block.type === 'header' || block.type === 'footer' ? (
             <HeaderFooterEditPanel block={block} onAction={onAction} setToast={setToast} />
           ) : (
@@ -1367,59 +1353,78 @@ function AdEditPanel({ block, category, onAction, setToast }) {
 // ─── Video edit panel ──────────────────────────────────────────────────────
 // Video blocks get two knobs: swap the iframe src, or replace the iframe
 // with a static image at the same dimensions. No player UI.
-function VideoEditPanel({ block, onAction }) {
-  const [videoUrl, setVideoUrl] = useState(block.videoSrc || '');
+function VideoEditPanel({ block, onAction, setToast }) {
   const [imageUrl, setImageUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const w = block.videoW || 0;
+  const h = block.videoH || 0;
+  const dims = w && h ? `${w}×${h}` : 'video slot';
 
-  useEffect(() => {
-    setVideoUrl(block.videoSrc || '');
-    setImageUrl('');
-  }, [block.id, block.videoSrc]);
+  useEffect(() => { setImageUrl(''); }, [block.id]);
 
-  const applyUrl = () => {
-    if (!videoUrl.trim()) return;
-    onAction({ type: 'replaceVideoSrc', id: block.id, url: videoUrl.trim(), label: block.name });
-  };
-
-  const applyImage = () => {
-    if (!imageUrl.trim()) return;
+  const apply = (url) => {
+    const val = String(url || '').trim();
+    if (!val) return;
     onAction({
       type: 'replaceVideoWithImage',
       id: block.id,
-      url: imageUrl.trim(),
+      url: val,
       label: block.name,
-      dimensions: `${block.videoW || 0}x${block.videoH || 0}`,
+      dimensions: `${w}x${h}`,
     });
   };
 
+  const upload = async (file) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const mime = file.type || 'image/png';
+      const b64 = btoa(Array.from(new Uint8Array(buf)).map(c => String.fromCharCode(c)).join(''));
+      apply(`data:${mime};base64,${b64}`);
+    } catch (e) {
+      setToast && setToast('Upload failed: ' + (e?.message || e));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ fontSize: 12, color: 'var(--text-mid)' }}>
-        {block.videoTag === 'VIDEO' ? 'HTML5 video' : 'Embedded video'}
-        {block.videoW && block.videoH ? ` — ${block.videoW}×${block.videoH}` : ''}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '.08em',
+        textTransform: 'uppercase', color: 'var(--text-mid)',
+      }}>
+        Video slot — upload replacement image
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5 }}>
+        The original video embed is hidden in the comp. Upload an image
+        (screenshot, poster art, thumbnail) to fill the {dims} slot.
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <label className="form-label" style={{ fontSize: 10 }}>Swap video URL</label>
+      <label style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        gap: 8, padding: '10px 16px', borderRadius: 6,
+        border: '1.5px dashed var(--border)', cursor: 'pointer',
+        fontSize: 13, color: 'var(--text-mid)', background: 'var(--bg)',
+      }}>
+        {uploading ? 'Uploading…' : `Upload image (${dims})`}
         <input
-          className="form-input"
-          value={videoUrl}
-          onChange={(e) => setVideoUrl(e.target.value)}
-          placeholder="https://www.youtube.com/watch?v=…"
+          type="file" accept="image/*" style={{ display: 'none' }}
+          onChange={(e) => upload(e.target.files?.[0])}
         />
-        <button className="btn-accent" style={{ marginTop: 4 }} onClick={applyUrl}>Apply URL</button>
-      </div>
+      </label>
 
       <div style={{ borderTop: '1px solid var(--border-faint)', paddingTop: 10 }}>
-        <label className="form-label" style={{ fontSize: 10 }}>Replace with image</label>
+        <label className="form-label" style={{ fontSize: 10 }}>Or paste image URL</label>
         <input
           className="form-input"
           value={imageUrl}
           onChange={(e) => setImageUrl(e.target.value)}
           placeholder="https://… image URL"
         />
-        <button className="btn-accent" style={{ marginTop: 4 }} onClick={applyImage}>
-          Replace with image
+        <button className="btn-accent" style={{ marginTop: 4 }} onClick={() => apply(imageUrl)}>
+          Apply URL
         </button>
       </div>
 
