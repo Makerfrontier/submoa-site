@@ -7,8 +7,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { EditPanel } from '../atomic/comp/panels/EditPanel';
 import { BlockCanvas } from '../atomic/comp/canvas/BlockCanvas';
 import { StartScreen } from '../atomic/comp/panels/StartScreen';
+import { CompListScreen } from '../atomic/comp/panels/CompListScreen';
 import { createBlock } from '../atomic/comp/blocks';
 import { DEFAULT_BRAND, normalizeBrand } from '../atomic/comp/brand/BrandConfig';
+import { downloadHtmlBlob } from '../atomic/comp/export/HtmlExporter';
 
 function readIdFromPath() {
   if (typeof window === 'undefined') return null;
@@ -22,6 +24,7 @@ export default function AtomicComp({ navigate }) {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState('');
+  const [viewport, setViewport] = useState('desktop'); // 'desktop' | 'mobile'
   const saveTimer = useRef(null);
   const pendingCompRef = useRef(null); // latest state for debounced save
   const compIdRef = useRef(null);      // newest known id (survives async saves)
@@ -189,6 +192,20 @@ export default function AtomicComp({ navigate }) {
     });
   };
 
+  const handleExportHtml = () => {
+    if (!comp) return;
+    try {
+      downloadHtmlBlob({
+        name: comp.name || 'comp',
+        blocks: comp.blocks || [],
+        brand: comp.brand || DEFAULT_BRAND,
+      });
+      setToast('HTML downloaded.');
+    } catch (e) {
+      setToast('Export failed: ' + String(e?.message || e));
+    }
+  };
+
   const handleShare = async () => {
     const id = compIdRef.current;
     if (!id) { setToast('Save first'); return; }
@@ -213,22 +230,26 @@ export default function AtomicComp({ navigate }) {
     return () => clearTimeout(t);
   }, [toast]);
 
-  // Start screen when no comp loaded
+  // No comp loaded — show the comp list above the start screen.
   if (!comp) {
     if (loading) return <LoadingState />;
-    return <StartScreen onCompCreated={(c) => {
-      const blocks = Array.isArray(c.blocks) ? c.blocks : [];
-      const brand = normalizeBrand(c.brand || DEFAULT_BRAND);
-      compIdRef.current = c.id;
-      setComp({
-        id: c.id, name: c.name || 'Untitled Comp',
-        source_url: c.source_url || null,
-        share_token: c.share_token || null,
-        share_enabled: !!c.share_enabled,
-        blocks, brand,
-      });
-      window.history.pushState({}, '', `/atomic/comp/${c.id}`);
-    }} />;
+    return (
+      <CompListScreen
+        onCompCreated={(c) => {
+          const blocks = Array.isArray(c.blocks) ? c.blocks : [];
+          const brand = normalizeBrand(c.brand || DEFAULT_BRAND);
+          compIdRef.current = c.id;
+          setComp({
+            id: c.id, name: c.name || 'Untitled Comp',
+            source_url: c.source_url || null,
+            share_token: c.share_token || null,
+            share_enabled: !!c.share_enabled,
+            blocks, brand,
+          });
+          window.history.pushState({}, '', `/atomic/comp/${c.id}`);
+        }}
+      />
+    );
   }
 
   return (
@@ -236,12 +257,15 @@ export default function AtomicComp({ navigate }) {
       <TopBar
         comp={comp}
         saving={saving}
+        viewport={viewport}
+        onViewportChange={setViewport}
         onNameChange={(name) => setComp((prev) => {
           const next = { ...prev, name };
           scheduleAutoSave(next);
           return next;
         })}
         onShare={handleShare}
+        onExport={handleExportHtml}
         navigate={navigate}
       />
 
@@ -264,11 +288,13 @@ export default function AtomicComp({ navigate }) {
           background: '#EFECE5',
         }}>
           <div style={{
-            maxWidth: 1280, margin: '0 auto',
+            maxWidth: viewport === 'mobile' ? 390 : 1280,
+            margin: '0 auto',
             background: '#fff',
             boxShadow: '0 8px 40px rgba(0,0,0,0.12)',
             borderRadius: 10, overflow: 'hidden',
             minHeight: 600,
+            transition: 'max-width 0.25s ease',
           }}>
             <BlockCanvas
               blocks={comp.blocks}
@@ -300,7 +326,7 @@ export default function AtomicComp({ navigate }) {
   );
 }
 
-function TopBar({ comp, saving, onNameChange, onShare, navigate }) {
+function TopBar({ comp, saving, viewport, onViewportChange, onNameChange, onShare, onExport, navigate }) {
   return (
     <div style={{
       flexShrink: 0,
@@ -308,10 +334,10 @@ function TopBar({ comp, saving, onNameChange, onShare, navigate }) {
       background: 'var(--card)',
       borderBottom: '1px solid var(--border)',
       display: 'flex', alignItems: 'center',
-      padding: '0 16px', gap: 16,
+      padding: '0 16px', gap: 14,
     }}>
       <button
-        onClick={() => navigate ? navigate('/dashboard') : (window.location.href = '/dashboard')}
+        onClick={() => (navigate ? navigate('/atomic/comp') : (window.location.href = '/atomic/comp'))}
         style={{
           background: 'transparent', border: 'none', padding: '6px 10px',
           borderRadius: 6, cursor: 'pointer',
@@ -332,6 +358,29 @@ function TopBar({ comp, saving, onNameChange, onShare, navigate }) {
         }}
       />
 
+      {/* Viewport toggle */}
+      <div style={{
+        display: 'flex', gap: 2,
+        background: 'var(--bg)', borderRadius: 6, padding: 3,
+      }}>
+        {[{ k: 'desktop', label: '🖥' }, { k: 'mobile', label: '📱' }].map((v) => (
+          <button
+            key={v.k}
+            onClick={() => onViewportChange(v.k)}
+            title={v.k === 'desktop' ? 'Desktop preview' : 'Mobile preview'}
+            style={{
+              background: viewport === v.k ? 'var(--card)' : 'transparent',
+              border: 'none', borderRadius: 4,
+              padding: '4px 10px', fontSize: 13,
+              cursor: 'pointer',
+              color: viewport === v.k ? 'var(--text)' : 'var(--text-mid)',
+              fontFamily: 'DM Sans, sans-serif',
+              boxShadow: viewport === v.k ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >{v.label}</button>
+        ))}
+      </div>
+
       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
         {saving && (
           <span style={{ fontSize: 12, color: 'var(--text-mid)', fontFamily: 'DM Sans, sans-serif' }}>Saving…</span>
@@ -339,6 +388,15 @@ function TopBar({ comp, saving, onNameChange, onShare, navigate }) {
         {!saving && comp.share_enabled && (
           <span style={{ fontSize: 12, color: 'var(--green-dark)', fontFamily: 'DM Sans, sans-serif' }}>● Shared</span>
         )}
+        <button
+          onClick={onExport}
+          style={{
+            background: 'transparent', color: 'var(--text)',
+            border: '1px solid var(--border)', borderRadius: 6,
+            padding: '7px 14px', fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
+          }}
+        >Export HTML</button>
         <button
           onClick={onShare}
           style={{
