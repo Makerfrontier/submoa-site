@@ -32,6 +32,7 @@ export async function onRequest(context: any) {
 
   const items = ((episodes.results || []) as any[]).map(e => {
     const audioUrl = `${base}/api/quick-podcast/${e.id}/audio`;
+    const coverUrl = `${base}/api/quick-podcast/${e.id}/cover`;
     const pubDate = new Date((e.created_at || 0) * 1000).toUTCString();
     const duration = e.audio_duration_seconds || 600;
     const guid = `quickpodcast-${e.id}`;
@@ -44,10 +45,13 @@ export async function onRequest(context: any) {
       <guid isPermaLink="false">${guid}</guid>
       <enclosure url="${escapeXml(audioUrl)}" length="0" type="audio/mpeg"/>
       <itunes:duration>${formatDuration(duration)}</itunes:duration>
+      <itunes:image href="${escapeXml(coverUrl)}"/>
       <itunes:summary>${escapeXml(description)}</itunes:summary>
       <itunes:explicit>no</itunes:explicit>
     </item>`;
   }).join('');
+
+  const feedCoverUrl = `${base}/api/quick-podcast/feed-cover/${rawToken}.png`;
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"
@@ -66,6 +70,7 @@ export async function onRequest(context: any) {
       <itunes:email>${escapeXml(user.email || 'noreply@submoacontent.com')}</itunes:email>
     </itunes:owner>
     <itunes:explicit>no</itunes:explicit>
+    <itunes:image href="${escapeXml(feedCoverUrl)}"/>
     <itunes:category text="Technology"/>
     <itunes:block>yes</itunes:block>
     <itunes:type>episodic</itunes:type>

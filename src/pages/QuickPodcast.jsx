@@ -50,6 +50,8 @@ export default function QuickPodcast({ navigate }) {
   const [showScript, setShowScript] = useState(false);
   const [feed, setFeed] = useState(null); // { feed_url, rotated_at }
   const [feedExpanded, setFeedExpanded] = useState(false);
+  const [coverRefreshedAt, setCoverRefreshedAt] = useState(0);
+  const [coverBusy, setCoverBusy] = useState(''); // 'regen' | 'upload' | ''
   const [confirmModal, setConfirmModal] = useState(null);
   const pollTimerRef = useRef(null);
 
@@ -156,6 +158,39 @@ export default function QuickPodcast({ navigate }) {
   const copyUrl = async () => {
     if (!feed?.feed_url) return;
     try { await navigator.clipboard.writeText(feed.feed_url); setToast('Copied'); setTimeout(() => setToast(''), 1500); } catch { setToast('Copy failed'); }
+  };
+
+  // Extract the rss token from feed_url so the cover <img> knows the path.
+  const rssToken = useMemo(() => {
+    if (!feed?.feed_url) return '';
+    const m = String(feed.feed_url).match(/\/feed\/([a-f0-9]{16,})\.xml/i);
+    return m ? m[1] : '';
+  }, [feed?.feed_url]);
+
+  const regenerateCover = async () => {
+    setCoverBusy('regen');
+    try {
+      await api('/api/quick-podcast/regenerate-cover', { method: 'POST' });
+      setCoverRefreshedAt(Date.now());
+      setToast('New cover generated'); setTimeout(() => setToast(''), 2000);
+    } catch (e) { setToast(e.message); }
+    finally { setCoverBusy(''); }
+  };
+
+  const uploadCover = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCoverBusy('upload');
+    try {
+      const fd = new FormData();
+      fd.append('cover', file);
+      const res = await fetch('/api/quick-podcast/upload-cover', { method: 'POST', body: fd, credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Upload failed ${res.status}`);
+      setCoverRefreshedAt(Date.now());
+      setToast('Cover uploaded'); setTimeout(() => setToast(''), 2000);
+    } catch (err) { setToast(err.message); }
+    finally { setCoverBusy(''); e.target.value = ''; }
   };
 
   const generating = Boolean(activeEpisodeId) && status?.status !== 'audio_ready' && status?.status !== 'failed';
@@ -326,6 +361,32 @@ export default function QuickPodcast({ navigate }) {
           </button>
           {feedExpanded && (
             <div style={{ padding: 16, borderTop: '1px solid var(--border-light)' }}>
+              {rssToken && (
+                <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid var(--border-light)' }}>
+                  <div style={{ ...eyebrowStyle, marginBottom: 8 }}>✦ FEED COVER</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <img
+                      src={`/api/quick-podcast/feed-cover/${rssToken}.png${coverRefreshedAt ? `?v=${coverRefreshedAt}` : ''}`}
+                      alt="Your podcast feed cover"
+                      style={{ width: 80, height: 80, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--border)', background: 'var(--surface-inp)' }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: 'DM Sans', fontSize: 13, color: 'var(--text-mid)', marginBottom: 8, lineHeight: 1.45 }}>
+                        Cover Apple Podcasts shows for your feed.
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button onClick={regenerateCover} disabled={coverBusy !== ''} style={{ ...secondaryBtnStyle, opacity: coverBusy ? 0.6 : 1, cursor: coverBusy ? 'wait' : 'pointer' }}>
+                          {coverBusy === 'regen' ? 'Generating…' : 'Regenerate'}
+                        </button>
+                        <label style={{ ...secondaryBtnStyle, opacity: coverBusy ? 0.6 : 1, cursor: coverBusy ? 'wait' : 'pointer', display: 'inline-block' }}>
+                          {coverBusy === 'upload' ? 'Uploading…' : 'Upload custom'}
+                          <input type="file" accept="image/png,image/jpeg" onChange={uploadCover} disabled={coverBusy !== ''} style={{ display: 'none' }} />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <p style={{ fontFamily: 'DM Sans', fontSize: 13, color: 'var(--text-mid)', marginTop: 0, lineHeight: 1.55 }}>
                 Add this URL to Apple Podcasts to get every podcast you generate auto-downloaded to your iPhone. Works in CarPlay, AirPods, HomePod.
               </p>
