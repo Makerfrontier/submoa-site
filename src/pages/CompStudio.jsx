@@ -103,6 +103,11 @@ const INJECTED_SCRIPT = `
   function friendlyName(el, type, attrs) {
     var tag = el.tagName.toUpperCase();
     var text = (el.innerText || el.textContent || '').trim();
+    if (type === 'logo') {
+      var lw = el.naturalWidth || el.width || el.offsetWidth || 0;
+      var lh = el.naturalHeight || el.height || el.offsetHeight || 0;
+      return 'Site Logo — ' + lw + '×' + lh;
+    }
     if (tag === 'HEADER') return 'Site Header';
     if (tag === 'FOOTER') return 'Site Footer';
     if (tag === 'NAV') {
@@ -162,6 +167,7 @@ const INJECTED_SCRIPT = `
     if (type === 'heading')      return 'HEADING';
     if (type === 'paragraph')    return 'PARAGRAPH';
     if (type === 'image')        return 'IMAGE';
+    if (type === 'logo')         return 'LOGO';
     if (type === 'ad')           return 'AD UNIT';
     if (type === 'section')      return 'SECTION';
     if (type === 'card')         return 'CARD';
@@ -177,13 +183,18 @@ const INJECTED_SCRIPT = `
     var attrs = new Map();
     var cardParents = new Set();
 
-    // Header / Nav — first of each only, skip mobile variants
+    // Extract the logo img from the first <header> as its own editable block.
+    // Registering the entire <header>/<nav>/<footer> as a single block caused
+    // dedup to drop every image/heading/link inside, leaving the user unable
+    // to swap the logo. Nav link editing is out of scope for now — leaf
+    // items inside nav/footer are simply not exposed as blocks.
     var firstHeader = document.querySelector('header');
-    if (firstHeader && !isExcludedChrome(firstHeader)) { candidates.set(firstHeader, { type: 'header' }); }
-    var firstNav = document.querySelector('nav');
-    if (firstNav && !isExcludedChrome(firstNav)) { candidates.set(firstNav, { type: 'nav' }); }
-    var firstFooter = document.querySelector('footer');
-    if (firstFooter && !isExcludedChrome(firstFooter)) { candidates.set(firstFooter, { type: 'footer' }); }
+    if (firstHeader && !isExcludedChrome(firstHeader)) {
+      var logoImg = firstHeader.querySelector('img');
+      if (logoImg && !candidates.has(logoImg)) {
+        candidates.set(logoImg, { type: 'logo' });
+      }
+    }
 
     // Ad placeholders — check rendered dimensions against IAB
     document.querySelectorAll('.ad-placeholder').forEach(function(el) {
@@ -218,6 +229,25 @@ const INJECTED_SCRIPT = `
       var matching = structured.filter(function(c) { return c.tagName === firstTag; });
       if (matching.length < 2) return;
       matching.forEach(function(card) { cardParents.add(card); candidates.set(card, { type: 'card' }); });
+    });
+
+    // Single-card detection — catch standalone article cards (image + heading
+    // + body paragraph) even when they aren't part of a sibling grid. Skips
+    // anything already marked as a grid card so detection is additive.
+    document.querySelectorAll('article, [class*="card" i], [class*="story" i], [class*="tile" i], [class*="post-" i]').forEach(function(el) {
+      if (el.closest('[data-comp-skip]') || isExcludedChrome(el)) return;
+      if (candidates.has(el)) return;
+      if (cardParents.has(el)) return;
+      var cardHeadings = el.querySelectorAll('h1,h2,h3,h4,h5');
+      if (cardHeadings.length === 0 || cardHeadings.length > 2) return;
+      if (!el.querySelector('img')) return;
+      if (!el.querySelector('p')) return;
+      // Avoid matching ancestors that already contain a grid/single card.
+      var innerCards = 0;
+      cardParents.forEach(function(cp) { if (el.contains(cp) && cp !== el) innerCards++; });
+      if (innerCards > 0) return;
+      candidates.set(el, { type: 'card' });
+      cardParents.add(el);
     });
 
     // Images (>80x80)
@@ -345,6 +375,25 @@ const INJECTED_SCRIPT = `
         preview: preview,
       };
       if (type === 'ad' && a) { block.adSize = a.adSize; block.adLabel = a.adLabel; }
+      if (type === 'card') {
+        var cImg = c.el.querySelector('img');
+        var cH = c.el.querySelector('h1,h2,h3,h4,h5');
+        var cP = c.el.querySelector('p');
+        var cBtn = c.el.querySelector('a.btn, button, .cta, [class*="button"], a[class*="btn"], a[class*="cta"]');
+        if (!cBtn) cBtn = c.el.querySelector('a');
+        block.cardFields = {
+          imageUrl:   cImg ? (cImg.getAttribute('src') || '') : '',
+          headline:   cH   ? (cH.innerText || cH.textContent || '').trim() : '',
+          body:       cP   ? (cP.innerText || cP.textContent || '').trim() : '',
+          buttonText: cBtn ? (cBtn.innerText || cBtn.textContent || '').trim() : '',
+          buttonUrl:  (cBtn && cBtn.getAttribute) ? (cBtn.getAttribute('href') || '') : '',
+        };
+      }
+      if (type === 'logo') {
+        block.imgW = c.el.naturalWidth || c.el.width || c.el.offsetWidth || 0;
+        block.imgH = c.el.naturalHeight || c.el.height || c.el.offsetHeight || 0;
+        block.currentSrc = c.el.getAttribute('src') || '';
+      }
       if (type === 'image') {
         // <img> dimensions come from natural/width/offset; CSS-var backgrounds
         // live on arbitrary elements so we fall back to offsetWidth/offsetHeight.
@@ -481,6 +530,41 @@ const INJECTED_SCRIPT = `
         collect();
       };
       el.addEventListener('blur', handler);
+      return;
+    }
+    if (m.type === 'updateCardFields') {
+      var el = findById(m.id);
+      if (!el) return;
+      var f = m.fields || {};
+      if (typeof f.imageUrl === 'string' && f.imageUrl) {
+        var cImg = el.querySelector('img');
+        if (cImg) cImg.setAttribute('src', f.imageUrl);
+      }
+      if (typeof f.headline === 'string') {
+        var cH = el.querySelector('h1,h2,h3,h4,h5');
+        if (cH) {
+          // Preserve a link wrapper inside the heading if present — only
+          // rewrite the text, not the anchor element.
+          var hLink = cH.querySelector('a');
+          if (hLink) hLink.textContent = f.headline;
+          else cH.textContent = f.headline;
+        }
+      }
+      if (typeof f.body === 'string') {
+        var cP = el.querySelector('p');
+        if (cP) cP.textContent = f.body;
+      }
+      if (typeof f.buttonText === 'string' && f.buttonText) {
+        var cBtn = el.querySelector('a.btn, button, .cta, [class*="button"], a[class*="btn"], a[class*="cta"]');
+        if (!cBtn) cBtn = el.querySelector('a');
+        if (cBtn) cBtn.textContent = f.buttonText;
+      }
+      if (typeof f.buttonUrl === 'string' && f.buttonUrl) {
+        var cBtnLink = el.querySelector('a.btn, a.cta, a[class*="btn"], a[class*="cta"]');
+        if (!cBtnLink) cBtnLink = el.querySelector('a');
+        if (cBtnLink) cBtnLink.setAttribute('href', f.buttonUrl);
+      }
+      collect();
       return;
     }
     if (m.type === 'replaceDocumentHtml') {
@@ -636,8 +720,10 @@ function BlockRow({ block, selected, onSelect, onToggleLock, onAction, category,
         <div style={{ background: 'var(--card)', color: 'var(--text)', padding: 10, borderTop: '1px solid var(--border-light)' }}>
           {block.type === 'ad' ? (
             <AdEditPanel block={block} category={category} onAction={onAction} setToast={setToast} />
-          ) : block.type === 'image' ? (
+          ) : block.type === 'image' || block.type === 'logo' ? (
             <ImageEditPanel block={block} category={category} onAction={onAction} setToast={setToast} />
+          ) : block.type === 'card' ? (
+            <CardEditPanel block={block} onAction={onAction} setToast={setToast} />
           ) : (
             <TextEditPanel block={block} category={category} onAction={onAction} setToast={setToast} rawHtml={rawHtml} />
           )}
@@ -905,6 +991,117 @@ function AdEditPanel({ block, category, onAction, setToast }) {
   );
 }
 
+// ─── Card edit panel (structured) ───────────────────────────────────────────
+// Cards bundle image + headline + body + button. Editing them through the
+// plain-text panel used to wipe the whole container via textContent. This
+// panel exposes each field separately and dispatches a single per-field
+// update action — the iframe handler then targets only the relevant child.
+function CardEditPanel({ block, onAction, setToast }) {
+  const initial = block.cardFields || { imageUrl: '', headline: '', body: '', buttonText: '', buttonUrl: '' };
+  const [fields, setFields] = useState(initial);
+
+  useEffect(() => {
+    setFields(block.cardFields || { imageUrl: '', headline: '', body: '', buttonText: '', buttonUrl: '' });
+  }, [block.id, block.cardFields]);
+
+  const upload = async (file) => {
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const mime = file.type || 'image/png';
+      const b64 = btoa(Array.from(new Uint8Array(buf)).map(c => String.fromCharCode(c)).join(''));
+      const url = `data:${mime};base64,${b64}`;
+      setFields(f => ({ ...f, imageUrl: url }));
+    } catch (e) { setToast('Image upload failed: ' + e.message); }
+  };
+
+  const apply = () => {
+    onAction({
+      type: 'updateCardFields',
+      id: block.id,
+      fields,
+      label: block.name,
+      original: block.cardFields || {},
+    });
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="eyebrow" style={{ fontSize: 10 }}>CARD FIELDS</div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <label className="form-label" style={{ fontSize: 10 }}>Image URL</label>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input
+            className="form-input"
+            style={{ flex: 1, minWidth: 0 }}
+            value={fields.imageUrl}
+            onChange={(e) => setFields(f => ({ ...f, imageUrl: e.target.value }))}
+            placeholder="https://…"
+          />
+          {fields.imageUrl && (
+            <img
+              src={fields.imageUrl}
+              alt=""
+              style={{ width: 52, height: 36, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)' }}
+            />
+          )}
+        </div>
+        <label className="btn-ghost" style={{ alignSelf: 'flex-start', cursor: 'pointer', fontSize: 11, padding: '4px 8px' }}>
+          Upload image…
+          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => upload(e.target.files?.[0])} />
+        </label>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <label className="form-label" style={{ fontSize: 10 }}>Headline</label>
+        <input
+          className="form-input"
+          value={fields.headline}
+          onChange={(e) => setFields(f => ({ ...f, headline: e.target.value }))}
+        />
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <label className="form-label" style={{ fontSize: 10 }}>Body copy</label>
+        <textarea
+          className="form-textarea"
+          rows={3}
+          value={fields.body}
+          onChange={(e) => setFields(f => ({ ...f, body: e.target.value }))}
+        />
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <label className="form-label" style={{ fontSize: 10 }}>Button text</label>
+        <input
+          className="form-input"
+          value={fields.buttonText}
+          onChange={(e) => setFields(f => ({ ...f, buttonText: e.target.value }))}
+        />
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <label className="form-label" style={{ fontSize: 10 }}>Button URL</label>
+        <input
+          className="form-input"
+          value={fields.buttonUrl}
+          onChange={(e) => setFields(f => ({ ...f, buttonUrl: e.target.value }))}
+          placeholder="https://…"
+        />
+      </div>
+
+      <button className="btn-accent" onClick={apply}>Apply</button>
+      <button
+        className="btn-danger-sm"
+        onClick={() => onAction({ type: 'delete', id: block.id, label: block.name, preview: block.preview })}
+      >
+        Delete block
+      </button>
+    </div>
+  );
+}
+
 // ─── Main component ────────────────────────────────────────────────────────
 export default function CompStudio() {
   const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
@@ -1033,6 +1230,23 @@ export default function CompStudio() {
       postToIframe({ type: 'replaceText', id: action.id, text: action.text });
       setSessionChanges(sc => [...sc, { action: 'text', label: action.label, original: action.original, updated: action.text }]);
       setToast('Text updated.');
+    } else if (action.type === 'updateCardFields') {
+      postToIframe({ type: 'updateCardFields', id: action.id, fields: action.fields });
+      const f = action.fields || {};
+      const orig = action.original || {};
+      const diffs = [];
+      if (f.imageUrl !== orig.imageUrl)   diffs.push('image');
+      if (f.headline !== orig.headline)   diffs.push('headline');
+      if (f.body !== orig.body)           diffs.push('body');
+      if (f.buttonText !== orig.buttonText) diffs.push('button');
+      if (f.buttonUrl !== orig.buttonUrl) diffs.push('button URL');
+      setSessionChanges(sc => [...sc, {
+        action: 'text',
+        label: action.label,
+        original: orig.headline || '',
+        updated: `Card fields: ${diffs.join(', ') || 'no changes'}`,
+      }]);
+      setToast(diffs.length ? `Card updated (${diffs.join(', ')}).` : 'No card changes.');
     } else if (action.type === 'inlineEdit') {
       postToIframe({ type: 'inlineEdit', id: action.id });
     } else if (action.type === 'replaceImage') {
