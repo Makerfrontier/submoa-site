@@ -47,17 +47,30 @@ export async function onRequest(context: { request: Request; env: Env }) {
 
     const id = generateId();
     const now = Math.floor(Date.now() / 1000);
+    // SingleFile captures can be 500 KB–2 MB and blow the D1 row limit.
+    // Store the HTML in R2 and keep only the key in D1. html_content column
+    // is retained (empty string) for backward-compat with old rows.
+    const html_r2_key = `comp-studio/${account_id}/drafts/${id}/content.html`;
+    try {
+      await env.SUBMOA_IMAGES.put(html_r2_key, html_content, {
+        httpMetadata: { contentType: 'text/html; charset=utf-8' },
+      });
+    } catch (err: any) {
+      return json({ error: `R2 write failed: ${err?.message || err}` }, 500);
+    }
     try {
       await env.submoacontent_db
         .prepare(`INSERT INTO comp_studio_drafts
                   (id, account_id, name, category, source_url, html_content,
-                   session_changes, strip_stats, status, thumbnail_r2_key,
-                   created_at, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', NULL, ?, ?)`)
-        .bind(id, account_id, name, category, source_url, html_content,
+                   html_r2_key, session_changes, strip_stats, status,
+                   thumbnail_r2_key, created_at, updated_at)
+                  VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, 'draft', NULL, ?, ?)`)
+        .bind(id, account_id, name, category, source_url, html_r2_key,
               session_changes, strip_stats, now, now)
         .run();
     } catch (err: any) {
+      // Roll back the R2 write so we don't leak orphan objects.
+      try { await env.SUBMOA_IMAGES.delete(html_r2_key); } catch {}
       return json({ error: `DB insert failed: ${err?.message || err}` }, 500);
     }
 

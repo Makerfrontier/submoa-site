@@ -147,6 +147,17 @@ const INJECTED_SCRIPT = `
       }
       return 'Image — ' + w + '×' + h;
     }
+    if (type === 'video') {
+      var vSrc = (el.getAttribute('src') || '').toString();
+      var vLabel = 'Video';
+      if (/youtube|youtu\\.be/i.test(vSrc)) vLabel = 'YouTube video';
+      else if (/vimeo/i.test(vSrc)) vLabel = 'Vimeo video';
+      else if (/wistia/i.test(vSrc)) vLabel = 'Wistia video';
+      else if (tag === 'VIDEO') vLabel = 'HTML5 video';
+      var vw = el.offsetWidth || el.width || 0;
+      var vh = el.offsetHeight || el.height || 0;
+      return vLabel + (vw && vh ? ' — ' + vw + '×' + vh : '');
+    }
     if (type === 'ad' && attrs) return 'Ad Unit — ' + attrs.adLabel + ' ' + attrs.adSize;
     if (type === 'card') {
       var h = el.querySelector('h1,h2,h3,h4,h5');
@@ -173,6 +184,7 @@ const INJECTED_SCRIPT = `
     if (type === 'card')         return 'CARD';
     if (type === 'footer')       return 'FOOTER';
     if (type === 'cta')          return 'CTA';
+    if (type === 'video')        return 'VIDEO';
     return 'BLOCK';
   }
 
@@ -248,6 +260,23 @@ const INJECTED_SCRIPT = `
       if (innerCards > 0) return;
       candidates.set(el, { type: 'card' });
       cardParents.add(el);
+    });
+
+    // Video embeds — any iframe pointing at YouTube/Vimeo/Wistia, or a plain
+    // <video> element. Surfaces as type:'video' so the edit panel can offer
+    // a URL swap or a "replace with image" escape hatch.
+    var VIDEO_HOST_RE = /(youtube\\.com\\/embed|youtu\\.be|youtube\\-nocookie\\.com|vimeo\\.com|player\\.vimeo\\.com|wistia\\.|fast\\.wistia\\.)/i;
+    document.querySelectorAll('iframe').forEach(function(el) {
+      if (el.closest('[data-comp-skip]') || isExcludedChrome(el)) return;
+      if (candidates.has(el)) return;
+      var src = (el.getAttribute('src') || '').toLowerCase();
+      if (!VIDEO_HOST_RE.test(src)) return;
+      candidates.set(el, { type: 'video' });
+    });
+    document.querySelectorAll('video').forEach(function(el) {
+      if (el.closest('[data-comp-skip]') || isExcludedChrome(el)) return;
+      if (candidates.has(el)) return;
+      candidates.set(el, { type: 'video' });
     });
 
     // Images (>80x80)
@@ -394,6 +423,12 @@ const INJECTED_SCRIPT = `
         block.imgH = c.el.naturalHeight || c.el.height || c.el.offsetHeight || 0;
         block.currentSrc = c.el.getAttribute('src') || '';
       }
+      if (type === 'video') {
+        block.videoTag = c.el.tagName.toUpperCase(); // 'IFRAME' or 'VIDEO'
+        block.videoSrc = c.el.getAttribute('src') || '';
+        block.videoW = c.el.offsetWidth || c.el.width || 0;
+        block.videoH = c.el.offsetHeight || c.el.height || 0;
+      }
       if (type === 'image') {
         // <img> dimensions come from natural/width/offset; CSS-var backgrounds
         // live on arbitrary elements so we fall back to offsetWidth/offsetHeight.
@@ -413,6 +448,36 @@ const INJECTED_SCRIPT = `
   }
 
   function findById(id) { return document.querySelector('[data-comp-id="' + id + '"]'); }
+
+  // Swap the source on an <img> without letting the browser load the old
+  // CDN URL via srcset/sizes or a parent <picture><source srcset>. Preserves
+  // the element's existing width/height so replaced images stay constrained
+  // to the original layout slot.
+  function swapImgSrc(imgEl, newUrl) {
+    if (!imgEl || imgEl.tagName !== 'IMG') return;
+    // Clear srcset on the img itself.
+    imgEl.removeAttribute('srcset');
+    imgEl.removeAttribute('sizes');
+    // And on any <source srcset> siblings inside a parent <picture>.
+    var picture = imgEl.parentElement && imgEl.parentElement.tagName === 'PICTURE'
+      ? imgEl.parentElement
+      : null;
+    if (picture) {
+      picture.querySelectorAll('source[srcset]').forEach(function(s) { s.remove(); });
+    }
+    // Measure the current layout slot BEFORE swapping src so the natural
+    // dimensions of the new image don't bleed into layout.
+    var ow = imgEl.offsetWidth || imgEl.width || 0;
+    var oh = imgEl.offsetHeight || imgEl.height || 0;
+    imgEl.setAttribute('src', newUrl);
+    // Lock the rendered size to the original slot. 'width:100%' lets the img
+    // still flex with parent containers while 'height' keeps aspect stable.
+    if (ow && oh) {
+      imgEl.style.width = '100%';
+      imgEl.style.height = oh + 'px';
+      if (!imgEl.style.objectFit) imgEl.style.objectFit = 'cover';
+    }
+  }
 
   function highlight(id) {
     document.querySelectorAll('[data-comp-hl]').forEach(function(el) {
@@ -473,14 +538,7 @@ const INJECTED_SCRIPT = `
       var el = findById(m.id);
       if (!el) { collect(); return; }
       if (el.tagName === 'IMG') {
-        var iw = el.offsetWidth || el.width || el.naturalWidth || 0;
-        var ih = el.offsetHeight || el.height || el.naturalHeight || 0;
-        el.setAttribute('src', m.url);
-        if (iw && ih) {
-          el.style.width = '100%';
-          el.style.height = ih + 'px';
-          el.style.objectFit = 'cover';
-        }
+        swapImgSrc(el, m.url);
       } else {
         // Non-IMG element carrying a CSS variable background. Override the
         // var() reference by writing the new URL to background-image inline
@@ -532,13 +590,52 @@ const INJECTED_SCRIPT = `
       el.addEventListener('blur', handler);
       return;
     }
+    if (m.type === 'replaceVideoSrc') {
+      var vEl = findById(m.id);
+      if (!vEl) return;
+      var newUrl = String(m.url || '').trim();
+      if (!newUrl) return;
+      // Normalize YouTube watch/short URLs to the embed form so the iframe
+      // still renders after the swap.
+      var ytM = newUrl.match(/(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/shorts\\/)([A-Za-z0-9_-]+)/i);
+      var embedUrl = ytM ? ('https://www.youtube.com/embed/' + ytM[1]) : newUrl;
+      vEl.setAttribute('src', embedUrl);
+      collect();
+      return;
+    }
+    if (m.type === 'replaceVideoWithImage') {
+      var vEl2 = findById(m.id);
+      if (!vEl2) return;
+      var imgUrl = String(m.url || '').trim();
+      if (!imgUrl) return;
+      var vw = vEl2.offsetWidth || vEl2.width || 0;
+      var vh = vEl2.offsetHeight || vEl2.height || 0;
+      var vStyle = vEl2.getAttribute('style') || '';
+      var vCls = vEl2.getAttribute('class') || '';
+      var parent = vEl2.parentElement;
+      var img = document.createElement('img');
+      img.setAttribute('src', imgUrl);
+      if (vw) img.setAttribute('width', String(vw));
+      if (vh) img.setAttribute('height', String(vh));
+      if (vStyle) img.setAttribute('style', vStyle);
+      if (vCls) img.setAttribute('class', vCls);
+      // Preserve the data-comp-id so the React selection doesn't drop off.
+      var existingId = vEl2.getAttribute('data-comp-id');
+      if (existingId) img.setAttribute('data-comp-id', existingId);
+      if (parent) parent.replaceChild(img, vEl2);
+      // New element is an <img> — run the same size-lock helper so any
+      // responsive styling on the parent slot still applies cleanly.
+      swapImgSrc(img, imgUrl);
+      collect();
+      return;
+    }
     if (m.type === 'updateCardFields') {
       var el = findById(m.id);
       if (!el) return;
       var f = m.fields || {};
       if (typeof f.imageUrl === 'string' && f.imageUrl) {
         var cImg = el.querySelector('img');
-        if (cImg) cImg.setAttribute('src', f.imageUrl);
+        if (cImg) swapImgSrc(cImg, f.imageUrl);
       }
       if (typeof f.headline === 'string') {
         var cH = el.querySelector('h1,h2,h3,h4,h5');
@@ -720,10 +817,14 @@ function BlockRow({ block, selected, onSelect, onToggleLock, onAction, category,
         <div style={{ background: 'var(--card)', color: 'var(--text)', padding: 10, borderTop: '1px solid var(--border-light)' }}>
           {block.type === 'ad' ? (
             <AdEditPanel block={block} category={category} onAction={onAction} setToast={setToast} />
-          ) : block.type === 'image' || block.type === 'logo' ? (
+          ) : block.type === 'image' ? (
             <ImageEditPanel block={block} category={category} onAction={onAction} setToast={setToast} />
+          ) : block.type === 'logo' ? (
+            <LogoEditPanel block={block} onAction={onAction} setToast={setToast} />
           ) : block.type === 'card' ? (
             <CardEditPanel block={block} onAction={onAction} setToast={setToast} />
+          ) : block.type === 'video' ? (
+            <VideoEditPanel block={block} onAction={onAction} />
           ) : (
             <TextEditPanel block={block} category={category} onAction={onAction} setToast={setToast} rawHtml={rawHtml} />
           )}
@@ -987,6 +1088,134 @@ function AdEditPanel({ block, category, onAction, setToast }) {
         )}
       </div>
       <button className="btn-danger-sm" onClick={() => onAction({ type: 'delete', id: block.id, label: block.name, preview: block.preview })}>Delete block</button>
+    </div>
+  );
+}
+
+// ─── Video edit panel ──────────────────────────────────────────────────────
+// Video blocks get two knobs: swap the iframe src, or replace the iframe
+// with a static image at the same dimensions. No player UI.
+function VideoEditPanel({ block, onAction }) {
+  const [videoUrl, setVideoUrl] = useState(block.videoSrc || '');
+  const [imageUrl, setImageUrl] = useState('');
+
+  useEffect(() => {
+    setVideoUrl(block.videoSrc || '');
+    setImageUrl('');
+  }, [block.id, block.videoSrc]);
+
+  const applyUrl = () => {
+    if (!videoUrl.trim()) return;
+    onAction({ type: 'replaceVideoSrc', id: block.id, url: videoUrl.trim(), label: block.name });
+  };
+
+  const applyImage = () => {
+    if (!imageUrl.trim()) return;
+    onAction({
+      type: 'replaceVideoWithImage',
+      id: block.id,
+      url: imageUrl.trim(),
+      label: block.name,
+      dimensions: `${block.videoW || 0}x${block.videoH || 0}`,
+    });
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-mid)' }}>
+        {block.videoTag === 'VIDEO' ? 'HTML5 video' : 'Embedded video'}
+        {block.videoW && block.videoH ? ` — ${block.videoW}×${block.videoH}` : ''}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <label className="form-label" style={{ fontSize: 10 }}>Swap video URL</label>
+        <input
+          className="form-input"
+          value={videoUrl}
+          onChange={(e) => setVideoUrl(e.target.value)}
+          placeholder="https://www.youtube.com/watch?v=…"
+        />
+        <button className="btn-accent" style={{ marginTop: 4 }} onClick={applyUrl}>Apply URL</button>
+      </div>
+
+      <div style={{ borderTop: '1px solid var(--border-faint)', paddingTop: 10 }}>
+        <label className="form-label" style={{ fontSize: 10 }}>Replace with image</label>
+        <input
+          className="form-input"
+          value={imageUrl}
+          onChange={(e) => setImageUrl(e.target.value)}
+          placeholder="https://… image URL"
+        />
+        <button className="btn-accent" style={{ marginTop: 4 }} onClick={applyImage}>
+          Replace with image
+        </button>
+      </div>
+
+      <button
+        className="btn-danger-sm"
+        onClick={() => onAction({ type: 'delete', id: block.id, label: block.name, preview: block.preview })}
+      >
+        Delete block
+      </button>
+    </div>
+  );
+}
+
+// ─── Logo edit panel ───────────────────────────────────────────────────────
+// Minimal single-field panel for the site logo. Reuses the replaceImage
+// iframe handler so srcset/sizes are cleared and dimensions are locked.
+function LogoEditPanel({ block, onAction, setToast }) {
+  const [url, setUrl] = useState(block.currentSrc || '');
+  useEffect(() => { setUrl(block.currentSrc || ''); }, [block.id, block.currentSrc]);
+
+  const upload = async (file) => {
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const mime = file.type || 'image/png';
+      const b64 = btoa(Array.from(new Uint8Array(buf)).map(c => String.fromCharCode(c)).join(''));
+      setUrl(`data:${mime};base64,${b64}`);
+    } catch (e) { setToast('Upload failed: ' + e.message); }
+  };
+
+  const apply = () => {
+    if (!url.trim()) return;
+    onAction({
+      type: 'replaceImage',
+      id: block.id,
+      url: url.trim(),
+      label: block.name,
+      dimensions: `${block.imgW || 0}x${block.imgH || 0}`,
+    });
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-mid)' }}>
+        Logo — {block.imgW || '?'}×{block.imgH || '?'}
+      </div>
+      {url && (
+        <img
+          src={url}
+          alt=""
+          style={{
+            maxHeight: 48, objectFit: 'contain', alignSelf: 'flex-start',
+            background: 'var(--bg)', padding: 4, borderRadius: 4, border: '1px solid var(--border)',
+          }}
+        />
+      )}
+      <label className="form-label" style={{ fontSize: 10 }}>Logo image URL</label>
+      <input
+        className="form-input"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="https://… logo image URL"
+      />
+      <label className="btn-ghost" style={{ alignSelf: 'flex-start', cursor: 'pointer', fontSize: 11, padding: '4px 8px' }}>
+        Upload file…
+        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => upload(e.target.files?.[0])} />
+      </label>
+      <button className="btn-accent" onClick={apply}>Apply</button>
     </div>
   );
 }
@@ -1257,6 +1486,14 @@ export default function CompStudio() {
       postToIframe({ type: 'replaceAdWithImage', id: action.id, url: action.url, alt: action.alt });
       setSessionChanges(sc => [...sc, { action: 'ad', adSize: action.adSize, adLabel: action.adLabel, method: 'creative applied' }]);
       setToast('Creative applied.');
+    } else if (action.type === 'replaceVideoSrc') {
+      postToIframe({ type: 'replaceVideoSrc', id: action.id, url: action.url });
+      setSessionChanges(sc => [...sc, { action: 'text', label: action.label, original: '(video src)', updated: action.url }]);
+      setToast('Video URL updated.');
+    } else if (action.type === 'replaceVideoWithImage') {
+      postToIframe({ type: 'replaceVideoWithImage', id: action.id, url: action.url });
+      setSessionChanges(sc => [...sc, { action: 'image', label: action.label, dimensions: action.dimensions }]);
+      setToast('Video replaced with image.');
     } else if (action.type === 'delete') {
       postToIframe({ type: 'deleteBlock', id: action.id });
       setSessionChanges(sc => [...sc, { action: 'delete', label: action.label, preview: action.preview }]);
