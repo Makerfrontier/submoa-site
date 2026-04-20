@@ -52,6 +52,10 @@ export default function QuickPodcast({ navigate }) {
   const [feedExpanded, setFeedExpanded] = useState(false);
   const [coverRefreshedAt, setCoverRefreshedAt] = useState(0);
   const [coverBusy, setCoverBusy] = useState(''); // 'regen' | 'upload' | ''
+  const [themeExpanded, setThemeExpanded] = useState(false);
+  const [themeMusic, setThemeMusic] = useState(null); // GET response
+  const [themePrompt, setThemePrompt] = useState('');
+  const [themeBusy, setThemeBusy] = useState(''); // 'regen' | 'upload' | ''
   const [confirmModal, setConfirmModal] = useState(null);
   const pollTimerRef = useRef(null);
 
@@ -191,6 +195,47 @@ export default function QuickPodcast({ navigate }) {
       setToast('Cover uploaded'); setTimeout(() => setToast(''), 2000);
     } catch (err) { setToast(err.message); }
     finally { setCoverBusy(''); e.target.value = ''; }
+  };
+
+  const loadThemeMusic = async () => {
+    try {
+      const d = await api('/api/quick-podcast/theme-music');
+      setThemeMusic(d);
+      if (d?.prompt && !themePrompt) setThemePrompt(d.prompt);
+    } catch (e) { setToast(e.message); }
+  };
+
+  const regenerateTheme = async () => {
+    setThemeBusy('regen');
+    try {
+      const res = await fetch('/api/quick-podcast/theme-music', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(themePrompt.trim() ? { prompt: themePrompt.trim() } : {}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Regen failed ${res.status}`);
+      await loadThemeMusic();
+      setToast('Theme music generated'); setTimeout(() => setToast(''), 2500);
+    } catch (err) { setToast(err.message); }
+    finally { setThemeBusy(''); }
+  };
+
+  const uploadTheme = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setThemeBusy('upload');
+    try {
+      const fd = new FormData();
+      fd.append('audio', file);
+      const res = await fetch('/api/quick-podcast/theme-music', { method: 'PUT', body: fd, credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Upload failed ${res.status}`);
+      await loadThemeMusic();
+      setToast('Theme music uploaded'); setTimeout(() => setToast(''), 2000);
+    } catch (err) { setToast(err.message); }
+    finally { setThemeBusy(''); e.target.value = ''; }
   };
 
   const generating = Boolean(activeEpisodeId) && status?.status !== 'audio_ready' && status?.status !== 'failed';
@@ -409,6 +454,67 @@ export default function QuickPodcast({ navigate }) {
                 {feed?.rotated_at ? `Last rotated: ${formatRelative(feed.rotated_at)}` : 'Never rotated.'}
               </div>
               <button onClick={rotateFeed} style={{ ...secondaryBtnStyle, marginTop: 6, color: 'var(--error)' }}>Reset URL</button>
+            </div>
+          )}
+        </div>
+
+        {/* Theme Music card — separate expandable section */}
+        <div style={{ marginTop: 12, border: '1px solid var(--border)', background: 'var(--card)', borderRadius: 6 }}>
+          <button
+            onClick={() => { setThemeExpanded(v => { const next = !v; if (next) loadThemeMusic(); return next; }); }}
+            style={{ width: '100%', padding: '14px 16px', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', ...eyebrowStyle }}
+          >
+            <span>✦ THEME MUSIC</span>
+            <span style={{ color: 'var(--text-mid)', fontSize: 14 }}>{themeExpanded ? '▴' : '▾'}</span>
+          </button>
+          {themeExpanded && (
+            <div style={{ padding: 16, borderTop: '1px solid var(--border-light)' }}>
+              <p style={{ fontFamily: 'DM Sans', fontSize: 13, color: 'var(--text-mid)', marginTop: 0, lineHeight: 1.55 }}>
+                Plays at the start and end of every podcast you generate. Same music every episode — your show's signature.
+              </p>
+
+              {themeMusic?.has_music ? (
+                <>
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontFamily: 'DM Sans', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-mid)', marginBottom: 4 }}>INTRO</div>
+                    <audio controls preload="none" src={`${themeMusic.intro_url}?v=${themeMusic.generated_at || 0}`} style={{ width: '100%' }} />
+                  </div>
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontFamily: 'DM Sans', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-mid)', marginBottom: 4 }}>OUTRO</div>
+                    <audio controls preload="none" src={`${themeMusic.outro_url}?v=${themeMusic.generated_at || 0}`} style={{ width: '100%' }} />
+                  </div>
+                </>
+              ) : (
+                <div style={{ marginTop: 12, padding: 12, background: 'var(--surface-inp)', borderRadius: 4, fontFamily: 'DM Sans', fontSize: 13, color: 'var(--text-mid)' }}>
+                  No theme music yet. Generate your first podcast to create one automatically, or regenerate below.
+                </div>
+              )}
+
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontFamily: 'DM Sans', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-mid)', marginBottom: 4 }}>PROMPT (optional)</div>
+                <textarea
+                  value={themePrompt}
+                  onChange={e => setThemePrompt(e.target.value)}
+                  placeholder="Describe your ideal theme music, or leave blank to use the default."
+                  style={{ width: '100%', minHeight: 84, padding: 10, fontFamily: 'DM Sans', fontSize: 13, lineHeight: 1.5, color: 'var(--text)', background: 'var(--surface-inp)', border: '1px solid var(--border)', borderRadius: 4, resize: 'vertical' }}
+                />
+              </div>
+
+              <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={regenerateTheme} disabled={themeBusy !== ''} style={{ ...secondaryBtnStyle, background: 'var(--amber)', color: 'var(--card)', border: '1px solid var(--amber)', opacity: themeBusy ? 0.6 : 1, cursor: themeBusy ? 'wait' : 'pointer' }}>
+                  {themeBusy === 'regen' ? 'Generating… (~15s)' : 'Regenerate (~$0.04)'}
+                </button>
+                <label style={{ ...secondaryBtnStyle, opacity: themeBusy ? 0.6 : 1, cursor: themeBusy ? 'wait' : 'pointer', display: 'inline-block' }}>
+                  {themeBusy === 'upload' ? 'Uploading…' : 'Upload custom'}
+                  <input type="file" accept="audio/mpeg,audio/wav" onChange={uploadTheme} disabled={themeBusy !== ''} style={{ display: 'none' }} />
+                </label>
+              </div>
+
+              {themeMusic?.generated_at && (
+                <div style={{ marginTop: 10, fontFamily: 'DM Sans', fontSize: 12, color: 'var(--text-mid)' }}>
+                  Last updated: {formatRelative(themeMusic.generated_at)} · {themeMusic.is_custom ? 'Custom upload' : 'AI generated'}
+                </div>
+              )}
             </div>
           )}
         </div>
