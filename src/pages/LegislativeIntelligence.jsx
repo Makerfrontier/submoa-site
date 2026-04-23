@@ -1429,7 +1429,7 @@ export default function LegislativeIntelligence({ navigate }) { // eslint-disabl
       <div style={{ borderBottom: '1px solid var(--border-light)', background: 'var(--card)' }}>
         <div style={{ padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>
-            ⚖ Legislative Intelligence
+            ⚖ Atomic Politics
           </h1>
           <div style={{ display: 'flex', gap: 4, marginLeft: 16, flexWrap: 'wrap' }}>
             {MODES.map(m => (

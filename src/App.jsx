@@ -31,6 +31,10 @@ import TTSStudio from './pages/TTSStudio'
 import PodcastStudio from './pages/PodcastStudio'
 import QuickPodcast from './pages/QuickPodcast'
 import SiteAgentPanel from './components/SiteAgentPanel.jsx'
+import SidebarV2 from './components/SidebarV2.jsx'
+import AdminLayoutV2, { AdminOverviewV2 } from './components/AdminLayoutV2.jsx'
+import AtomicReactor from './pages/AtomicReactor.jsx'
+import DashboardV2 from './pages/DashboardV2.jsx'
 
 function ImpersonationBanner({ user, syncUser, navigate }) {
   const stop = async () => {
@@ -477,7 +481,8 @@ function isAppRoute(path) {
       path === '/dashboard' || path === '/author' || path === '/account' ||
       path === '/admin'     || path === '/writer' ||
       path === '/admin/brand-bible' || path === '/admin/features' || path === '/admin/bugs' ||
-      path === '/admin/hosts' || path === '/tts' ||
+      path === '/admin/hosts' || path === '/admin/comp-studio' || path === '/admin/atomic-comp-original' ||
+      path === '/tts' ||
       path === '/listen' ||
       path === '/atomic/comp' || path.startsWith('/atomic/comp/') ||
       path === '/atomic/images' ||
@@ -487,7 +492,8 @@ function isAppRoute(path) {
       path === '/youtube-transcript' ||
       path === '/legislative-intelligence' ||
       path === '/press-release' ||
-      path === '/brief-builder') return true
+      path === '/brief-builder' ||
+      path === '/reactor' || path.startsWith('/reactor/')) return true
   if (path.match(/^\/briefs\/[^/]+\/edit$/)) return true
   if (path.startsWith('/brief/'))         return true
   if (path.startsWith('/content/'))       return true
@@ -837,7 +843,7 @@ function Login({ navigate, syncUser }) {
       await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
       await fetchUser()
       await syncUser()
-      navigate('/dashboard')
+      navigate('/reactor')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -903,7 +909,7 @@ function Register({ navigate }) {
       })
       await fetchUser()
       await syncUser()
-      navigate('/dashboard')
+      navigate('/reactor')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -3212,6 +3218,14 @@ export default function App() {
 
   const [syncData, setSyncData] = useState(null)
   const [editingDraft, setEditingDraft] = useState(null)
+  const [access, setAccess] = useState({ super_admin: false, all_access: false, grants: [] })
+  useEffect(() => {
+    if (!user) { setAccess({ super_admin: false, all_access: false, grants: [] }); return }
+    fetch('/api/access/my', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setAccess(d) })
+      .catch(() => {})
+  }, [user])
   const syncUser = async () => {
     try {
       const data = await api('/api/dashboard/sync')
@@ -3222,6 +3236,13 @@ export default function App() {
   const authValue = { user, loading, fetchUser, syncUser, syncData }
 
   const useSidebar = !!user && isAppRoute(page)
+
+  // Post-login landing redirect: logged-in users hitting "/" land on the
+  // Atomic Reactor, not the marketing landing page. Done as a side-effect
+  // so React doesn't render Landing for a split second first.
+  useEffect(() => {
+    if (!loading && user && page === '/') navigate('/reactor')
+  }, [loading, user, page, navigate])
 
   // Standalone preview frame — bypasses all app chrome so it can render
   // cleanly inside the Brand Bible admin iframe. Must be checked before
@@ -3248,7 +3269,7 @@ export default function App() {
     <AuthContext.Provider value={authValue}>
       {user?.impersonating && <ImpersonationBanner user={user} syncUser={syncUser} navigate={navigate} />}
       {useSidebar
-        ? <Sidebar navigate={navigate} page={page} syncUser={syncUser} />
+        ? <SidebarV2 navigate={navigate} page={page} user={user} access={access} />
         : <Nav navigate={navigate} syncUser={syncUser} />}
       <div className={useSidebar ? 'app-main' : 'page'} style={user?.impersonating ? { paddingTop: 38 } : undefined}>
         {useSidebar && (
@@ -3261,14 +3282,17 @@ export default function App() {
         {page === '/request' && <RequestAccess navigate={navigate} />}
         {page === '/register' && <Register navigate={navigate} />}
         {page === '/author' && (loading ? null : user ? <Author navigate={navigate} syncUser={syncUser} editingDraft={editingDraft} onEditDone={() => setEditingDraft(null)} /> : <Login navigate={navigate} syncUser={syncUser} />)}
-        {page === '/dashboard' && (loading ? null : user ? <Dashboard /> : <Login navigate={navigate} />)}
+        {page === '/dashboard' && (loading ? null : user ? <DashboardV2 navigate={navigate} /> : <Login navigate={navigate} />)}
+        {(page === '/reactor' || page.startsWith('/reactor/')) && (loading ? null : user ? <AtomicReactor navigate={navigate} page={page} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/account' && (loading ? null : user ? <Account navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/writer' && (loading ? null : user ? <Writer navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
-        {page === '/admin' && (loading ? null : user ? <AdminGuard><AdminDashboard /></AdminGuard> : <Login navigate={navigate} />)}
-        {page === '/admin/brand-bible' && (loading ? null : user ? <AdminGuard><AdminBrandBible /></AdminGuard> : <Login navigate={navigate} />)}
-        {page === '/admin/features' && (loading ? null : user ? <AdminGuard><AdminFeatures /></AdminGuard> : <Login navigate={navigate} />)}
-        {page === '/admin/bugs' && (loading ? null : user ? <AdminGuard><AdminBugs /></AdminGuard> : <Login navigate={navigate} />)}
-        {page === '/admin/hosts' && (loading ? null : user ? <AdminGuard><AdminHosts /></AdminGuard> : <Login navigate={navigate} />)}
+        {page === '/admin' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AdminOverviewV2 navigate={navigate} /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
+        {page === '/admin/brand-bible' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AdminBrandBible /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
+        {page === '/admin/features' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AdminFeatures /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
+        {page === '/admin/bugs' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AdminBugs /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
+        {page === '/admin/hosts' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AdminHosts /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
+        {page === '/admin/comp-studio' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><CompStudio /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
+        {page === '/admin/atomic-comp-original' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AtomicComp navigate={navigate} /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
         {page === '/tts' && (loading ? null : user ? <TTSStudio /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {(page === '/podcast-studio' || page.startsWith('/podcast-studio/')) && (loading ? null : user ? <PodcastStudio page={page} navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page.match(/^\/content\/[^/]+\/review$/) && (loading ? null : user ? <ReviewPage navigate={navigate} /> : <Login navigate={navigate} />)}
@@ -3297,7 +3321,7 @@ export default function App() {
         {page.match(/^\/planner\/building\/[^/]+$/) && (loading ? null : user ? <PlannerBuilding navigate={navigate} id={page.split('/')[3]} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page.match(/^\/planner\/(?!building\/)[^/]+$/) && (loading ? null : user ? <PlannerDetail navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page.match(/^\/share\/[^/]+$/) && <ShareRedirect />}
-        {page === '/' && <Landing navigate={navigate} />}
+        {page === '/' && !user && <Landing navigate={navigate} />}
       </div>
       {user && <SiteAgentPanel user={user} currentPage={page} />}
     </AuthContext.Provider>

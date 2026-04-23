@@ -1,6 +1,6 @@
 {
   "name": "submoacontent",
-  "compatibility_date": "2024-01-01",
+  "compatibility_date": "2024-04-03",
   "compatibility_flags": ["nodejs_compat"],
   "pages_build_output_dir": "dist",
   "d1_databases": [
@@ -16,6 +16,12 @@
       "bucket_name": "submoa-images"
     }
   ],
+  "kv_namespaces": [
+    {
+      "binding": "REACTOR_CLASSIFIER_CACHE",
+      "id": "b1e787f0fa1b4fd88fc4badb27bb8093"
+    }
+  ],
   "browser": {
     "binding": "BROWSER"
   },
@@ -26,5 +32,21 @@
         "binding": "GENERATION_QUEUE"
       }
     ]
+  },
+  // Cross-worker DO binding — AudioSandbox is defined + deployed on the
+  // submoa-queue-consumer worker (see wrangler.consumer.toml). Pointing
+  // script_name at that worker lets Pages Functions share the same
+  // container instance for theme-music FFmpeg conversion without owning
+  // a separate container image.
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "AUDIO_SANDBOX",
+        "class_name": "AudioSandbox",
+        "script_name": "submoa-queue-consumer"
+      }
+    ]
   }
+  // No "migrations" block here — the AudioSandbox class is owned by the
+  // consumer worker (see wrangler.consumer.toml). Pages only consumes it.
 }
