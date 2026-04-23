@@ -481,8 +481,7 @@ function isAppRoute(path) {
       path === '/dashboard' || path === '/author' || path === '/account' ||
       path === '/admin'     || path === '/writer' ||
       path === '/admin/brand-bible' || path === '/admin/features' || path === '/admin/bugs' ||
-      path === '/admin/hosts' || path === '/admin/comp-studio' || path === '/admin/atomic-comp-original' ||
-      path === '/tts' ||
+      path === '/admin/hosts' || path === '/tts' ||
       path === '/listen' ||
       path === '/atomic/comp' || path.startsWith('/atomic/comp/') ||
       path === '/atomic/images' ||
@@ -3291,8 +3290,6 @@ export default function App() {
         {page === '/admin/features' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AdminFeatures /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
         {page === '/admin/bugs' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AdminBugs /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
         {page === '/admin/hosts' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AdminHosts /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
-        {page === '/admin/comp-studio' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><CompStudio /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
-        {page === '/admin/atomic-comp-original' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AtomicComp navigate={navigate} /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
         {page === '/tts' && (loading ? null : user ? <TTSStudio /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {(page === '/podcast-studio' || page.startsWith('/podcast-studio/')) && (loading ? null : user ? <PodcastStudio page={page} navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page.match(/^\/content\/[^/]+\/review$/) && (loading ? null : user ? <ReviewPage navigate={navigate} /> : <Login navigate={navigate} />)}

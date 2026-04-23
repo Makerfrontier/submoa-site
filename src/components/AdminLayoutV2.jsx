@@ -1,17 +1,16 @@
 // AdminLayoutV2 — wraps admin sub-pages with a local top-nav tab bar under
 // the .ds-v2 class. Keeps the existing admin pages (AdminBrandBible,
-// AdminFeatures, AdminBugs, AdminHosts, CompStudio, AtomicComp) reachable via
-// the same routes they already had — this layout just renders the active one
-// inside a framed shell.
+// AdminFeatures, AdminBugs, AdminHosts) reachable via the same routes they
+// already had — this layout just renders the active one inside a framed
+// shell. Atomic Comp lives in the main nav (Creative); Comp Studio is not
+// surfaced in the nav anywhere.
 
 const ADMIN_TABS = [
-  { path: '/admin',                      label: 'Overview' },
-  { path: '/admin/brand-bible',          label: 'Brand Bible' },
-  { path: '/admin/features',             label: 'Features' },
-  { path: '/admin/bugs',                 label: 'Bugs' },
-  { path: '/admin/hosts',                label: 'Hosts' },
-  { path: '/admin/comp-studio',          label: 'Comp Studio' },
-  { path: '/admin/atomic-comp-original', label: 'Original Atomic Comp' },
+  { path: '/admin',             label: 'Overview' },
+  { path: '/admin/brand-bible', label: 'Brand Bible' },
+  { path: '/admin/features',    label: 'Features' },
+  { path: '/admin/bugs',        label: 'Bugs' },
+  { path: '/admin/hosts',       label: 'Hosts' },
 ];
 
 export default function AdminLayoutV2({ page, navigate, children }) {
