@@ -171,12 +171,14 @@
 .ds-v2 .v2-input:focus { border-color: var(--amber); }
 .ds-v2 .v2-input::placeholder { color: var(--ink-faint); }
 
-/* Sidebar */
+/* Sidebar — fixed to viewport so v1's `.app-main { margin-left: var(--sidebar-w) }`
+   reserves space on the right for page content. Width matches --sidebar-w
+   (220px) exactly so the reservation lines up with no gap and no overlap. */
 .ds-v2-sidebar {
-  width: 232px;
-  min-width: 232px;
+  width: var(--sidebar-w, 220px);
+  min-width: var(--sidebar-w, 220px);
   height: 100dvh;
-  position: sticky;
+  position: fixed;
   top: 0;
   left: 0;
   background: var(--sidebar-bg, #1A1F2E);
