@@ -32,7 +32,7 @@ import PodcastStudio from './pages/PodcastStudio'
 import QuickPodcast from './pages/QuickPodcast'
 import SiteAgentPanel from './components/SiteAgentPanel.jsx'
 import SidebarV2 from './components/SidebarV2.jsx'
-import AdminLayoutV2, { AdminOverviewV2 } from './components/AdminLayoutV2.jsx'
+import AdminLayoutV2 from './components/AdminLayoutV2.jsx'
 import AtomicReactor from './pages/AtomicReactor.jsx'
 import DashboardV2 from './pages/DashboardV2.jsx'
 
@@ -3286,7 +3286,7 @@ export default function App() {
         {(page === '/reactor' || page.startsWith('/reactor/')) && (loading ? null : user ? <AtomicReactor navigate={navigate} page={page} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/account' && (loading ? null : user ? <Account navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/writer' && (loading ? null : user ? <Writer navigate={navigate} syncUser={syncUser} /> : <Login navigate={navigate} syncUser={syncUser} />)}
-        {page === '/admin' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AdminOverviewV2 navigate={navigate} /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
+        {page === '/admin' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AdminDashboard /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
         {page === '/admin/brand-bible' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AdminBrandBible /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
         {page === '/admin/features' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AdminFeatures /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}
         {page === '/admin/bugs' && (loading ? null : user ? <AdminGuard><AdminLayoutV2 page={page} navigate={navigate}><AdminBugs /></AdminLayoutV2></AdminGuard> : <Login navigate={navigate} />)}

@@ -58,39 +58,3 @@ export default function AdminLayoutV2({ page, navigate, children }) {
   );
 }
 
-export function AdminOverviewV2({ navigate }) {
-  const cards = [
-    { path: '/admin/brand-bible', label: 'Brand Bible', desc: 'Tokens, type scale, brand rules.' },
-    { path: '/admin/features',    label: 'Features',    desc: 'Feature specs, behavior notes.' },
-    { path: '/admin/bugs',        label: 'Bugs',        desc: 'Open bugs and triage.' },
-    { path: '/admin/hosts',       label: 'Hosts',       desc: 'Podcast host profiles.' },
-    { path: '/admin/comp-studio', label: 'Comp Studio', desc: 'Legacy comp studio for super-admin work.' },
-    { path: '/admin/atomic-comp-original', label: 'Original Atomic Comp', desc: 'Archived editor, still reachable via URL.' },
-  ];
-  return (
-    <div className="ds-v2-page">
-      <div className="ds-v2-page__header">
-        <div>
-          <div className="ds-v2-page__eyebrow">// ADMIN OVERVIEW</div>
-          <h2 className="t-h2">All tools, one hub.</h2>
-        </div>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-        {cards.map(c => (
-          <button
-            key={c.path}
-            type="button"
-            className="v2-card"
-            onClick={() => navigate(c.path)}
-            style={{ height: 140, textAlign: 'left', cursor: 'pointer' }}
-          >
-            <div className="t-mono-label">{c.label}</div>
-            <div className="t-body-sm" style={{ color: 'var(--ink-mid)', marginTop: 6 }}>{c.desc}</div>
-            <div style={{ flex: 1 }} />
-            <div className="t-mono-tiny" style={{ color: 'var(--amber)' }}>OPEN →</div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
