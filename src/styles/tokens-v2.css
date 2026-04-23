@@ -1,8 +1,13 @@
-/* Brand Bible v2 — scoped under .ds-v2 so v1 pages render unchanged.
-   Applied to: Sidebar.v2, Atomic Reactor, Dashboard.v2, Admin hub.
-   See BRAND_BIBLE_V2.md for the rulebook. */
+/* Brand Bible v2 — GLOBAL. Tokens live at :root; v1 names are aliased in
+   src/index.css so every legacy `var(--text)` / `var(--card)` / etc. call
+   resolves to the v2 palette without rewriting call sites.
+   See BRAND_BIBLE_V2.md for the rulebook.
 
-.ds-v2 {
+   Admin note: the 13 section-accent stripes on AdminDashboard are an
+   intentional exception to the one-accent rule — wayfinding color-coding
+   for an internal tool. Customer-facing surfaces follow one-accent strict. */
+
+:root {
   --bg: #F4F1EA;
   --surface: #FFFFFF;
   --surface-alt: #FAF7F0;
@@ -30,113 +35,78 @@
 
   --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
-
-  font-family: var(--font-sans);
-  color: var(--ink);
-  background: var(--bg);
 }
 
-.ds-v2 *, .ds-v2 *::before, .ds-v2 *::after { box-sizing: border-box; }
+/* Type scale utility classes — usable anywhere in the app. */
+.t-display { font-family: var(--font-sans); font-size: 36px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 500; color: var(--ink); }
+.t-h1      { font-family: var(--font-sans); font-size: 28px; line-height: 1.2;  letter-spacing: -0.01em; font-weight: 500; color: var(--ink); margin: 0; }
+.t-h2      { font-family: var(--font-sans); font-size: 22px; line-height: 1.25; letter-spacing: -0.005em; font-weight: 500; color: var(--ink); margin: 0; }
+.t-h3      { font-family: var(--font-sans); font-size: 18px; line-height: 1.3;  letter-spacing: normal;   font-weight: 500; color: var(--ink); margin: 0; }
+.t-body    { font-family: var(--font-sans); font-size: 14px; line-height: 1.55; font-weight: 400; }
+.t-body-sm { font-family: var(--font-sans); font-size: 13px; line-height: 1.5;  font-weight: 400; }
+.t-button  { font-family: var(--font-sans); font-size: 13px; line-height: 1;    font-weight: 500; }
+.t-eyebrow    { font-family: var(--font-mono); font-size: 11px; line-height: 1.2; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); font-weight: 500; }
+.t-mono-label { font-family: var(--font-mono); font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; color: var(--ink); font-weight: 500; }
+.t-mono-meta  { font-family: var(--font-mono); font-size: 10px; line-height: 1.4; letter-spacing: 0.04em; color: var(--ink-light); font-weight: 400; }
+.t-mono-tiny  { font-family: var(--font-mono); font-size: 9px;  line-height: 1.2; letter-spacing: 0.08em; color: var(--ink-light); font-weight: 500; }
 
-.ds-v2 h1, .ds-v2 h2, .ds-v2 h3 {
-  font-family: var(--font-sans);
-  font-weight: 500;
-  color: var(--ink);
-  margin: 0;
-}
-.ds-v2 .t-display { font-size: 36px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 500; }
-.ds-v2 .t-h1      { font-size: 28px; line-height: 1.2;  letter-spacing: -0.01em; font-weight: 500; }
-.ds-v2 .t-h2      { font-size: 22px; line-height: 1.25; letter-spacing: -0.005em; font-weight: 500; }
-.ds-v2 .t-h3      { font-size: 18px; line-height: 1.3;  letter-spacing: normal;   font-weight: 500; }
-.ds-v2 .t-body    { font-size: 14px; line-height: 1.55; font-weight: 400; }
-.ds-v2 .t-body-sm { font-size: 13px; line-height: 1.5;  font-weight: 400; }
-.ds-v2 .t-button  { font-size: 13px; line-height: 1;    font-weight: 500; }
-
-.ds-v2 .t-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px; line-height: 1.2;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--amber);
-  font-weight: 500;
-}
-.ds-v2 .t-mono-label {
-  font-family: var(--font-mono);
-  font-size: 11px; line-height: 1.2;
-  letter-spacing: 0.08em;
-  color: var(--ink);
-  font-weight: 500;
-}
-.ds-v2 .t-mono-meta {
-  font-family: var(--font-mono);
-  font-size: 10px; line-height: 1.4;
-  letter-spacing: 0.04em;
-  color: var(--ink-light);
-  font-weight: 400;
-}
-.ds-v2 .t-mono-tiny {
-  font-family: var(--font-mono);
-  font-size: 9px; line-height: 1.2;
-  letter-spacing: 0.08em;
-  color: var(--ink-light);
-  font-weight: 500;
-}
-
-/* Clip helpers — Rule 5 from the brand bible. Every card uses these. */
-.ds-v2 .clip-1 {
+/* Clip helpers — Rule 5. Every card uses these. */
+.clip-1 {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
 }
-.ds-v2 .clip-2 {
+.clip-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.ds-v2 .clip-3 {
+.clip-3 {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* Card primitives — fixed heights per the rulebook. */
-.ds-v2 .v2-card {
+/* Card primitives — fixed heights. Un-nested so they work globally. */
+.v2-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 6px;
   padding: 16px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  box-sizing: border-box;
 }
-.ds-v2 .v2-card--h280 { height: 280px; }
-.ds-v2 .v2-card--h340 { height: 340px; }
-.ds-v2 .v2-card--stat { height: 88px; padding: 14px 16px; }
+.v2-card--h280 { height: 280px; }
+.v2-card--h340 { height: 340px; }
+.v2-card--h132 { height: 132px; }
+.v2-card--stat { height: 88px; padding: 14px 16px; }
 
-.ds-v2 .v2-card__body {
+.v2-card__body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
-
-.ds-v2 .v2-card__body button[type="button"]:hover {
+.v2-card__body button[type="button"]:hover {
   background: var(--surface-alt) !important;
 }
 
-/* Button primitives */
-.ds-v2 .v2-btn {
+/* Button primitives — un-nested. Primary is navy (not amber). Amber lives on
+   brand-spotlight surfaces like the Atomic Reactor CTA + "React →" submit. */
+.v2-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   padding: 9px 14px;
-  border-radius: 7px;
+  border-radius: 4px;
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
@@ -147,33 +117,45 @@
   color: var(--ink);
   transition: background 0.15s, border-color 0.15s, color 0.15s;
   white-space: nowrap;
+  box-sizing: border-box;
 }
-.ds-v2 .v2-btn:hover { background: var(--surface-alt); border-color: var(--ink-faint); }
-.ds-v2 .v2-btn--primary { background: var(--amber); color: #fff; border-color: var(--amber); }
-.ds-v2 .v2-btn--primary:hover { background: var(--amber-dark); border-color: var(--amber-dark); }
-.ds-v2 .v2-btn--ghost { background: transparent; border-color: transparent; color: var(--ink-mid); }
-.ds-v2 .v2-btn--ghost:hover { background: var(--surface-alt); color: var(--ink); }
-.ds-v2 .v2-btn--sm { padding: 6px 10px; font-size: 12px; }
+.v2-btn:hover { background: var(--surface-alt); border-color: var(--ink-faint); }
+.v2-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-.ds-v2 .v2-input {
+.v2-btn--primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.v2-btn--primary:hover { background: var(--ink-mid); border-color: var(--ink-mid); }
+
+.v2-btn--brand { background: var(--amber); color: #fff; border-color: var(--amber); }
+.v2-btn--brand:hover { background: var(--amber-dark); border-color: var(--amber-dark); }
+
+.v2-btn--ghost { background: transparent; border-color: transparent; color: var(--ink-mid); }
+.v2-btn--ghost:hover { background: var(--surface-alt); color: var(--ink); }
+
+.v2-btn--danger { color: var(--danger); border-color: var(--danger); background: var(--surface); }
+.v2-btn--danger:hover { background: var(--danger); color: #fff; }
+
+.v2-btn--sm { padding: 6px 10px; font-size: 12px; }
+
+/* Form inputs */
+.v2-input {
   width: 100%;
   padding: 10px 12px;
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.5;
   color: var(--ink);
-  background: var(--surface);
+  background: var(--surface-alt);
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: 4px;
   outline: none;
   transition: border-color 0.15s, background 0.15s;
+  box-sizing: border-box;
 }
-.ds-v2 .v2-input:focus { border-color: var(--amber); }
-.ds-v2 .v2-input::placeholder { color: var(--ink-faint); }
+.v2-input:focus { border-color: var(--amber); background: var(--surface); }
+.v2-input::placeholder { color: var(--ink-faint); }
 
-/* Sidebar — fixed to viewport so v1's `.app-main { margin-left: var(--sidebar-w) }`
-   reserves space on the right for page content. Width matches --sidebar-w
-   (220px) exactly so the reservation lines up with no gap and no overlap. */
+/* Sidebar — fixed to viewport; width matches --sidebar-w (220px) so the
+   legacy .app-main margin-left reservation lines up exactly. */
 .ds-v2-sidebar {
   width: var(--sidebar-w, 220px);
   min-width: var(--sidebar-w, 220px);
@@ -190,7 +172,9 @@
   overflow-x: hidden;
   padding: 18px 0 16px;
   z-index: 40;
+  box-sizing: border-box;
 }
+.ds-v2-sidebar *, .ds-v2-sidebar *::before, .ds-v2-sidebar *::after { box-sizing: border-box; }
 .ds-v2-sidebar__brand {
   padding: 0 18px 12px;
   font-family: 'Space Grotesk', sans-serif;
@@ -276,6 +260,12 @@
   color: rgba(232,228,218,0.65);
   cursor: pointer;
   border-top: 1px solid rgba(232,228,218,0.08);
+  background: transparent;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  font-family: 'Space Grotesk', sans-serif;
+  text-align: left;
 }
 .ds-v2-sidebar__footer:hover { color: #E8E4DA; }
 .ds-v2-sidebar__avatar {
@@ -345,19 +335,6 @@
   }
   .ds-v2-sidebar.is-open { transform: translateX(0); }
   .ds-v2-topbar { display: flex; }
-}
-
-/* Shell layout */
-.ds-v2-shell {
-  display: flex;
-  min-height: 100dvh;
-  background: var(--bg);
-}
-.ds-v2-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 /* Widget grid */
@@ -489,7 +466,10 @@
   display: flex;
   flex-direction: column;
   background: var(--bg);
+  font-family: var(--font-sans);
+  color: var(--ink);
 }
+.ds-v2-reactor * { box-sizing: border-box; }
 .ds-v2-reactor__hero {
   flex: 1;
   display: flex;
@@ -707,29 +687,65 @@
 .ds-v2-model-menu__item:hover { background: var(--surface-alt); }
 .ds-v2-model-menu__item.is-selected { color: var(--amber); font-weight: 500; }
 
-/* Page headers */
-.ds-v2-page {
-  padding: 28px 28px 48px;
-  max-width: 1320px;
+/* Page shell */
+.v2-page {
+  padding: 32px 40px 48px;
+  max-width: 1180px;
   width: 100%;
   margin: 0 auto;
+  box-sizing: border-box;
+  font-family: var(--font-sans);
+  color: var(--ink);
+  align-items: stretch;
+  /* Top-aligned content — no vertical centering, per brand rule. */
 }
 @media (max-width: 1023px) {
-  .ds-v2-page { padding: 20px 16px 80px; }
+  .v2-page { padding: 24px 16px 80px; }
 }
-.ds-v2-page__header {
+.v2-page__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 16px;
+  margin-bottom: 24px;
   flex-wrap: wrap;
 }
-.ds-v2-page__eyebrow {
+.v2-page__header-main { min-width: 0; flex: 1; }
+.v2-page__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.v2-page__eyebrow {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--amber);
-  margin-bottom: 6px;
+  font-weight: 500;
 }
+.v2-page__title {
+  font-family: var(--font-sans);
+  font-size: 28px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  font-weight: 500;
+  color: var(--ink);
+  margin: 6px 0 0;
+}
+.v2-page__subtitle {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  font-weight: 400;
+  color: var(--ink-mid);
+  margin: 6px 0 0;
+}
+
+/* Legacy .ds-v2-page alias so pages built before the global rollout keep
+   rendering identically. */
+.ds-v2-page { padding: 32px 40px 48px; max-width: 1180px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+@media (max-width: 1023px) { .ds-v2-page { padding: 24px 16px 80px; } }
+.ds-v2-page__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.ds-v2-page__eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); margin-bottom: 6px; font-weight: 500; }

@@ -2,6 +2,7 @@
 // the same highlight-flag inline edit flow used in Press Release.
 
 import { useEffect, useState, useRef } from 'react';
+import PageShell from '../components/PageShell.jsx';
 
 const TYPES = [
   { id: 'creative', name: 'Creative Brief', icon: '✦', desc: 'For any creative project. Align on vision before the work begins.' },
@@ -205,31 +206,36 @@ export default function BriefBuilder({ navigate, editId }) { // eslint-disable-l
 
   if (!typeId) {
     return (
-      <div className="page"><div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 24px' }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--text)' }}>Brief Builder</h1>
-        <p style={{ color: 'var(--text-mid)', marginTop: 6 }}>Pick a brief type to get started.</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, marginTop: 24 }}>
+      <PageShell
+        eyebrow="// BRIEF BUILDER"
+        title="Build a brief"
+        subtitle="Structured briefs for any audience. Pick a type to get started."
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
           {TYPES.map(t => (
             <button key={t.id} type="button" onClick={() => setTypeId(t.id)}
-              style={{ textAlign: 'left', padding: 18, borderRadius: 12, background: 'var(--card)', border: '1px solid var(--border)', cursor: 'pointer', boxShadow: 'var(--shadow-card)' }}>
-              <div style={{ fontSize: 28, color: '#6B4A8A', marginBottom: 6 }}>{t.icon}</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 600, color: 'var(--text)' }}>{t.name}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-light)', marginTop: 4 }}>{t.desc}</div>
+              style={{ textAlign: 'left', padding: 18, borderRadius: 6, background: 'var(--surface)', border: '1px solid var(--border)', cursor: 'pointer' }}>
+              <div style={{ fontSize: 28, color: 'var(--amber)', marginBottom: 6 }}>{t.icon}</div>
+              <div style={{ fontFamily: 'var(--font-sans)', fontSize: 16, fontWeight: 500, color: 'var(--ink)' }}>{t.name}</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-light)', marginTop: 4 }}>{t.desc}</div>
             </button>
           ))}
         </div>
-      </div></div>
+      </PageShell>
     );
   }
 
   const def = FIELDS[typeId] || [];
+  const activeType = TYPES.find(t => t.id === typeId);
   return (
-    <div className="page"><div style={{ maxWidth: 720, margin: '0 auto', padding: '32px 24px' }}>
-      <button className="btn-ghost" onClick={() => setTypeId(null)} style={{ fontSize: 12, marginBottom: 10 }}>← Change brief type</button>
-      <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--text)' }}>
-        {TYPES.find(t => t.id === typeId)?.name}
-      </h1>
-      {error && <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, padding: '10px 14px', color: 'var(--error)', fontSize: 13, margin: '16px 0' }}>{error}</div>}
+    <PageShell
+      eyebrow={`// BRIEF · ${String(activeType?.name || '').toUpperCase()}`}
+      title={activeType?.name || 'Brief'}
+      subtitle={activeType?.desc || ''}
+      actions={<button className="v2-btn v2-btn--sm" type="button" onClick={() => setTypeId(null)}>← Change type</button>}
+    >
+      <div style={{ maxWidth: 720, width: '100%' }}>
+      {error && <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, padding: '10px 14px', color: 'var(--error)', fontSize: 13, margin: '0 0 16px' }}>{error}</div>}
       <div style={{ marginTop: 20 }}>
         {def.map(([key, label, type]) => (
           <div key={key} style={{ marginBottom: 14 }}>
@@ -258,7 +264,8 @@ export default function BriefBuilder({ navigate, editId }) { // eslint-disable-l
         </div>
         {savedFlash && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--success)', fontFamily: 'DM Sans' }}>{savedFlash}</div>}
       </div>
-    </div></div>
+      </div>
+    </PageShell>
   );
 }
 

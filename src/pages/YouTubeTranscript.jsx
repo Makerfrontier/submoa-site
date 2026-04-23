@@ -2,6 +2,7 @@
 // blog-draft article. Requires auth (gated at the App route).
 
 import { useEffect, useState } from 'react';
+import PageShell from '../components/PageShell.jsx';
 
 const cardStyle = {
   background: 'var(--card)',
@@ -184,9 +185,11 @@ export default function YouTubeTranscript({ navigate }) {
   const takeawaysText = takeaways.length ? '\n\nKey Takeaways:\n' + takeaways.map(t => `- ${t}`).join('\n') : '';
 
   return (
-    <div className="page"><div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
-      <h1 className="page-title">YouTube Transcript</h1>
-      <p className="page-sub">Paste a YouTube URL. Get the raw transcript, an AI summary, and an optional blog draft.</p>
+    <PageShell
+      eyebrow="// YOUTUBE TRANSCRIBE"
+      title="Transcribe a video"
+      subtitle="Paste any URL. Get the raw transcript, an AI summary, and an optional blog draft."
+    >
 
       {videoMeta && (
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, padding: 10, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8 }}>
@@ -334,6 +337,6 @@ export default function YouTubeTranscript({ navigate }) {
           </div>
         </div>
       )}
-    </div></div>
+    </PageShell>
   );
 }

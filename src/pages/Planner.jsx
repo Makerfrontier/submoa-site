@@ -2,6 +2,7 @@
 // Full planner flow: input → questions → recap → plan → feedback → revision → approved.
 
 import { useEffect, useMemo, useState } from 'react'
+import PageShell from '../components/PageShell.jsx'
 
 const LOADING_MESSAGES = [
   'Researching vendors and options…',
@@ -319,11 +320,12 @@ export default function Planner({ navigate }) {
 
   // ───── Render per phase ─────
   return (
-    <div style={{ background: 'var(--bg)', minHeight: '100vh', padding: '40px 20px 120px' }}>
-      <div style={{ maxWidth: 960, margin: '0 auto' }}>
-        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600, letterSpacing: '0.3em', color: 'var(--amber)', textTransform: 'uppercase', marginBottom: 8 }}>◎ Planner</div>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(26px, 4vw, 40px)', color: 'var(--text)', marginBottom: 24 }}>Plan something real.</h1>
-
+    <PageShell
+      eyebrow="// PLANNER"
+      title="Plan something real."
+      subtitle="Itineraries and content plans. Works for travel, moves, weddings, road trips, events, and more."
+    >
+      <div style={{ maxWidth: 960, width: '100%' }}>
         {error && (
           <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error)', padding: 12, borderRadius: 8, marginBottom: 14, fontSize: 13 }}>{error}</div>
         )}
@@ -466,7 +468,7 @@ export default function Planner({ navigate }) {
           </Card>
         )}
       </div>
-    </div>
+    </PageShell>
   )
 }
 

@@ -1,6 +1,7 @@
 // /press-release — brief form + generated output with highlight-flag edits.
 
 import { useEffect, useState, useRef } from 'react';
+import PageShell from '../components/PageShell.jsx';
 
 export default function PressRelease({ navigate }) { // eslint-disable-line no-unused-vars
   const [view, setView] = useState('form'); // 'form' | 'output'
@@ -102,10 +103,13 @@ export default function PressRelease({ navigate }) { // eslint-disable-line no-u
   );
 
   return (
-    <div className="page"><div style={{ maxWidth: 720, margin: '0 auto', padding: '32px 24px' }}>
-      <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--text)' }}>Press Release</h1>
-      <p style={{ color: 'var(--text-mid)', marginTop: 6 }}>Fill in what you have. The more context the better.</p>
-      {error && <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, padding: '10px 14px', color: 'var(--error)', fontSize: 13, margin: '16px 0' }}>{error}</div>}
+    <PageShell
+      eyebrow="// PRESS RELEASE"
+      title="Write a release"
+      subtitle="Business news, ready to distribute. Fill in what you have — the more context the better."
+    >
+      <div style={{ maxWidth: 720, width: '100%' }}>
+      {error && <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, padding: '10px 14px', color: 'var(--error)', fontSize: 13, margin: '0 0 16px' }}>{error}</div>}
 
       <div style={{ marginTop: 20 }}>
         {field('Product or News', 'product_or_news', 'textarea', 'What is being announced? New product launch, event, milestone, partnership, award…', 4, true)}
@@ -139,7 +143,8 @@ export default function PressRelease({ navigate }) { // eslint-disable-line no-u
           {busy ? 'Generating…' : 'Generate Press Release'}
         </button>
       </div>
-    </div></div>
+      </div>
+    </PageShell>
   );
 }
 

@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 import { stripAndClean } from '../comp-utils';
 import { EMAIL_TEMPLATES } from '../template-baselines';
+import PageShell from '../components/PageShell.jsx';
 
 interface AuthorRow { slug: string; name: string }
 
@@ -303,9 +304,12 @@ export default function EmailBrief({ navigate }: { navigate?: (p: string) => voi
   const _customFilenameUnused = customFilename;
   if (!templateId) {
     return (
-      <div className="page"><div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
-        <h1 className="page-title">Email Builder</h1>
-        <p className="page-sub">Pick a template to start. You'll get a three-column editor with a live preview.</p>
+      <PageShell
+        eyebrow="// EMAIL BUILDER"
+        title="Email Builder"
+        subtitle="Marketing emails in your voice. Pick a template to start — you'll get a three-column editor with a live preview."
+      >
+        <div style={{ maxWidth: 1100, width: '100%' }}>
         {uploadError && (
           <div style={{ marginTop: 16, background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, padding: '10px 14px', color: 'var(--error)', fontSize: 13 }}>
             {uploadError}
@@ -353,7 +357,8 @@ export default function EmailBrief({ navigate }: { navigate?: (p: string) => voi
             />
           </label>
         </div>
-      </div></div>
+        </div>
+      </PageShell>
     );
   }
 

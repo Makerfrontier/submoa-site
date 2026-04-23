@@ -197,7 +197,7 @@ export default function DashboardV2({ navigate }) {
   };
 
   return (
-    <div className="ds-v2">
+    <div>
       <div className="ds-v2-page">
         <div className="ds-v2-page__header">
           <div>

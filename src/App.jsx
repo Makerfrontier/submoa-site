@@ -33,6 +33,7 @@ import QuickPodcast from './pages/QuickPodcast'
 import SiteAgentPanel from './components/SiteAgentPanel.jsx'
 import SidebarV2 from './components/SidebarV2.jsx'
 import AdminLayoutV2 from './components/AdminLayoutV2.jsx'
+import PageShell from './components/PageShell.jsx'
 import AtomicReactor from './pages/AtomicReactor.jsx'
 import DashboardV2 from './pages/DashboardV2.jsx'
 
@@ -1324,9 +1325,12 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
   function removeLink(i){ setForm(f => ({ ...f, relevantLinks: (f.relevantLinks||[]).filter((_,idx) => idx !== i) })) }
 
   return (
-    <div className="page"><div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 24px' }}>
-        <h1 className="page-title">Build Article</h1>
-        <p className="page-sub">Brief us in detail. Better signal in, better article out.</p>
+    <PageShell
+      eyebrow="// BUILD ARTICLE"
+      title="Draft a new article"
+      subtitle="Full editorial workflow — brief us in detail, better signal in, better article out."
+    >
+      <div style={{ maxWidth: 680, width: '100%' }}>
         {error && <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, padding: '10px 14px', fontSize: 13, color: 'var(--error)', marginBottom: 16 }}>{error}</div>}
         <form onSubmit={handleSubmit}>
           {/* SOURCE TOGGLE */}
@@ -1699,7 +1703,7 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
           </div>
         </form>
       </div>
-    </div>
+    </PageShell>
   )
 }
 

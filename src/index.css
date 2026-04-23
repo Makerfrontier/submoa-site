@@ -10,83 +10,89 @@
 /* ────────────────────────────────────────────────────────────
    Design tokens
    ──────────────────────────────────────────────────────────── */
+/* v1 → v2 alias block. tokens-v2.css owns the authoritative values at
+   :root (--bg, --surface, --ink, --amber, --font-sans, etc.). The legacy
+   names below stay in place so every `var(--text)`, `var(--card)`,
+   `var(--green)` call site throughout the app still resolves — but to
+   v2 values. See BRAND_BIBLE_V2.md for the rulebook.
+   Deleted outright (not aliased): --green family, --leather family,
+   --accent-* family, --podcast-teal family. Call sites that referenced
+   those have been migrated to the v2 primitives. */
 :root {
-  /* Surfaces */
-  --bg:            #EDE8DF;
-  --card:          #FAF7F2;
-  --card-alt:      #F5F0E8;
-  --surface-inp:   #F0EBE2;
-  --surface-hover: #EAE4DA;
+  /* Surfaces — v1 names → v2 values */
+  --card:          var(--surface);
+  --card-alt:      var(--surface-alt);
+  --surface-inp:   var(--surface-alt);
+  --surface-hover: var(--surface-alt);
 
   /* Borders */
-  --border:        #CDC5B4;
-  --border-light:  #E0D9CE;
-  --border-faint:  #EAE4DC;
+  --border-light:  var(--border);
+  --border-faint:  var(--border);
 
-  /* Greens (primary CTA / forest sage) */
-  --green:         #3D5A3E;
-  --green-dark:    #2B4030;
-  --green-light:   #6A8A6A;
-  --green-glow:    rgba(61,90,62,0.08);
-  --green-border:  rgba(61,90,62,0.18);
+  /* Greens — aliased to ink so legacy `var(--green)` primary buttons become
+     navy per v2. The semantic --success token (below) stays green for
+     positive-delta indicators (not decorative). */
+  --green:         var(--ink);
+  --green-dark:    var(--ink);
+  --green-light:   var(--ink-mid);
+  --green-glow:    rgba(26,31,46,0.06);
+  --green-border:  rgba(26,31,46,0.18);
 
-  /* Amber (eyebrows / brass accents) */
-  --amber:         #B8872E;
-  --amber-light:   #F5EDD8;
-  --amber-dim:     #7A5C1E;
-  --amber-border:  rgba(184,135,46,0.2);
+  /* Leather (old sidebar palette) → ink; legacy refs map to the v2 dark navy */
+  --leather:       var(--ink);
+  --leather-dark:  var(--sidebar-bg);
+  --leather-light: var(--ink-mid);
 
-  /* Leather (sidebar + warm contrast) */
-  --leather:       #8B6348;
-  --leather-dark:  #3A2410;
-  --leather-light: #C4A882;
+  /* Podcast teal / per-feature accents — collapsed to amber per v2 rule #1.
+     Admin section stripes are a documented exception (AdminDashboard). */
+  --podcast-teal:        var(--amber);
+  --podcast-teal-bg:     var(--amber-soft);
+  --podcast-teal-border: rgba(232,132,61,0.22);
+  --accent-article:      var(--amber);
+  --accent-email:        var(--amber);
+  --accent-infographic:  var(--amber);
+  --accent-prompt:       var(--amber);
+  --accent-presentation: var(--amber);
 
-  /* Text */
-  --text:          #221A10;
-  --text-mid:      #6B5744;
-  --text-light:    #A09080;
-  --text-dim:      #C4B8A8;
+  /* Amber — v1 family → v2 family */
+  --amber-light:   var(--amber-soft);
+  --amber-dim:     var(--amber-dark);
+  --amber-border:  rgba(232,132,61,0.2);
 
-  /* Status */
-  --success:        #3A7A3A;
-  --success-bg:     rgba(58,122,58,0.10);
-  --success-border: rgba(58,122,58,0.20);
-  --warning:        #9A6B1A;
-  --warning-bg:     rgba(154,107,26,0.10);
-  --warning-border: rgba(154,107,26,0.20);
-  --error:          #8B3A2A;
-  --error-bg:       rgba(139,58,42,0.10);
-  --error-border:   rgba(139,58,42,0.20);
+  /* Text → ink */
+  --text:          var(--ink);
+  --text-mid:      var(--ink-mid);
+  --text-light:    var(--ink-light);
+  --text-dim:      var(--ink-faint);
+
+  /* Status — semantic, keep */
+  --success-bg:     rgba(74,155,110,0.10);
+  --success-border: rgba(74,155,110,0.20);
+  --warning-bg:     rgba(193,139,44,0.10);
+  --warning-border: rgba(193,139,44,0.20);
+  --error:          var(--danger);
+  --error-bg:       rgba(184,68,68,0.10);
+  --error-border:   rgba(184,68,68,0.20);
   --info:           #2A5A7A;
   --info-bg:        rgba(42,90,122,0.10);
   --info-border:    rgba(42,90,122,0.20);
 
-  /* Sidebar text */
-  --sidebar-text:  #B4A490;
-
-  /* Card accent colors per type */
-  --accent-article:      var(--green);
-  --accent-email:        #9A6B1A;
-  --accent-infographic:  #2A7A6A;
-  --accent-prompt:       #2A5A8A;
-  --accent-presentation: #6A4A8A;
-
-  /* Type stacks */
-  --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
-  --font-ui:      "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Type stacks — v1 names → v2 equivalents so legacy references render
+     Space Grotesk / JetBrains Mono instead of Playfair / DM Sans. */
+  --font-display: var(--font-sans);
+  --font-ui:      var(--font-sans);
   --font-read:    "Crimson Pro", Georgia, "Times New Roman", serif;
-  --font-mono:    "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
 
   /* Shadows */
-  --shadow-card:   0 2px 20px rgba(34,26,16,0.06), 0 1px 4px rgba(34,26,16,0.04);
-  --shadow-button: 0 2px 10px rgba(43,64,48,0.25);
+  --shadow-card:   0 2px 20px rgba(26,31,46,0.06), 0 1px 4px rgba(26,31,46,0.04);
+  --shadow-button: 0 2px 10px rgba(26,31,46,0.18);
 
   /* Layout */
   --sidebar-w: 220px;
-  --radius-card:  12px;
-  --radius-input: 8px;
+  --radius-card:  6px;
+  --radius-input: 4px;
   --radius-pill:  100px;
-  --radius-sm:    5px;
+  --radius-sm:    4px;
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -102,9 +108,9 @@ html {
 }
 
 body {
-  font-family: var(--font-ui);
+  font-family: var(--font-sans);
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   min-height: 100vh;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -113,12 +119,15 @@ body {
   overscroll-behavior-x: none;
 }
 
-a { color: var(--green); text-decoration: none; }
+a { color: var(--ink); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
+/* Page titles use Space Grotesk per v2 hard rule #4. Marketing pages that
+   still want editorial-serif can opt in explicitly via a utility class. */
 h1, h2, h3, h4 {
-  font-family: var(--font-display);
-  color: var(--text);
+  font-family: var(--font-sans);
+  color: var(--ink);
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 
@@ -310,14 +319,23 @@ html, body { margin: 0; padding: 0; }
 /* Breakpoint covers mobile AND tablet; desktop is ≥1024px. */
 @media (max-width: 1023px) {
   .sidebar {
+    /* Bumped above the Site Agent narrow pill (z:50) and wide pill (z:900)
+       so an open drawer always sits above the floating assistant button.
+       Also above the mobile overlay (below) but below the app top bar
+       (z:1000) so the hamburger stays tappable. */
     transform: translateX(-100%);
     transition: transform 0.25s ease;
     top: calc(52px + env(safe-area-inset-top, 0px));
     height: calc(100vh - 52px - env(safe-area-inset-top, 0px));
+    z-index: 990;
   }
   .sidebar--open { transform: translateX(0); }
   /* The floating sidebar-hamburger is replaced by the fixed top bar. */
   .sidebar-hamburger { display: none; }
+  .sidebar-overlay {
+    /* Backdrop sits below the drawer but above the Site Agent button. */
+    z-index: 980;
+  }
   .sidebar-overlay--open { display: block; top: calc(52px + env(safe-area-inset-top, 0px)); }
   .app-mobile-topbar { display: flex; }
   /* Desktop top utility bar lives inside .app-main — hide it under 1024px. */

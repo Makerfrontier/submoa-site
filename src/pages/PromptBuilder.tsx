@@ -5,6 +5,7 @@
 // amber-accented code block with Copy / Save / Start over actions.
 
 import { useEffect, useRef, useState } from 'react';
+import PageShell from '../components/PageShell.jsx';
 
 interface Message { role: 'user' | 'assistant'; content: string; }
 interface SavedPrompt {
@@ -183,30 +184,34 @@ export default function PromptBuilder() {
   // Screen 1 — model selection
   if (screen === 'model') {
     return (
-      <div style={{ maxWidth: 820, margin: '0 auto', padding: '40px 24px' }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--text)', marginBottom: 20 }}>
-          Which AI are you building this prompt for?
-        </h1>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-          {MODELS.map(m => (
-            <button key={m.id} type="button" onClick={() => { setModelId(m.id); setScreen('intent'); }}
-              style={{
-                textAlign: 'left', padding: 16, borderRadius: 10,
-                background: 'var(--card)', border: '1px solid var(--border)',
-                cursor: 'pointer', boxShadow: 'var(--shadow-card)',
-              }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{m.label}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-mid)', marginTop: 4 }}>{m.desc}</div>
-            </button>
-          ))}
+      <PageShell
+        eyebrow="// PROMPT BUILDER"
+        title="Prompt Builder"
+        subtitle="Design prompts. Test. Ship."
+        actions={<button className="v2-btn v2-btn--sm" type="button" onClick={() => setSavedOpen(true)}>Saved prompts →</button>}
+      >
+        <div style={{ maxWidth: 820, width: '100%' }}>
+          <div style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--ink-mid)', marginBottom: 16 }}>
+            Which AI are you building this prompt for?
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+            {MODELS.map(m => (
+              <button key={m.id} type="button" onClick={() => { setModelId(m.id); setScreen('intent'); }}
+                style={{
+                  textAlign: 'left', padding: 16, borderRadius: 6,
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  cursor: 'pointer',
+                }}>
+                <div style={{ fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 500, color: 'var(--ink)' }}>{m.label}</div>
+                <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--ink-mid)', marginTop: 4 }}>{m.desc}</div>
+              </button>
+            ))}
+          </div>
+          {savedOpen && (
+            <SavedPanel list={savedList} onClose={() => setSavedOpen(false)} onDelete={deleteSaved} />
+          )}
         </div>
-        <div style={{ marginTop: 24 }}>
-          <button className="btn-ghost" onClick={() => setSavedOpen(true)}>View saved prompts →</button>
-        </div>
-        {savedOpen && (
-          <SavedPanel list={savedList} onClose={() => setSavedOpen(false)} onDelete={deleteSaved} />
-        )}
-      </div>
+      </PageShell>
     );
   }
 

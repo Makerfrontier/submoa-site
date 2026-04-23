@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { PRESENTATION_TEMPLATES } from '../template-baselines';
+import PageShell from '../components/PageShell.jsx';
 
 interface AuthorRow { slug: string; name: string }
 interface SlideDraft { id: string; title: string; body: string; type: 'title' | 'content' | 'section' | 'quote' | 'stats' }
@@ -320,9 +321,12 @@ export default function PresentationBrief({ navigate }: { navigate?: (p: string)
 
   if (!templateId) {
     return (
-      <div className="page"><div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
-        <h1 className="page-title">PowerPoint Builder</h1>
-        <p className="page-sub">Pick a template to start. You'll get a three-column editor with a live deck preview.</p>
+      <PageShell
+        eyebrow="// POWERPOINT"
+        title="Deck Builder"
+        subtitle="Slides in your brand. Pick a template to start — you'll get a three-column editor with a live preview."
+      >
+        <div style={{ maxWidth: 1100, width: '100%' }}>
         {uploadError && (
           <div style={{ marginTop: 16, background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, padding: '10px 14px', color: 'var(--error)', fontSize: 13 }}>
             {uploadError}
@@ -391,7 +395,8 @@ export default function PresentationBrief({ navigate }: { navigate?: (p: string)
             </div>
           </div>
         )}
-      </div></div>
+        </div>
+      </PageShell>
     );
   }
 

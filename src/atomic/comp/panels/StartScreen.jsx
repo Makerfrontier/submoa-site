@@ -208,28 +208,36 @@ export function StartScreen({ onCompCreated }) {
   // ───────────────────────────────────────────────────────────────
   return (
     <div style={{
-      minHeight: '100vh',
       background: 'var(--bg)',
       display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      padding: 40,
-      fontFamily: 'DM Sans, sans-serif',
+      alignItems: 'center',
+      padding: '32px 40px 60px',
+      fontFamily: 'var(--font-sans)',
+      maxWidth: 1180, width: '100%', margin: '0 auto',
+      boxSizing: 'border-box',
     }}>
       <div style={{
-        fontSize: 11, fontWeight: 700, letterSpacing: '0.15em',
-        color: 'var(--amber)', textTransform: 'uppercase', marginBottom: 20,
-      }}>✦ Atomic Comp System</div>
+        fontFamily: 'var(--font-mono)',
+        fontSize: 11, fontWeight: 500, letterSpacing: '0.16em',
+        color: 'var(--amber)', textTransform: 'uppercase', marginBottom: 8,
+        alignSelf: 'flex-start',
+      }}>// ATOMIC COMP</div>
 
       <h1 style={{
-        fontSize: 'clamp(2rem, 4vw, 3rem)',
-        fontWeight: 700, color: 'var(--green-dark)',
-        marginBottom: 12, textAlign: 'center', lineHeight: 1.1,
+        fontFamily: 'var(--font-sans)',
+        fontSize: 28,
+        fontWeight: 500, color: 'var(--ink)',
+        marginBottom: 6, textAlign: 'left', lineHeight: 1.2,
+        letterSpacing: '-0.01em',
+        alignSelf: 'flex-start',
       }}>Build a comp in seconds</h1>
 
       <p style={{
-        fontSize: 18, color: 'var(--text-mid)',
-        marginBottom: 40, textAlign: 'center',
-        maxWidth: 520, lineHeight: 1.5,
+        fontFamily: 'var(--font-sans)',
+        fontSize: 14, color: 'var(--ink-mid)',
+        marginBottom: 32, textAlign: 'left',
+        maxWidth: 520, lineHeight: 1.55,
+        alignSelf: 'flex-start',
       }}>Start from a URL, a description, an image, or a blank canvas.</p>
 
       <div style={{ width: '100%', maxWidth: 720 }}>

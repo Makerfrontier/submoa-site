@@ -15,7 +15,7 @@ const ADMIN_TABS = [
 
 export default function AdminLayoutV2({ page, navigate, children }) {
   return (
-    <div className="ds-v2" style={{ background: 'var(--bg)', minHeight: '100%' }}>
+    <div style={{ background: 'var(--bg)', minHeight: '100%' }}>
       <div style={{
         background: 'var(--surface)',
         borderBottom: '1px solid var(--border)',

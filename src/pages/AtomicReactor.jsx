@@ -279,7 +279,7 @@ export default function AtomicReactor({ navigate, page }) {
   );
 
   return (
-    <div className="ds-v2 ds-v2-reactor">
+    <div className="ds-v2-reactor">
       {!hasConversation ? (
         <div className="ds-v2-reactor__hero">
           <div className="ds-v2-reactor__atom" aria-hidden>

@@ -5,6 +5,7 @@
 // All confirmed sources ship to the generator as full citations.
 
 import { useEffect, useState } from "react";
+import PageShell from '../components/PageShell.jsx';
 
 interface AuthorRow { slug: string; name: string }
 
@@ -256,9 +257,12 @@ export default function InfographicBrief({ navigate }: { navigate?: (p: string) 
   const gap = (totalFound ?? 0) < 3 && sources !== null;
 
   return (
-    <div className="page"><div style={{ maxWidth: 760, margin: "0 auto", padding: "32px 24px" }}>
-      <h1 className="page-title">Build Infographic</h1>
-      <p className="page-sub">Research first. Visuals second. Every claim gets a citation.</p>
+    <PageShell
+      eyebrow="// INFOGRAPHIC"
+      title="Build an infographic"
+      subtitle="Research-backed visual storytelling. Every claim gets a citation."
+    >
+      <div style={{ maxWidth: 760, width: '100%' }}>
 
       {handoff && (
         <div style={{
@@ -466,6 +470,7 @@ export default function InfographicBrief({ navigate }: { navigate?: (p: string) 
           </div>
         </>
       )}
-    </div></div>
+      </div>
+    </PageShell>
   );
 }
