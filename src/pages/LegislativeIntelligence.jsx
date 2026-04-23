@@ -77,11 +77,12 @@ function BillDetailPanel({ billId, onClose, onAnalyze }) {
     if (!bill) return;
     setAnalyzing(true);
     try {
+      console.log(`[analyze-bill] bill_id=${bill.bill_id} source=bill-detail-panel`);
       const d = await api('/legislative/analyze', {
         method: 'POST',
         body: JSON.stringify({ legislation_id: bill.bill_id, mode: 'party', party: bill.sponsor_party?.startsWith('D') ? 'D' : 'R' }),
       });
-      onAnalyze?.(d.brief_id);
+      onAnalyze?.({ briefId: d.brief_id, bill });
       onClose?.();
     } catch (e) { setError(e.message); }
     setAnalyzing(false);
@@ -617,8 +618,9 @@ function PartyIntel({ onAnalyze, onBillOpen }) {
     if (!selected) return;
     setAnalyzing(true);
     try {
+      console.log(`[analyze-bill] bill_id=${selected.bill_id} source=party-intelligence`);
       const d = await api('/legislative/analyze', { method: 'POST', body: JSON.stringify({ legislation_id: selected.bill_id, mode: 'party', party }) });
-      onAnalyze?.(d.brief_id);
+      onAnalyze?.({ briefId: d.brief_id, bill: selected });
     } catch (e) { setError(e.message); }
     setAnalyzing(false);
   };
@@ -733,8 +735,9 @@ function RepIntel({ onAnalyze }) {
     if (!selectedBill || !selectedId) return;
     setAnalyzing(true);
     try {
+      console.log(`[analyze-bill] bill_id=${selectedBill.bill_id} source=rep-intelligence`);
       const d = await api('/legislative/analyze', { method: 'POST', body: JSON.stringify({ legislation_id: selectedBill.bill_id, mode: 'rep', rep_profile_id: selectedId }) });
-      onAnalyze?.(d.brief_id);
+      onAnalyze?.({ briefId: d.brief_id, bill: selectedBill });
     } catch (e) { setError(e.message); }
     setAnalyzing(false);
   };
@@ -938,7 +941,19 @@ function RepManager({ onClose }) {
 }
 
 // ─── Brief viewer (reused by all modes once a brief is produced) ─────────────
-function BriefViewer({ briefId, onQuestion }) {
+// Derive a display-friendly chamber label from a Congress.gov bill_id like
+// "119-hr-1234" / "119-s-47". Falls back to the raw id prefix when the
+// pattern isn't recognized.
+function billChamber(billId) {
+  const m = String(billId || '').toLowerCase().match(/^(?:\d+-)?([a-z]+)/);
+  if (!m) return '';
+  const prefix = m[1];
+  if (prefix === 'hr' || prefix === 'hres' || prefix === 'hjres' || prefix === 'hconres') return 'House';
+  if (prefix === 's' || prefix === 'sres' || prefix === 'sjres' || prefix === 'sconres') return 'Senate';
+  return prefix.toUpperCase();
+}
+
+function BriefViewer({ briefId, bill, onQuestion }) {
   const [brief, setBrief] = useState(null);
   const [flags, setFlags] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1017,9 +1032,50 @@ function BriefViewer({ briefId, onQuestion }) {
     </div>
   );
 
+  // Collapsible bill-context panel. Always present when bill metadata is
+  // available, defaults to expanded so the analysis is anchored to its
+  // source. Uses brand tokens only — var(--card) bg, var(--border) border.
+  const billStatus = bill?.status || bill?.last_action || '';
+  const billParty = bill?.sponsor_party || '';
+  const billChamberLabel = billChamber(bill?.bill_id);
+
   return (
     <div style={{ padding: '0 24px 24px', position: 'relative' }}>
       {error && <div style={{ color: 'var(--error)', fontSize: 12, marginBottom: 10 }}>{error}</div>}
+
+      {bill && (
+        <details
+          open
+          style={{
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            padding: '12px 16px',
+            marginBottom: 12,
+          }}
+        >
+          <summary style={{ cursor: 'pointer', listStyle: 'none', outline: 'none' }}>
+            <div style={{
+              fontFamily: 'DM Sans', fontSize: 11, fontWeight: 600,
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+              color: 'var(--amber)',
+            }}>Bill Analysis</div>
+            <h3 style={{
+              fontFamily: 'Playfair Display', fontWeight: 600, fontSize: 22,
+              lineHeight: 1.3, letterSpacing: 'normal',
+              color: 'var(--text)', margin: '4px 0 6px',
+            }}>
+              {bill.title || bill.bill_id}
+            </h3>
+            <div style={{
+              fontFamily: 'DM Sans', fontSize: 13,
+              color: 'var(--text-mid)', lineHeight: 1.45,
+            }}>
+              {[billChamberLabel, billStatus, billParty].filter(Boolean).join(' · ') || bill.bill_id}
+            </div>
+          </summary>
+        </details>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>Brief · {brief.mode} mode</h3>
@@ -1110,12 +1166,41 @@ function NarrativeCraft({ bootstrap }) {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Pre-loaded analysis from bill_analysis_cache. When populated, renders
+  // the "Context Loaded" banner and seeds the first assistant message so
+  // the conversation starts with shared knowledge of the bill.
+  const [preloadedContext, setPreloadedContext] = useState(null);
   const scrollRef = useRef(null);
 
   useEffect(() => {
     api('/legislative/rep-profiles').then(d => setProfiles(d.profiles || [])).catch(() => {});
   }, []);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [messages]);
+
+  // Fetch cached analysis whenever the bill id changes. Cache hits are
+  // surfaced via the banner + a seeded assistant message so the user sees
+  // the context before typing.
+  useEffect(() => {
+    const trimmed = String(billId || '').trim();
+    if (!trimmed) { setPreloadedContext(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await api(`/legislative/analysis-cache?bill_id=${encodeURIComponent(trimmed)}`);
+        if (cancelled) return;
+        if (d?.cached && d.analysis) {
+          setPreloadedContext(d.analysis);
+          console.log(`[narrative-craft] bill_id=${trimmed} context_loaded=true source=analysis-cache`);
+        } else {
+          setPreloadedContext(null);
+          console.log(`[narrative-craft] bill_id=${trimmed} context_loaded=false source=analysis-cache`);
+        }
+      } catch {
+        if (!cancelled) setPreloadedContext(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [billId]);
 
   useEffect(() => {
     if (bootstrap?.initialMessage) {
@@ -1140,6 +1225,7 @@ function NarrativeCraft({ bootstrap }) {
           rep_profile_id: repId || null,
           party: party || null,
           messages: next,
+          preloaded_context: preloadedContext || null,
         }),
       });
       setChatId(res.chat_id);
@@ -1159,6 +1245,26 @@ function NarrativeCraft({ bootstrap }) {
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 12, height: 'calc(100vh - 160px)' }}>
       {error && <div style={{ color: 'var(--error)', fontSize: 12 }}>{error}</div>}
+      {preloadedContext && (
+        <div style={{
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          padding: '10px 14px',
+        }}>
+          <div style={{
+            fontFamily: 'DM Sans', fontSize: 11, fontWeight: 600,
+            letterSpacing: '0.1em', textTransform: 'uppercase',
+            color: 'var(--amber)',
+          }}>Context Loaded</div>
+          <div style={{
+            fontFamily: 'DM Sans', fontSize: 13, lineHeight: 1.45,
+            color: 'var(--text-mid)', marginTop: 2,
+          }}>
+            Analysis of {preloadedContext.bill_title || preloadedContext.bill_id || 'the bill'} pre-loaded for narrative crafting.
+          </div>
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
         <div>
           <label className="form-label">Bill ID (optional)</label>
@@ -1301,7 +1407,20 @@ function FloatingChat() {
 
 // ─── Page root ──────────────────────────────────────────────────────────────
 export default function LegislativeIntelligence({ navigate }) { // eslint-disable-line no-unused-vars
-  const [mode, setMode] = useState('morning');
+  // Allow other nav entry points (e.g. the sidebar's "Party Intelligence"
+  // shortcut) to request a specific initial mode via sessionStorage. The
+  // flag is consumed exactly once so a subsequent manual visit still lands
+  // on the default Morning Brief tab.
+  const [mode, setMode] = useState(() => {
+    try {
+      const requested = typeof window !== 'undefined' ? sessionStorage.getItem('legintel:initialMode') : null;
+      if (requested && MODES.some((m) => m.id === requested)) {
+        sessionStorage.removeItem('legintel:initialMode');
+        return requested;
+      }
+    } catch { /* sessionStorage unavailable — fall through */ }
+    return 'morning';
+  });
   const [lastBrief, setLastBrief] = useState(null);
   const [openBillId, setOpenBillId] = useState(null);
 
@@ -1326,11 +1445,11 @@ export default function LegislativeIntelligence({ navigate }) { // eslint-disabl
       {mode === 'morning' && <MorningBrief onBillOpen={setOpenBillId} />}
       {mode === 'party'   && <PartyIntel onAnalyze={setLastBrief} onBillOpen={setOpenBillId} />}
       {mode === 'rep'     && <RepIntel onAnalyze={setLastBrief} />}
-      {mode === 'craft'   && <NarrativeCraft bootstrap={lastBrief ? { billId: '' } : null} />}
+      {mode === 'craft'   && <NarrativeCraft bootstrap={lastBrief ? { billId: lastBrief.bill?.bill_id || '', bill: lastBrief.bill || null } : null} />}
 
       {(mode === 'party' || mode === 'rep') && lastBrief && (
         <div style={{ marginTop: 12 }}>
-          <BriefViewer briefId={lastBrief} onQuestion={() => setMode('craft')} />
+          <BriefViewer briefId={lastBrief.briefId} bill={lastBrief.bill} onQuestion={() => setMode('craft')} />
         </div>
       )}
 

@@ -1485,6 +1485,7 @@ export default function Dashboard() {
   const [pressReleases, setPressReleases] = useState([]);
   const [briefs, setBriefs] = useState([]);
   const [filter, setFilter]           = useState('all');
+  const [sortBy, setSortBy]           = useState('progress'); // 'progress' (default) | 'content_type'
   const [loading, setLoading]         = useState(true);
   const [user, setUser]               = useState(null); // ← INJECT: from GET /api/me or session
   const [confirmModal, setConfirmModal] = useState(null); // { message, onConfirm }
@@ -1565,7 +1566,7 @@ export default function Dashboard() {
   }, [load, pausePoll]);
 
   // ── Filter logic ──
-  const filtered = submissions.filter(s => {
+  const filteredBase = submissions.filter(s => {
     if (s.article_format === 'email') return false; // emails get their own card section
     if (s.article_format === 'presentation') return false; // presentations get their own section
     if (filter === 'all')       return true;
@@ -1575,6 +1576,19 @@ export default function Dashboard() {
     if (filter === 'published') return s.status === 'published';
     return true;
   });
+
+  // Content Type sort: alphabetical by article_format, ties broken by
+  // created_at desc so newest in each type group surfaces first.
+  const filtered = sortBy === 'content_type'
+    ? [...filteredBase].sort((a, b) => {
+        const typeA = String(a.article_format || '').toLowerCase();
+        const typeB = String(b.article_format || '').toLowerCase();
+        if (typeA !== typeB) return typeA < typeB ? -1 : 1;
+        const ca = Number(a.created_at || 0);
+        const cb = Number(b.created_at || 0);
+        return cb - ca;
+      })
+    : filteredBase;
 
   // ── Action handlers ──
   // INJECT: replace these with your actual API calls
@@ -1813,6 +1827,23 @@ export default function Dashboard() {
             onClick={() => setFilter(f.id)}
           >
             {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Sort bar */}
+      <div className="db-sort-row">
+        <span className="db-sort-label">Sort</span>
+        {[
+          { id: 'progress',     label: 'Progress' },
+          { id: 'content_type', label: 'Content Type' },
+        ].map(s => (
+          <button
+            key={s.id}
+            className={`db-sort-btn${sortBy === s.id ? ' active' : ''}`}
+            onClick={() => setSortBy(s.id)}
+          >
+            {s.label}
           </button>
         ))}
       </div>

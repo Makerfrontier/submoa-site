@@ -141,6 +141,40 @@ export async function onRequest(context: { request: Request; env: any }) {
       user.id,
     ).run();
 
+    // Cache the analysis by bill_id + user so Narrative Craft can pre-load
+    // it when the same bill is revisited. Keyed on bill_id (the canonical
+    // Congress-style identifier) so rows match across sessions.
+    try {
+      const cacheRow = {
+        brief_id: briefId,
+        mode,
+        bill_title: bill.title || '',
+        bill_id: bill.bill_id || bill.id,
+        sponsor_party: bill.sponsor_party || party || '',
+        sponsor_name: bill.sponsor_name || '',
+        status: bill.status || '',
+        last_action_date: bill.last_action_date || '',
+        pork_analysis: results.pork_analysis || [],
+        talking_points_pro: results.talking_points_pro || [],
+        talking_points_opposed: results.talking_points_opposed || [],
+        verbatim_extracts: results.verbatim_extracts || [],
+        historical_parallels: results.historical_parallels || [],
+        opposition_alignment: results.opposition_alignment || [],
+      };
+      await env.submoacontent_db.prepare(
+        `INSERT INTO bill_analysis_cache (id, bill_id, user_id, analysis_data, created_at)
+         VALUES (?, ?, ?, ?, unixepoch())`
+      ).bind(
+        generateId(),
+        bill.bill_id || bill.id,
+        user.id,
+        JSON.stringify(cacheRow),
+      ).run();
+    } catch {
+      // Cache write is best-effort — never fail the request because we
+      // couldn't populate Narrative Craft's pre-load cache.
+    }
+
     await writeAudit(env, request, user.id, { action: 'brief-generated', legislation_id: bill.id, brief_id: briefId, rep_profile_id, details: { mode, party } });
     return json({ brief_id: briefId, mode, ...results });
   } catch (e: any) {

@@ -65,6 +65,42 @@
   font-weight: 600;
 }
 
+/* Sort row — same pill layout as filter row, but active pill uses amber
+   per brand spec for secondary controls. */
+.db-sort-row {
+  max-width: 800px;
+  margin: 0 auto 16px;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+}
+.db-sort-label {
+  font-family: var(--font-ui);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-mid);
+  margin-right: 4px;
+}
+.db-sort-btn {
+  padding: 6px 14px;
+  border-radius: 100px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-mid);
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.db-sort-btn:hover { color: var(--text); border-color: var(--text-light); background: var(--card); }
+.db-sort-btn.active {
+  background: var(--amber);
+  color: var(--card);
+  border-color: var(--amber);
+  font-weight: 600;
+}
+
 /* Cards container */
 .db-cards-container { max-width: 800px; margin: 0 auto; }
 

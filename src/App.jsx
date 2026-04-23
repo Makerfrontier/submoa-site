@@ -16,6 +16,7 @@ import Planner, { PlannerDetail } from './pages/Planner'
 import PlannerBuilding from './pages/PlannerBuilding'
 import CompStudio from './pages/CompStudio'
 import AtomicComp from './pages/AtomicComp'
+import AtomicFlashImages from './pages/AtomicFlashImages'
 import AtomicCompShare from './pages/AtomicCompShare'
 import YouTubeTranscript from './pages/YouTubeTranscript'
 import LegislativeIntelligence from './pages/LegislativeIntelligence'
@@ -123,6 +124,16 @@ import './App.css'
 const AuthContext = createContext(null)
 function useAuth() { return useContext(AuthContext) }
 
+// Tiny in-app redirect used by gated routes. Fires the custom nav helper
+// on mount so the outer sidebar + history stay in sync.
+function RedirectTo({ path, navigate }) {
+  useEffect(() => {
+    if (navigate) navigate(path);
+    else window.location.replace(path);
+  }, [path, navigate]);
+  return null;
+}
+
 function usePage() {
   const [page, setPage] = useState(window.location.pathname || '/')
   const navigate = (path) => {
@@ -132,7 +143,7 @@ function usePage() {
     // Notify global listeners (e.g. NotificationBell popover) so they can react to in-app navigation.
     window.dispatchEvent(new CustomEvent('submoa:navigate', { detail: { path } }))
   }
-  return { page, navigate }
+  return { page, navigate, setPage }
 }
 
 async function api(path, options = {}) {
@@ -217,7 +228,11 @@ function KeywordPills({ keywordsJson }) {
 // ─── Logout Button ─────────────────────────────────────────────────────
 function LogoutButton() {
   async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    // credentials: 'include' is required for both directions — sending the
+    // session cookie to the server AND letting the server's Set-Cookie:
+    // max-age=0 response actually clear the cookie in the browser. Without
+    // it the endpoint returns 200 but the session never ends.
+    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
     window.location.href = '/';
   }
 
@@ -285,10 +300,16 @@ function Sidebar({ navigate, page, syncUser }) {
     { path: '/brief/presentation', label: 'PowerPoint',     icon: <SbIconDeck /> },
     { path: '/brief/email',        label: 'Email Builder',  icon: <SbIconEmail /> },
     { path: '/comp-studio',        label: 'Comp Studio',    icon: <span style={{ fontSize: 14 }}>⊞</span> },
+    { path: '/atomic/comp',        label: 'Atomic Comp ✦',  icon: <span style={{ fontSize: 14 }}>⬡</span> },
+    { path: '/atomic/images',      label: 'Atomic Flash ◈', superAdminOnly: true, icon: <span style={{ fontSize: 14 }}>◈</span> },
     { path: '/youtube-transcript', label: 'YouTube',        icon: <span style={{ fontSize: 14 }}>▶</span> },
     { path: '/tts',                label: 'TTS Studio',     icon: <span style={{ fontSize: 14 }}>♪</span> },
     { path: '/listen',             label: 'Listen',         icon: <span style={{ fontSize: 14 }}>▷</span> },
     { path: '/podcast-studio',     label: 'Podcast Studio', icon: <span style={{ fontSize: 14 }}>◉</span> },
+    // Fast-access entry point to the Legislative Intelligence page's Party
+    // tab. Gated by the same legislative-intelligence access grant. Sets a
+    // session bridge so the target page boots into that mode directly.
+    { path: '/legislative-intelligence', label: 'Party Intelligence', icon: <span style={{ fontSize: 14 }}>⚖</span>, initialMode: 'party', requiresLegIntel: true },
     { divider: true },
     { path: '/planner',            label: 'Planner',        icon: <span style={{ fontSize: 14 }}>◎</span> },
     { path: '/brief/infographic',  label: 'Infographic',    icon: <SbIconInfographic /> },
@@ -302,18 +323,30 @@ function Sidebar({ navigate, page, syncUser }) {
       <div className="sidebar-logo">Sub Moa Content</div>
 
       <nav className="sidebar-nav" aria-label="Primary">
-        {items.map((it, idx) => it.divider ? (
-          <div key={`div-${idx}`} className="sidebar-divider" />
-        ) : (
-          <a
-            key={it.path}
-            href="#"
-            className={`sidebar-link${isActive(it.path) ? ' active' : ''}`}
-            onClick={e => { e.preventDefault(); navTo(it.path) }}
-          >
-            {it.icon}<span>{it.label}</span>
-          </a>
-        ))}
+        {items.map((it, idx) => {
+          if (it.divider) return <div key={`div-${idx}`} className="sidebar-divider" />;
+          if (it.superAdminOnly && !(user?.super_admin || user?.role === 'super_admin')) return null;
+          if (it.requiresLegIntel && !hasAccess('legislative-intelligence')) return null;
+          return (
+            <a
+              key={`${it.path}-${it.label}`}
+              href="#"
+              className={`sidebar-link${isActive(it.path) ? ' active' : ''}`}
+              onClick={e => {
+                e.preventDefault();
+                // Session bridge for nav items that target a specific in-page
+                // mode (e.g. Party Intel deep-linking into the Legislative
+                // Intelligence page's Party tab).
+                if (it.initialMode) {
+                  try { sessionStorage.setItem('legintel:initialMode', it.initialMode); } catch {}
+                }
+                navTo(it.path);
+              }}
+            >
+              {it.icon}<span>{it.label}</span>
+            </a>
+          );
+        })}
         <div className="sidebar-divider" />
         {isAdmin && (
           <a
@@ -445,6 +478,9 @@ function isAppRoute(path) {
       path === '/admin'     || path === '/writer' ||
       path === '/admin/brand-bible' || path === '/admin/features' || path === '/admin/bugs' ||
       path === '/admin/hosts' || path === '/tts' ||
+      path === '/listen' ||
+      path === '/atomic/comp' || path.startsWith('/atomic/comp/') ||
+      path === '/atomic/images' ||
       path === '/podcast-studio' || path.startsWith('/podcast-studio/') ||
       path === '/prompt-builder' ||
       path === '/comp-studio' ||
@@ -3153,7 +3189,7 @@ function AdminGuard({ children }) {
 export default function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
-  const { page, navigate } = usePage()
+  const { page, navigate, setPage } = usePage()
 
   const fetchUser = async () => {
     try {
@@ -3167,6 +3203,12 @@ export default function App() {
   }
 
   useEffect(() => { fetchUser() }, [])
+
+  useEffect(() => {
+    const handlePopState = () => setPage(window.location.pathname)
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [setPage])
 
   const [syncData, setSyncData] = useState(null)
   const [editingDraft, setEditingDraft] = useState(null)
@@ -3198,28 +3240,6 @@ export default function App() {
     return (
       <AuthContext.Provider value={authValue}>
         <AtomicCompShare />
-      </AuthContext.Provider>
-    );
-  }
-
-  // Atomic Comp builder — standalone full-viewport editor. Bypasses the
-  // sidebar shell so the two-column layout (edit panel + canvas) gets the
-  // full viewport height without fighting the app chrome.
-  if (page === '/atomic/comp' || page.startsWith('/atomic/comp/')) {
-    return (
-      <AuthContext.Provider value={authValue}>
-        {loading ? null : user ? <AtomicComp navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />}
-      </AuthContext.Provider>
-    );
-  }
-
-  // Quick Podcast — also standalone (no sidebar). Structurally separable
-  // for the future product spinout; treated like a different app that
-  // happens to share auth.
-  if (page === '/listen') {
-    return (
-      <AuthContext.Provider value={authValue}>
-        {loading ? null : user ? <QuickPodcast navigate={navigate} /> : <Login navigate={navigate} />}
       </AuthContext.Provider>
     );
   }
@@ -3266,6 +3286,9 @@ export default function App() {
         {page === '/brief/presentation' && (loading ? null : user ? <PresentationBrief navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/planner' && (loading ? null : user ? <Planner navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/comp-studio' && (loading ? null : user ? <CompStudio /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/listen' && (loading ? null : user ? <QuickPodcast navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {(page === '/atomic/comp' || page.startsWith('/atomic/comp/')) && (loading ? null : user ? <AtomicComp navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/atomic/images' && (loading ? null : user ? <AtomicFlashImages navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/youtube-transcript' && (loading ? null : user ? <YouTubeTranscript navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/legislative-intelligence' && (loading ? null : user ? <LegislativeGate navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/press-release' && (loading ? null : user ? <PressRelease navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
