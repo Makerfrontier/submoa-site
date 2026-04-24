@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from "react";
 import PageShell from '../components/PageShell.jsx';
+import SourceBanner, { useTranscriptSource } from '../components/SourceBanner.jsx';
 
 interface AuthorRow { slug: string; name: string }
 
@@ -89,6 +90,7 @@ function TemplatePreview({ id }: { id: string }) {
 }
 
 export default function InfographicBrief({ navigate }: { navigate?: (p: string) => void }) {
+  const { source: transcriptSource } = useTranscriptSource();
   const [handoff, setHandoff] = useState<{ source_submission_id: string; topic: string } | null>(null);
 
   // Phase 1 — intent + research
@@ -263,6 +265,7 @@ export default function InfographicBrief({ navigate }: { navigate?: (p: string) 
       subtitle="Research-backed visual storytelling. Every claim gets a citation."
     >
       <div style={{ maxWidth: 760, width: '100%' }}>
+      {transcriptSource && <SourceBanner source={transcriptSource} navigate={navigate} />}
 
       {handoff && (
         <div style={{

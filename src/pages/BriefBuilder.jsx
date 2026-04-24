@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import PageShell from '../components/PageShell.jsx';
+import SourceBanner, { useTranscriptSource } from '../components/SourceBanner.jsx';
 
 const TYPES = [
   { id: 'creative', name: 'Creative Brief', icon: '✦', desc: 'For any creative project. Align on vision before the work begins.' },
@@ -91,6 +92,7 @@ const FIELDS = {
 };
 
 export default function BriefBuilder({ navigate, editId }) { // eslint-disable-line no-unused-vars
+  const { source: transcriptSource } = useTranscriptSource();
   const [typeId, setTypeId] = useState(null);
   const [authors, setAuthors] = useState([]);
   const [authorId, setAuthorId] = useState('');
@@ -211,6 +213,7 @@ export default function BriefBuilder({ navigate, editId }) { // eslint-disable-l
         title="Build a brief"
         subtitle="Structured briefs for any audience. Pick a type to get started."
       >
+        {transcriptSource && <SourceBanner source={transcriptSource} navigate={navigate} />}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
           {TYPES.map(t => (
             <button key={t.id} type="button" onClick={() => setTypeId(t.id)}
@@ -235,6 +238,7 @@ export default function BriefBuilder({ navigate, editId }) { // eslint-disable-l
       actions={<button className="v2-btn v2-btn--sm" type="button" onClick={() => setTypeId(null)}>← Change type</button>}
     >
       <div style={{ maxWidth: 720, width: '100%' }}>
+      {transcriptSource && <SourceBanner source={transcriptSource} navigate={navigate} />}
       {error && <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, padding: '10px 14px', color: 'var(--error)', fontSize: 13, margin: '0 0 16px' }}>{error}</div>}
       <div style={{ marginTop: 20 }}>
         {def.map(([key, label, type]) => (

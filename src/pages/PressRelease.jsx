@@ -2,8 +2,10 @@
 
 import { useEffect, useState, useRef } from 'react';
 import PageShell from '../components/PageShell.jsx';
+import SourceBanner, { useTranscriptSource } from '../components/SourceBanner.jsx';
 
 export default function PressRelease({ navigate }) { // eslint-disable-line no-unused-vars
+  const { source: transcriptSource } = useTranscriptSource();
   const [view, setView] = useState('form'); // 'form' | 'output'
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -109,6 +111,7 @@ export default function PressRelease({ navigate }) { // eslint-disable-line no-u
       subtitle="Business news, ready to distribute. Fill in what you have — the more context the better."
     >
       <div style={{ maxWidth: 720, width: '100%' }}>
+      {transcriptSource && <SourceBanner source={transcriptSource} navigate={navigate} />}
       {error && <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, padding: '10px 14px', color: 'var(--error)', fontSize: 13, margin: '0 0 16px' }}>{error}</div>}
 
       <div style={{ marginTop: 20 }}>

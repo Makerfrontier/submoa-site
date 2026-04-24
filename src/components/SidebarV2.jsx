@@ -10,10 +10,10 @@ import { useEffect, useState } from 'react';
 
 const CATEGORIES = [
   { id: 'writing', label: 'WRITING', items: [
-    { path: '/author',             label: 'Article',            icon: 'article' },
-    { path: '/press-release',      label: 'Press Release',      icon: 'press' },
-    { path: '/brief-builder',      label: 'Brief Builder',      icon: 'brief' },
-    { path: '/youtube-transcript', label: 'YouTube Transcribe', icon: 'video' },
+    { path: '/author',                 label: 'Article',              icon: 'article' },
+    { path: '/press-release',          label: 'Press Release',        icon: 'press' },
+    { path: '/brief-builder',          label: 'Brief Builder',        icon: 'brief' },
+    { path: '/atomic/transcription',   label: 'Atomic Transcription', icon: 'video', requiresFlag: 'ATOMIC_TRANSCRIPTION_ENABLED' },
   ]},
   { id: 'creative', label: 'CREATIVE', items: [
     { path: '/atomic/images', label: 'Atomic Flash', icon: 'flash' },
@@ -38,7 +38,7 @@ const CATEGORIES = [
   ]},
 ];
 
-export default function SidebarV2({ page, navigate, user, access }) {
+export default function SidebarV2({ page, navigate, user, access, featureFlags = {} }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => { setDrawerOpen(false); }, [page]);
@@ -125,7 +125,14 @@ export default function SidebarV2({ page, navigate, user, access }) {
           </button>
 
           {CATEGORIES.map(cat => {
-            const visible = cat.items.filter(it => !it.gate || hasAccess(it.gate));
+            const visible = cat.items.filter(it => {
+              if (it.gate && !hasAccess(it.gate)) return false;
+              // Feature flags — server tells the client which flags are on via
+              // /api/features/flags. Items marked requiresFlag hide until the
+              // matching flag is truthy.
+              if (it.requiresFlag === 'ATOMIC_TRANSCRIPTION_ENABLED' && !featureFlags.atomic_transcription) return false;
+              return true;
+            });
             if (visible.length === 0) return null;
             return (
               <div key={cat.id}>

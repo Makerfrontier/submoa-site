@@ -10,6 +10,7 @@
 //     new conversation_id which we push into the URL without a full reload.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import SourceBanner, { useTranscriptSource } from '../components/SourceBanner.jsx';
 
 const SUGGESTIONS = [
   'article on bigfoot in ohio',
@@ -75,6 +76,7 @@ export default function AtomicReactor({ navigate, page }) {
   const [error, setError] = useState('');
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
+  const { source: transcriptSource } = useTranscriptSource();
 
   // Hydrate history when opening an existing conversation.
   useEffect(() => {
@@ -280,6 +282,11 @@ export default function AtomicReactor({ navigate, page }) {
 
   return (
     <div className="ds-v2-reactor">
+      {transcriptSource && (
+        <div style={{ padding: '16px 20px 0', maxWidth: 820, width: '100%', margin: '0 auto' }}>
+          <SourceBanner source={transcriptSource} navigate={navigate} />
+        </div>
+      )}
       {!hasConversation ? (
         <div className="ds-v2-reactor__hero">
           <div className="ds-v2-reactor__atom" aria-hidden>

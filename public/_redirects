@@ -1,0 +1,4 @@
+# Legacy YouTube Transcribe → Atomic Transcription (Cloudflare Pages redirect).
+# Kept separate from the client-side RedirectTo fallback in App.jsx so search
+# engines and external links follow the 301 at the edge.
+/youtube-transcript  /atomic/transcription  301

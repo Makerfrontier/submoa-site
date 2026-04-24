@@ -18,7 +18,6 @@ import CompStudio from './pages/CompStudio'
 import AtomicComp from './pages/AtomicComp'
 import AtomicFlashImages from './pages/AtomicFlashImages'
 import AtomicCompShare from './pages/AtomicCompShare'
-import YouTubeTranscript from './pages/YouTubeTranscript'
 import LegislativeIntelligence from './pages/LegislativeIntelligence'
 import PressRelease from './pages/PressRelease'
 import BriefBuilder from './pages/BriefBuilder'
@@ -34,8 +33,11 @@ import SiteAgentPanel from './components/SiteAgentPanel.jsx'
 import SidebarV2 from './components/SidebarV2.jsx'
 import AdminLayoutV2 from './components/AdminLayoutV2.jsx'
 import PageShell from './components/PageShell.jsx'
+import SourceBanner, { useTranscriptSource } from './components/SourceBanner.jsx'
 import AtomicReactor from './pages/AtomicReactor.jsx'
 import DashboardV2 from './pages/DashboardV2.jsx'
+import AtomicTranscription from './pages/AtomicTranscription.jsx'
+import AtomicTranscriptionView from './pages/AtomicTranscriptionView.jsx'
 
 function ImpersonationBanner({ user, syncUser, navigate }) {
   const stop = async () => {
@@ -493,7 +495,8 @@ function isAppRoute(path) {
       path === '/legislative-intelligence' ||
       path === '/press-release' ||
       path === '/brief-builder' ||
-      path === '/reactor' || path.startsWith('/reactor/')) return true
+      path === '/reactor' || path.startsWith('/reactor/') ||
+      path === '/atomic/transcription' || path.startsWith('/atomic/transcription/')) return true
   if (path.match(/^\/briefs\/[^/]+\/edit$/)) return true
   if (path.startsWith('/brief/'))         return true
   if (path.startsWith('/content/'))       return true
@@ -1130,6 +1133,7 @@ const WORD_COUNTS = [
 
 function Author({ navigate, syncUser, editingDraft, onEditDone }) {
   const { user } = useAuth()
+  const { source: transcriptSource } = useTranscriptSource()
   const [authors, setAuthors] = useState([])
   const [authorProfile, setAuthorProfile] = useState(null)
   const [authorProfileExpanded, setAuthorProfileExpanded] = useState(false)
@@ -1331,6 +1335,7 @@ function Author({ navigate, syncUser, editingDraft, onEditDone }) {
       subtitle="Full editorial workflow — brief us in detail, better signal in, better article out."
     >
       <div style={{ maxWidth: 680, width: '100%' }}>
+        {transcriptSource && <SourceBanner source={transcriptSource} navigate={navigate} />}
         {error && <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, padding: '10px 14px', fontSize: 13, color: 'var(--error)', marginBottom: 16 }}>{error}</div>}
         <form onSubmit={handleSubmit}>
           {/* SOURCE TOGGLE */}
@@ -3229,6 +3234,10 @@ export default function App() {
       .then(d => { if (d) setAccess(d) })
       .catch(() => {})
   }, [user])
+  const [featureFlags, setFeatureFlags] = useState({})
+  useEffect(() => {
+    fetch('/api/features/flags').then(r => r.ok ? r.json() : {}).then(setFeatureFlags).catch(() => {})
+  }, [])
   const syncUser = async () => {
     try {
       const data = await api('/api/dashboard/sync')
@@ -3272,7 +3281,7 @@ export default function App() {
     <AuthContext.Provider value={authValue}>
       {user?.impersonating && <ImpersonationBanner user={user} syncUser={syncUser} navigate={navigate} />}
       {useSidebar
-        ? <SidebarV2 navigate={navigate} page={page} user={user} access={access} />
+        ? <SidebarV2 navigate={navigate} page={page} user={user} access={access} featureFlags={featureFlags} />
         : <Nav navigate={navigate} syncUser={syncUser} />}
       <div className={useSidebar ? 'app-main' : 'page'} style={user?.impersonating ? { paddingTop: 38 } : undefined}>
         {useSidebar && (
@@ -3314,7 +3323,9 @@ export default function App() {
         {page === '/listen' && (loading ? null : user ? <QuickPodcast navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {(page === '/atomic/comp' || page.startsWith('/atomic/comp/')) && (loading ? null : user ? <AtomicComp navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/atomic/images' && (loading ? null : user ? <AtomicFlashImages navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
-        {page === '/youtube-transcript' && (loading ? null : user ? <YouTubeTranscript navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/atomic/transcription' && (loading ? null : user ? <AtomicTranscription navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page.match(/^\/atomic\/transcription\/[^/]+/) && (loading ? null : user ? <AtomicTranscriptionView navigate={navigate} page={page} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/youtube-transcript' && <RedirectTo path="/atomic/transcription" navigate={navigate} />}
         {page === '/legislative-intelligence' && (loading ? null : user ? <LegislativeGate navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/press-release' && (loading ? null : user ? <PressRelease navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/brief-builder' && (loading ? null : user ? <BriefBuilder navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}

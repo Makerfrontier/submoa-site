@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { stripAndClean } from '../comp-utils';
 import { EMAIL_TEMPLATES } from '../template-baselines';
 import PageShell from '../components/PageShell.jsx';
+import SourceBanner, { useTranscriptSource } from '../components/SourceBanner.jsx';
 
 interface AuthorRow { slug: string; name: string }
 
@@ -81,6 +82,7 @@ function escape(str: string) {
 }
 
 export default function EmailBrief({ navigate }: { navigate?: (p: string) => void }) {
+  const { source: transcriptSource } = useTranscriptSource();
   const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
   useEffect(() => {
     const onResize = () => setIsDesktop(window.innerWidth >= 1024);
@@ -310,6 +312,7 @@ export default function EmailBrief({ navigate }: { navigate?: (p: string) => voi
         subtitle="Marketing emails in your voice. Pick a template to start — you'll get a three-column editor with a live preview."
       >
         <div style={{ maxWidth: 1100, width: '100%' }}>
+        {transcriptSource && <SourceBanner source={transcriptSource} navigate={navigate} />}
         {uploadError && (
           <div style={{ marginTop: 16, background: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 6, padding: '10px 14px', color: 'var(--error)', fontSize: 13 }}>
             {uploadError}

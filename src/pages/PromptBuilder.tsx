@@ -6,6 +6,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import PageShell from '../components/PageShell.jsx';
+import SourceBanner, { useTranscriptSource } from '../components/SourceBanner.jsx';
 
 interface Message { role: 'user' | 'assistant'; content: string; }
 interface SavedPrompt {
@@ -37,6 +38,7 @@ function timeAgo(ts: number) {
 }
 
 export default function PromptBuilder() {
+  const { source: transcriptSource } = useTranscriptSource();
   const [screen, setScreen] = useState<'model' | 'intent' | 'dialogue'>('model');
   const [modelId, setModelId] = useState<string>('claude');
   const model = MODELS.find(m => m.id === modelId) || MODELS[0];
@@ -191,6 +193,7 @@ export default function PromptBuilder() {
         actions={<button className="v2-btn v2-btn--sm" type="button" onClick={() => setSavedOpen(true)}>Saved prompts →</button>}
       >
         <div style={{ maxWidth: 820, width: '100%' }}>
+          {transcriptSource && <SourceBanner source={transcriptSource} />}
           <div style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--ink-mid)', marginBottom: 16 }}>
             Which AI are you building this prompt for?
           </div>
