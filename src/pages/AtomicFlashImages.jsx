@@ -355,7 +355,7 @@ export default function AtomicFlashImages() {
       <h1 style={{
         fontFamily: 'DM Sans', fontSize: 22, fontWeight: 600,
         lineHeight: 1.15, letterSpacing: '-0.01em',
-        color: 'var(--green-dark)', margin: '0 0 2px',
+        color: 'var(--ink)', margin: '0 0 2px',
       }}>Atomic Flash Images</h1>
       <p style={{
         fontFamily: 'DM Sans', fontSize: 12,
@@ -376,16 +376,16 @@ export default function AtomicFlashImages() {
               onClick={() => setMode(m.key)}
               style={{
                 flex: 1, padding: '8px 6px',
-                background: sel ? 'var(--green-dark)' : 'transparent',
-                color: sel ? '#fff' : 'var(--text-mid)',
-                border: sel ? '1px solid var(--green-dark)' : '1px solid var(--border)',
+                background: sel ? 'var(--ink)' : 'transparent',
+                color: sel ? '#fff' : 'var(--ink-mid)',
+                border: sel ? '1px solid var(--ink)' : '1px solid var(--border)',
                 borderRadius: 6,
                 fontFamily: 'DM Sans', cursor: 'pointer',
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, lineHeight: 1.1,
               }}
             >
               <span style={{ fontSize: 11, fontWeight: 500 }}>{m.title}</span>
-              <span style={{ fontSize: 9, color: sel ? 'rgba(255,255,255,0.65)' : 'var(--text-muted, #9B8F82)' }}>{m.sub}</span>
+              <span style={{ fontSize: 9, color: sel ? 'rgba(255,255,255,0.65)' : 'var(--ink-light)' }}>{m.sub}</span>
             </button>
           );
         })}
@@ -487,7 +487,7 @@ export default function AtomicFlashImages() {
         background: 'var(--surface-inp)', borderRadius: 999,
         fontFamily: 'DM Sans', fontSize: 10, color: 'var(--text-mid)',
       }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green-dark)', display: 'inline-block' }} />
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
         {modelBadge.label}
       </div>
 
@@ -553,7 +553,7 @@ export default function AtomicFlashImages() {
           marginTop: 6,
           padding: '2px 0',
           background: 'transparent', border: 'none',
-          color: prompt ? 'var(--green-dark)' : 'var(--text-muted, #9B8F82)',
+          color: prompt ? 'var(--ink)' : 'var(--ink-light)',
           fontFamily: 'DM Sans', fontSize: 11, fontWeight: 500,
           cursor: prompt ? 'pointer' : 'default',
           textAlign: 'left',
@@ -675,7 +675,7 @@ export default function AtomicFlashImages() {
             onClick={() => setLightboxIter(iter)}
             style={{
               display: 'block', width: '100%', height: 180,
-              objectFit: 'cover', background: '#1A2E22',
+              objectFit: 'cover', background: 'var(--surface-alt)',
               borderRadius: 8, cursor: 'pointer',
             }}
           />
@@ -701,9 +701,9 @@ export default function AtomicFlashImages() {
                 {saved ? (
                   <span style={{
                     display: 'inline-flex', alignItems: 'center', gap: 4,
-                    fontFamily: 'DM Sans', fontSize: 10, color: 'var(--green-dark)',
+                    fontFamily: 'DM Sans', fontSize: 10, color: 'var(--success)',
                   }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green-dark)', display: 'inline-block' }} />
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
                     Saved
                   </span>
                 ) : iter.saving ? (
@@ -732,9 +732,9 @@ export default function AtomicFlashImages() {
                   disabled={generating || expanding || !iter.blob}
                   style={{
                     ...smallBtn, padding: '5px 9px', fontSize: 10,
-                    background: remixPanelIter?.id === iter.id ? 'var(--green-dark)' : 'var(--amber)',
+                    background: remixPanelIter?.id === iter.id ? 'var(--ink)' : 'var(--amber)',
                     color: '#fff',
-                    border: `1px solid ${remixPanelIter?.id === iter.id ? 'var(--green-dark)' : 'var(--amber)'}`,
+                    border: `1px solid ${remixPanelIter?.id === iter.id ? 'var(--ink)' : 'var(--amber)'}`,
                     opacity: (generating || expanding || !iter.blob) ? 0.5 : 1,
                     cursor: (generating || expanding || !iter.blob) ? 'not-allowed' : 'pointer',
                   }}
@@ -744,7 +744,7 @@ export default function AtomicFlashImages() {
                   disabled={generating || expanding}
                   style={{
                     ...smallBtn, padding: '5px 9px', fontSize: 10,
-                    background: refinePanelIter?.id === iter.id ? 'var(--green-dark)' : 'transparent',
+                    background: refinePanelIter?.id === iter.id ? 'var(--ink)' : 'transparent',
                     color: refinePanelIter?.id === iter.id ? '#fff' : 'var(--amber)',
                     border: `1px solid var(--amber)`,
                     opacity: (generating || expanding) ? 0.5 : 1,
@@ -960,7 +960,7 @@ export default function AtomicFlashImages() {
             style={{
               maxWidth: '92vw', maxHeight: '92vh',
               objectFit: 'contain', borderRadius: 8,
-              background: '#1A2E22', cursor: 'default',
+              background: 'var(--ink)', cursor: 'default',
             }}
           />
         </div>
@@ -1019,9 +1019,9 @@ function pillStyle(active) {
   return {
     flex: 1,
     padding: '7px 10px',
-    background: active ? 'var(--green-dark)' : 'transparent',
-    color: active ? '#fff' : 'var(--text-mid)',
-    border: active ? '1px solid var(--green-dark)' : '1px solid var(--border)',
+    background: active ? 'var(--ink)' : 'transparent',
+    color: active ? '#fff' : 'var(--ink-mid)',
+    border: active ? '1px solid var(--ink)' : '1px solid var(--border)',
     borderRadius: 6,
     fontFamily: 'DM Sans', fontSize: 12, fontWeight: 500,
     cursor: 'pointer', lineHeight: 1,

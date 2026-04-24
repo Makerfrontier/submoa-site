@@ -135,7 +135,7 @@ function ImageField({ fieldDef, value, onChange }) {
           onChange={(e) => handleFile(e.target.files?.[0])}
         />
       </label>
-      {err && <div style={{ fontSize: 11, color: '#a03030', marginTop: 4 }}>{err}</div>}
+      {err && <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>{err}</div>}
     </div>
   );
 }

@@ -83,7 +83,7 @@ function FakeSidebar({ activePage }) {
   return (
     <div style={{ width: 200, background: 'var(--leather-dark)', color: 'var(--card)', padding: '20px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
       <div style={{ fontFamily: 'DM Sans', fontSize: 10, letterSpacing: '0.12em', color: 'var(--amber)', textTransform: 'uppercase', marginBottom: 6 }}>✦ SUBMOA ✦</div>
-      <div style={{ fontFamily: 'Playfair Display', fontSize: 18, fontWeight: 600, marginBottom: 20 }}>Sub Moa Content</div>
+      <div style={{ fontFamily: 'var(--font-sans)', fontSize: 18, fontWeight: 600, marginBottom: 20 }}>Sub Moa Content</div>
       {items.map(p => (
         <div key={p.key}
           style={{

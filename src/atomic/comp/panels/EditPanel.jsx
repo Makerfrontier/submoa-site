@@ -154,7 +154,7 @@ function BlockEditFields({ block, brand, onUpdateField, onDelete, onToggleLock }
         display: 'flex', gap: 8,
       }}>
         <button onClick={onToggleLock} style={BTN_GHOST}>🔒 Lock</button>
-        <button onClick={onDelete} style={{ ...BTN_GHOST, color: '#a03030', borderColor: 'rgba(160,48,48,0.3)' }}>
+        <button onClick={onDelete} style={{ ...BTN_GHOST, color: 'var(--danger)', borderColor: 'var(--danger)' }}>
           🗑 Delete
         </button>
       </div>

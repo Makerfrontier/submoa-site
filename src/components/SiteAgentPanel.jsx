@@ -265,7 +265,7 @@ export default function SiteAgentPanel({ user, currentPage }) {
 function MessageBubble({ msg }) {
   if (msg.role === 'user') {
     return (
-      <div style={{ alignSelf: 'flex-end', maxWidth: '85%', padding: '8px 12px', background: 'var(--green-glow)', border: '1px solid var(--green-border)', fontFamily: 'DM Sans', fontSize: 13, color: 'var(--text)', borderRadius: 8, whiteSpace: 'pre-wrap' }}>
+      <div style={{ alignSelf: 'flex-end', maxWidth: '85%', padding: '8px 12px', background: 'var(--amber-tint)', border: '1px solid var(--amber)', fontFamily: 'DM Sans', fontSize: 13, color: 'var(--ink)', borderRadius: 8, whiteSpace: 'pre-wrap' }}>
         {msg.content}
       </div>
     );

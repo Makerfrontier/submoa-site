@@ -570,9 +570,9 @@ export default function PresentationBrief({ navigate }: { navigate?: (p: string)
             <button key={s.id} type="button" onClick={() => setActiveSlideIdx(i)}
               style={{
                 textAlign: 'left', padding: '6px 8px', borderRadius: 6,
-                background: i === activeSlideIdx ? 'var(--green)' : 'var(--bg)',
-                color: i === activeSlideIdx ? '#fff' : 'var(--text-mid)',
-                border: `1px solid ${i === activeSlideIdx ? 'var(--green)' : 'var(--border)'}`,
+                background: i === activeSlideIdx ? 'var(--ink)' : 'var(--bg)',
+                color: i === activeSlideIdx ? '#fff' : 'var(--ink-mid)',
+                border: `1px solid ${i === activeSlideIdx ? 'var(--ink)' : 'var(--border)'}`,
                 cursor: 'pointer', fontSize: 12,
               }}>
               <span style={{ fontFamily: 'monospace', fontSize: 10, opacity: 0.7 }}>{String(i + 1).padStart(2, '0')}</span>

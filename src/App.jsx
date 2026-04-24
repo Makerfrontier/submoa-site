@@ -1,6 +1,5 @@
 import { useState, useEffect, createContext, useContext, useRef } from 'react'
 import { marked } from 'marked'
-import Dashboard from './pages/Dashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import About from './pages/About'
 import Platform from './pages/Platform'

@@ -42,7 +42,7 @@ const CHART_TYPES = [
 
 function TemplatePreview({ id }: { id: string }) {
   const stroke = "var(--text-mid)";
-  const fill = "var(--green)";
+  const fill = "var(--amber)";
   const accent = "var(--amber)";
   if (id === "data-story") {
     return (
@@ -324,7 +324,7 @@ export default function InfographicBrief({ navigate }: { navigate?: (p: string) 
                         <strong style={{ color: 'var(--text-mid)' }}>{s.source_name}</strong>
                         {s.year ? ` · ${s.year}` : ''}
                         {' · '}
-                        <a href={s.source_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)' }}>View source</a>
+                        <a href={s.source_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)' }}>View source</a>
                         <span style={{ marginLeft: 8, color: confidenceColor(s.confidence), fontWeight: 600, textTransform: 'uppercase' }}>
                           {s.confidence}
                         </span>
@@ -421,11 +421,11 @@ export default function InfographicBrief({ navigate }: { navigate?: (p: string) 
               {TEMPLATES.map((t) => (
                 <button key={t.id} type="button" onClick={() => setStyleId(t.id)}
                   style={{
-                    background: styleId === t.id ? "var(--green-glow)" : "var(--card)",
-                    border: styleId === t.id ? "1.5px solid var(--green)" : "1px solid var(--border)",
+                    background: styleId === t.id ? "var(--amber-tint)" : "var(--surface)",
+                    border: styleId === t.id ? "1.5px solid var(--amber)" : "1px solid var(--border)",
                     borderRadius: 12, padding: 14, cursor: "pointer", textAlign: "left",
                     transition: "all 0.15s",
-                    boxShadow: styleId === t.id ? "0 0 0 3px var(--green-glow)" : "var(--shadow-card)",
+                    boxShadow: styleId === t.id ? "0 0 0 3px var(--amber-tint)" : "var(--shadow-card)",
                   }}>
                   <div style={{ background: "var(--bg)", borderRadius: 6, padding: 6, marginBottom: 10 }}>
                     <TemplatePreview id={t.id} />
@@ -444,9 +444,9 @@ export default function InfographicBrief({ navigate }: { navigate?: (p: string) 
                 <button key={fmt} type="button" onClick={() => setOutputFormat(fmt)}
                   style={{
                     flex: 1, padding: "12px 16px", borderRadius: 8,
-                    border: outputFormat === fmt ? "1.5px solid var(--green)" : "1.5px solid var(--border)",
-                    background: outputFormat === fmt ? "var(--green-glow)" : "var(--surface-inp)",
-                    color: outputFormat === fmt ? "var(--green)" : "var(--text-mid)",
+                    border: outputFormat === fmt ? "1.5px solid var(--amber)" : "1.5px solid var(--border)",
+                    background: outputFormat === fmt ? "var(--amber-tint)" : "var(--surface-alt)",
+                    color: outputFormat === fmt ? "var(--amber-dark)" : "var(--ink-mid)",
                     fontFamily: "var(--font-ui)", fontSize: 14, fontWeight: 600,
                     cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.04em",
                     transition: "all 0.15s",

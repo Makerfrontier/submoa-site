@@ -114,7 +114,7 @@ export default function AdminFeatures() {
       {/* LEFT */}
       <div style={{ width: 360, flexShrink: 0, borderRight: '1px solid var(--border)', background: 'var(--card)', padding: '24px 20px', overflowY: 'auto', maxHeight: 'calc(100vh - 60px)' }}>
         <div style={eyebrowStyle}>✦ FEATURES</div>
-        <h1 style={{ fontFamily: 'Playfair Display', fontSize: 40, fontWeight: 600, lineHeight: 1.15, letterSpacing: '-0.015em', color: 'var(--green-dark)', margin: '6px 0 20px' }}>
+        <h1 style={{ fontFamily: 'var(--font-sans)', fontSize: 28, fontWeight: 500, lineHeight: 1.2, letterSpacing: '-0.01em', color: 'var(--ink)', margin: '6px 0 20px' }}>
           Feature specs
         </h1>
 
@@ -194,7 +194,7 @@ function FeatureDetail({ detail, onChange, onSave, dirty, onCloseBug }) {
   return (
     <div style={{ maxWidth: 820, display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-        <h1 style={{ fontFamily: 'Playfair Display', fontSize: 40, fontWeight: 600, lineHeight: 1.15, letterSpacing: '-0.015em', color: 'var(--green-dark)', margin: 0 }}>{f.name}</h1>
+        <h1 style={{ fontFamily: 'var(--font-sans)', fontSize: 28, fontWeight: 500, lineHeight: 1.2, letterSpacing: '-0.01em', color: 'var(--ink)', margin: 0 }}>{f.name}</h1>
         <span style={{ fontFamily: 'DM Sans', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: statusColor(f.status), border: `1px solid ${statusColor(f.status)}`, padding: '2px 6px', borderRadius: 3 }}>{f.status}</span>
       </div>
       <div style={{ fontFamily: 'DM Sans', fontSize: 12, color: 'var(--text-mid)' }}>

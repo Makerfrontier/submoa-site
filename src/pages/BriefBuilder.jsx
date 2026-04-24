@@ -365,7 +365,7 @@ function BriefOutput({ record, edited, setEdited, onSave, onBack, typeLabel }) {
           }}>Download .txt</button>
         </div>
       </div>
-      <div className="eyebrow" style={{ color: '#6B4A8A', marginBottom: 8 }}>BRIEF BUILDER · {String(typeLabel).toUpperCase()}</div>
+      <div className="eyebrow" style={{ color: 'var(--amber)', marginBottom: 8 }}>BRIEF BUILDER · {String(typeLabel).toUpperCase()}</div>
       {error && <div style={{ color: 'var(--error)', fontSize: 12, marginBottom: 10 }}>{error}</div>}
       <div ref={ref} onMouseUp={onMouseUp}
         style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 28, fontFamily: 'var(--font-read)', fontSize: 15, lineHeight: 1.7, color: 'var(--text)', whiteSpace: 'pre-wrap', userSelect: 'text' }}>

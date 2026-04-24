@@ -1709,7 +1709,7 @@ function SectionUsers({ currentUserRole: roleFromParent }) {
       {/* Confirm modal */}
       {confirmModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'var(--surface-inp)', border: '0.5px solid var(--green)', borderRadius: 8, padding: 24, width: 380, fontFamily: 'sans-serif' }}>
+          <div style={{ background: 'var(--surface-inp)', border: '0.5px solid var(--amber)', borderRadius: 8, padding: 24, width: 380, fontFamily: 'sans-serif' }}>
             <div style={{ color: 'var(--text)', fontSize: 14, marginBottom: 20, lineHeight: 1.6 }}>{confirmModal.message}</div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button className="adm-btn" onClick={() => setConfirmModal(null)}>Cancel</button>
@@ -1931,7 +1931,7 @@ function SectionLlmConfig() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 20 }}>
         {slots.map(s => (
           <div key={s.slot} className="adm-card">
-            <div style={{ fontSize: 10, color: '#6A4A8A', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700, marginBottom: 10 }}>
+            <div style={{ fontSize: 10, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700, marginBottom: 10 }}>
               Slot {s.slot}
             </div>
 

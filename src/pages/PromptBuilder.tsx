@@ -264,8 +264,8 @@ export default function PromptBuilder() {
               maxWidth: m.role === 'user' ? '75%' : '85%',
               padding: '10px 14px',
               borderRadius: m.role === 'user' ? '10px 10px 2px 10px' : '10px 10px 10px 2px',
-              background: m.role === 'user' ? 'var(--green)' : 'var(--card)',
-              color: m.role === 'user' ? '#fff' : 'var(--text)',
+              background: m.role === 'user' ? 'var(--ink)' : 'var(--surface)',
+              color: m.role === 'user' ? '#fff' : 'var(--ink)',
               border: m.role === 'user' ? 'none' : '1px solid var(--border)',
               fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap',
             }}>{m.content}</div>
@@ -337,7 +337,7 @@ function SavedPanel({ list, onClose, onDelete }: { list: SavedPrompt[]; onClose:
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{p.title || '(untitled)'}</div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, background: '#7A4A2A', color: '#fff', padding: '2px 8px', borderRadius: 100 }}>
+                  <span style={{ fontSize: 10, background: 'var(--amber)', color: '#fff', padding: '2px 8px', borderRadius: 100 }}>
                     {p.target_model}
                   </span>
                   <span style={{ fontSize: 10, color: 'var(--text-light)' }}>{timeAgo(p.created_at)}</span>

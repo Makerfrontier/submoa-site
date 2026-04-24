@@ -3,9 +3,15 @@
    resolves to the v2 palette without rewriting call sites.
    See BRAND_BIBLE_V2.md for the rulebook.
 
-   Admin note: the 13 section-accent stripes on AdminDashboard are an
-   intentional exception to the one-accent rule — wayfinding color-coding
-   for an internal tool. Customer-facing surfaces follow one-accent strict. */
+   Documented exceptions to the one-accent rule (v2 hard rule #1):
+   1. AdminDashboard — 13 section-accent stripes are wayfinding color-coding
+      for the internal admin nav. Not customer-facing.
+   2. PodcastStudio VOICE_COLORS — eve #C8582A, ara #B8872E, rex #2B4030,
+      sal #2A5A6A, leo #3A2410. Per-host identity markers, data not
+      decoration. Same category as transcript speaker colors. Each host
+      has a stable brand color users learn to recognize.
+   3. AtomicTranscriptionView speaker palette — 5 desaturated rotating
+      colors for distinguishing speakers in a transcript. Data, not theme. */
 
 :root {
   --bg: #F4F1EA;
@@ -22,6 +28,12 @@
   --amber: #E8843D;
   --amber-dark: #D67429;
   --amber-soft: #FFF7E8;
+  /* --amber-tint: more visible selected-state background. --amber-soft is
+     too close to --bg on cream surfaces to read as "selected"; --amber-tint
+     uses color-mix over the parent so it stays visible regardless of the
+     underlying surface. Use for selected pills/cards; --amber-soft stays
+     for chips and banners that sit on white cards. */
+  --amber-tint: color-mix(in srgb, var(--amber) 15%, transparent);
 
   --success: #4A9B6E;
   --warning: #C18B2C;

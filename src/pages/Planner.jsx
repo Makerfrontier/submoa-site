@@ -40,7 +40,7 @@ function PrimaryButton({ children, onClick, disabled, style }) {
   return (
     <button type="button" onClick={onClick} disabled={disabled} style={{
       padding: '10px 20px', fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-ui)',
-      background: disabled ? 'var(--border)' : 'var(--green)',
+      background: disabled ? 'var(--border)' : 'var(--ink)',
       color: disabled ? 'var(--text-dim)' : '#fff',
       border: 'none', borderRadius: 7,
       cursor: disabled ? 'default' : 'pointer',
@@ -122,12 +122,12 @@ function TaskSection({ task, sectionId, flags, onCommentSaved, itineraryId, lock
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
         {(task?.options || []).map((o, i) => (
           <div key={i} style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 14 }}>
-            <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--green)', color: '#fff', fontWeight: 700, textAlign: 'center', lineHeight: '22px', fontSize: 12, marginBottom: 8 }}>{o?.rank ?? i + 1}</div>
+            <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--amber)', color: '#fff', fontWeight: 700, textAlign: 'center', lineHeight: '22px', fontSize: 12, marginBottom: 8 }}>{o?.rank ?? i + 1}</div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>{o?.name}</div>
             <div style={{ fontSize: 12, color: 'var(--text-mid)', marginBottom: 8 }}>{o?.tagline}</div>
             {o?.cost_estimate && <div style={{ display: 'inline-block', background: 'var(--amber-light)', color: 'var(--amber-dim)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 100, marginBottom: 8 }}>{o.cost_estimate}</div>}
             {o?.phone && <div style={{ fontSize: 12, color: 'var(--text-mid)', marginBottom: 2 }}>📞 {o.phone}</div>}
-            {o?.website && <div style={{ fontSize: 12, marginBottom: 6 }}><a href={o.website} target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>{o.website}</a></div>}
+            {o?.website && <div style={{ fontSize: 12, marginBottom: 6 }}><a href={o.website} target="_blank" rel="noreferrer" style={{ color: 'var(--ink)' }}>{o.website}</a></div>}
             {Array.isArray(o?.pros) && o.pros.length > 0 && (
               <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0', fontSize: 12 }}>
                 {o.pros.map((p, k) => <li key={k} style={{ color: 'var(--text)', marginBottom: 2 }}>✓ {p}</li>)}
@@ -197,7 +197,7 @@ function PlanView({ plan, flags, onCommentSaved, itineraryId, locked }) {
           </ol>
         </Card>
       )}
-      <Card style={{ background: 'var(--green)', color: '#fff', marginBottom: 80 }}>
+      <Card style={{ background: 'color-mix(in srgb, var(--success) 10%, transparent)', borderColor: 'var(--success)', color: 'var(--ink)', marginBottom: 80 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div>
             <Eyebrow color="rgba(255,255,255,0.8)">Timeline</Eyebrow>
@@ -362,9 +362,9 @@ export default function Planner({ navigate }) {
                           style={{
                             padding: '8px 14px', fontSize: 13, fontWeight: 600,
                             borderRadius: 100,
-                            border: selected ? '2px solid var(--green)' : '1px solid var(--border)',
-                            background: selected ? 'var(--green-glow)' : 'var(--card)',
-                            color: selected ? 'var(--green)' : 'var(--text-mid)',
+                            border: selected ? '2px solid var(--amber)' : '1px solid var(--border)',
+                            background: selected ? 'var(--amber-tint)' : 'var(--surface)',
+                            color: selected ? 'var(--amber-dark)' : 'var(--ink-mid)',
                             cursor: 'pointer',
                           }}>{opt}</button>
                       )
@@ -522,7 +522,7 @@ export function PlannerDetail({ navigate }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <div style={{ color: 'var(--text)' }}>Your PDF is ready.</div>
               <a href={`/api/planner/${id}/pdf`} download="itinerary.pdf" style={{
-                padding: '10px 18px', background: 'var(--green)', color: '#fff', fontWeight: 600, fontSize: 14,
+                padding: '10px 18px', background: 'var(--ink)', color: '#fff', fontWeight: 600, fontSize: 14,
                 borderRadius: 7, textDecoration: 'none',
               }}>Download PDF</a>
             </div>

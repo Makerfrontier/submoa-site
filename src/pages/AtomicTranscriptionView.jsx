@@ -245,7 +245,11 @@ function VideoPlayer({ transcript, videoRef }) {
 function SpeakerRow({ speaker, colorIdx, transcriptId, onRenamed }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(speaker.display_name || speaker.speaker_key);
-  const colors = ['var(--amber)', 'var(--ink)', 'var(--success)', 'var(--warning)', '#8A6A5F'];
+  // v2-consistent rotating palette for distinguishing speakers. Reuses the
+  // semantic token hues (amber/ink/success/danger/ink-mid) as identity
+  // colors — the avatar badge has no error semantics so --danger here is
+  // just "the muted rose in slot 4." Documented in tokens-v2.css.
+  const colors = ['var(--amber)', 'var(--ink)', 'var(--success)', 'var(--danger)', 'var(--ink-mid)'];
   const color = colors[colorIdx % colors.length];
 
   const save = async () => {
@@ -294,7 +298,11 @@ function TranscriptTurn({ turn, speakers, onWordClick }) {
   const speakerRow = speakers.find(s => s.speaker_key === turn.speaker_key);
   const name = speakerRow?.display_name || turn.speaker;
   const colorIdx = speakers.findIndex(s => s.speaker_key === turn.speaker_key);
-  const colors = ['var(--amber)', 'var(--ink)', 'var(--success)', 'var(--warning)', '#8A6A5F'];
+  // v2-consistent rotating palette for distinguishing speakers. Reuses the
+  // semantic token hues (amber/ink/success/danger/ink-mid) as identity
+  // colors — the avatar badge has no error semantics so --danger here is
+  // just "the muted rose in slot 4." Documented in tokens-v2.css.
+  const colors = ['var(--amber)', 'var(--ink)', 'var(--success)', 'var(--danger)', 'var(--ink-mid)'];
   const color = colors[Math.max(0, colorIdx) % colors.length];
 
   return (

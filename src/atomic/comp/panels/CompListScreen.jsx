@@ -71,9 +71,9 @@ export function CompListScreen({ onCompCreated }) {
         <div style={{
           maxWidth: 640, margin: '0 auto',
           padding: '10px 14px', borderRadius: 6,
-          fontSize: 13, color: '#a03030',
-          background: 'rgba(160,48,48,0.08)',
-          border: '1px solid rgba(160,48,48,0.25)',
+          fontSize: 13, color: 'var(--danger)',
+          background: 'color-mix(in srgb, var(--danger) 10%, transparent)',
+          border: '1px solid var(--danger)',
           textAlign: 'center',
         }}>{err}</div>
       )}
@@ -84,11 +84,14 @@ export function CompListScreen({ onCompCreated }) {
 }
 
 function CompCard({ comp, onDelete, onCopyShare }) {
-  let blockCount = 0;
+  // block_count is precomputed by the list endpoint via json_array_length;
+  // fall back to parsing if the server ever ships the full blocks_json.
+  let blockCount = typeof comp.block_count === 'number'
+    ? comp.block_count
+    : (() => { try { return JSON.parse(comp.blocks_json || '[]').length; } catch { return 0; } })();
   let brand = {};
-  try { blockCount = JSON.parse(comp.blocks_json || '[]').length; } catch {}
   try { brand = JSON.parse(comp.brand_json || '{}'); } catch {}
-  const primary = brand?.primary || 'var(--green-dark)';
+  const primary = brand?.primary || 'var(--ink)';
   const logoUrl = brand?.logoUrl || '';
   const initials = (comp.name || 'Untitled').slice(0, 2).toUpperCase();
 
@@ -159,7 +162,7 @@ function CompCard({ comp, onDelete, onCopyShare }) {
             onClick={() => { window.location.href = `/atomic/comp/${comp.id}`; }}
             style={{
               flex: 1,
-              background: 'var(--green-dark)', color: '#fff',
+              background: 'var(--ink)', color: '#fff',
               border: 'none', borderRadius: 6,
               padding: '6px 0', fontSize: 12, fontWeight: 600,
               cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',

@@ -285,7 +285,7 @@ export default function AtomicComp({ navigate }) {
 
         <div style={{
           flex: 1, overflowY: 'auto', padding: 24,
-          background: '#EFECE5',
+          background: 'var(--surface-alt)',
         }}>
           <div style={{
             maxWidth: viewport === 'mobile' ? 390 : 1280,
@@ -313,7 +313,7 @@ export default function AtomicComp({ navigate }) {
           style={{
             position: 'fixed', bottom: 24, left: '50%',
             transform: 'translateX(-50%)',
-            background: 'var(--green-dark)',
+            background: 'var(--ink)',
             color: '#fff', padding: '12px 24px',
             borderRadius: 8, fontSize: 14,
             fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
@@ -386,7 +386,7 @@ function TopBar({ comp, saving, viewport, onViewportChange, onNameChange, onShar
           <span style={{ fontSize: 12, color: 'var(--text-mid)', fontFamily: 'DM Sans, sans-serif' }}>Saving…</span>
         )}
         {!saving && comp.share_enabled && (
-          <span style={{ fontSize: 12, color: 'var(--green-dark)', fontFamily: 'DM Sans, sans-serif' }}>● Shared</span>
+          <span style={{ fontSize: 12, color: 'var(--success)', fontFamily: 'DM Sans, sans-serif' }}>● Shared</span>
         )}
         <button
           onClick={onExport}
@@ -400,7 +400,7 @@ function TopBar({ comp, saving, viewport, onViewportChange, onNameChange, onShar
         <button
           onClick={onShare}
           style={{
-            background: 'var(--green-dark)', color: '#fff',
+            background: 'var(--ink)', color: '#fff',
             border: 'none', borderRadius: 6,
             padding: '8px 18px', fontSize: 13, fontWeight: 600,
             cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',

@@ -120,7 +120,7 @@ export default function AdminBugs() {
       {/* LEFT */}
       <div style={{ width: 340, flexShrink: 0, borderRight: '1px solid var(--border)', background: 'var(--card)', padding: '24px 20px', overflowY: 'auto', maxHeight: 'calc(100vh - 60px)' }}>
         <div style={eyebrowStyle}>✦ BUG LOG</div>
-        <h1 style={{ fontFamily: 'Playfair Display', fontSize: 40, fontWeight: 600, lineHeight: 1.15, letterSpacing: '-0.015em', color: 'var(--green-dark)', margin: '6px 0 20px' }}>
+        <h1 style={{ fontFamily: 'var(--font-sans)', fontSize: 28, fontWeight: 500, lineHeight: 1.2, letterSpacing: '-0.01em', color: 'var(--ink)', margin: '6px 0 20px' }}>
           Bugs
         </h1>
 
@@ -210,7 +210,7 @@ export default function AdminBugs() {
             <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div style={{ ...eyebrowStyle }}>CLAUDE CODE PROMPT</div>
-                <div style={{ fontFamily: 'Playfair Display', fontSize: 22, fontWeight: 600, color: 'var(--green-dark)', marginTop: 4 }}>{packageModal.title}</div>
+                <div style={{ fontFamily: 'var(--font-sans)', fontSize: 22, fontWeight: 500, color: 'var(--ink)', marginTop: 4 }}>{packageModal.title}</div>
                 <div style={{ fontFamily: 'DM Sans', fontSize: 11, color: 'var(--text-mid)', marginTop: 2 }}>Task #{packageModal.task_id.slice(0, 8)}</div>
               </div>
               <button onClick={() => setPackageModal(null)} aria-label="Close" style={{ fontSize: 20, padding: '4px 10px', background: 'transparent', border: 'none', color: 'var(--text-mid)', cursor: 'pointer', fontFamily: 'DM Sans' }}>×</button>

@@ -143,7 +143,7 @@ function BillDetailPanel({ billId, onClose, onAnalyze }) {
 }
 
 // ─── Stat card ─────────────────────────────────────────────────────────────
-function StatCard({ label, value, accent = 'var(--green)' }) {
+function StatCard({ label, value, accent = 'var(--amber)' }) {
   return (
     <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 20px', boxShadow: 'var(--shadow-card)' }}>
       <div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--amber)', fontWeight: 600 }}>{label}</div>
@@ -271,9 +271,9 @@ function MorningBrief({ onBillOpen }) {
               type="button"
               onClick={() => setScope(s.key)}
               style={{
-                padding: '5px 12px', borderRadius: 100, border: `1px solid ${active ? 'var(--green)' : 'var(--border)'}`,
-                background: active ? 'var(--green-glow)' : 'var(--card-alt)',
-                color: active ? 'var(--green)' : 'var(--text-mid)',
+                padding: '5px 12px', borderRadius: 100, border: `1px solid ${active ? 'var(--amber)' : 'var(--border)'}`,
+                background: active ? 'var(--amber-tint)' : 'var(--surface-alt)',
+                color: active ? 'var(--amber-dark)' : 'var(--ink-mid)',
                 fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 display: 'inline-flex', alignItems: 'center', gap: 6,
               }}
@@ -357,7 +357,7 @@ function MorningBrief({ onBillOpen }) {
                       background: 'transparent',
                       fontSize: 13,
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--green-glow)'; e.currentTarget.style.borderLeftColor = 'var(--green)'; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--amber-tint)'; e.currentTarget.style.borderLeftColor = 'var(--amber)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderLeftColor = 'transparent'; }}
                   >
                     <div style={{ fontWeight: 600, color: 'var(--text)' }}>{b.bill_id}</div>
@@ -365,7 +365,7 @@ function MorningBrief({ onBillOpen }) {
                   </div>
                 ))}
             </Panel>
-            <Panel title="Funding Anomalies & Crossovers" color="var(--leather)">
+            <Panel title="Funding Anomalies & Crossovers" color="var(--amber)">
               {anomalies.length === 0 && crossovers.length === 0 ? (
                 <div style={{ color: 'var(--text-light)', fontSize: 13 }}>FEC integration pending for this account. Live anomaly detection unlocks when FEC_API_KEY is set and watch lists are configured.</div>
               ) : (
@@ -659,8 +659,8 @@ function PartyIntel({ onAnalyze, onBillOpen }) {
               onDoubleClick={() => onBillOpen?.(b.bill_id)}
               style={{
                 padding: '8px 10px', borderRadius: 6, cursor: 'pointer',
-                background: selected?.bill_id === b.bill_id ? 'var(--green-glow)' : 'transparent',
-                borderLeft: selected?.bill_id === b.bill_id ? '3px solid var(--green)' : '3px solid transparent',
+                background: selected?.bill_id === b.bill_id ? 'var(--amber-tint)' : 'transparent',
+                borderLeft: selected?.bill_id === b.bill_id ? '3px solid var(--amber)' : '3px solid transparent',
                 borderBottom: '1px solid var(--border-faint)',
               }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{b.bill_id}</div>
@@ -675,7 +675,7 @@ function PartyIntel({ onAnalyze, onBillOpen }) {
             </>
           )}
         </Panel>
-        <Panel title="Bill Detail" color="var(--green)">
+        <Panel title="Bill Detail" color="var(--amber)">
           {!selected ? <div style={{ color: 'var(--text-light)', fontSize: 13 }}>Select a bill.</div> : (
             <>
               <div style={{ fontSize: 13, fontWeight: 600 }}>{selected.bill_id}</div>
@@ -767,7 +767,7 @@ function RepIntel({ onAnalyze }) {
           <StatCard label="Bills Sponsored" value={(rep.sponsored_legislation || []).length} />
           <StatCard label="Committees" value={(rep.committee_memberships || []).length} accent="var(--amber)" />
           <StatCard label="Tone Tags" value={(rep.tone_tags || []).length} accent="var(--info)" />
-          <StatCard label="Docs Ingested" value={rep.documents_ingested || 0} accent="var(--leather)" />
+          <StatCard label="Docs Ingested" value={rep.documents_ingested || 0} accent="var(--amber)" />
         </div>
       )}
 
@@ -789,7 +789,7 @@ function RepIntel({ onAnalyze }) {
             ))
           )}
         </Panel>
-        <Panel title="Selected Bill" color="var(--green)">
+        <Panel title="Selected Bill" color="var(--amber)">
           {!selectedBill ? <div style={{ color: 'var(--text-light)', fontSize: 13 }}>Pick a bill above.</div> : (
             <>
               <div style={{ fontSize: 13, fontWeight: 600 }}>{selectedBill.bill_id}</div>
@@ -1061,7 +1061,7 @@ function BriefViewer({ briefId, bill, onQuestion }) {
               color: 'var(--amber)',
             }}>Bill Analysis</div>
             <h3 style={{
-              fontFamily: 'Playfair Display', fontWeight: 600, fontSize: 22,
+              fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 22,
               lineHeight: 1.3, letterSpacing: 'normal',
               color: 'var(--text)', margin: '4px 0 6px',
             }}>
@@ -1361,7 +1361,7 @@ function FloatingChat() {
         style={{
           position: 'fixed', right: 24, bottom: 24, zIndex: 400,
           width: 56, height: 56, borderRadius: '50%',
-          background: 'var(--green)', color: '#fff', border: 'none',
+          background: 'var(--ink)', color: '#fff', border: 'none',
           boxShadow: '0 4px 14px rgba(0,0,0,0.2)', cursor: 'pointer',
           fontSize: 22,
         }}

@@ -39,7 +39,7 @@ const LABEL_STYLE = {
   fontFamily: 'DM Sans, sans-serif',
 };
 const BTN_PRIMARY = {
-  background: 'var(--green-dark, #2B4030)',
+  background: 'var(--ink)',
   color: '#fff',
   border: 'none',
   borderRadius: 6,
@@ -335,9 +335,9 @@ export function StartScreen({ onCompCreated }) {
                       fontSize: 12, fontWeight: 600,
                       fontFamily: 'DM Sans, sans-serif',
                       cursor: creating ? 'default' : 'pointer',
-                      border: '1px solid ' + (brief.tone === t ? 'var(--green-dark)' : 'var(--border)'),
-                      background: brief.tone === t ? 'var(--green-dark)' : 'transparent',
-                      color:      brief.tone === t ? '#fff' : 'var(--text)',
+                      border: '1px solid ' + (brief.tone === t ? 'var(--ink)' : 'var(--border)'),
+                      background: brief.tone === t ? 'var(--ink)' : 'transparent',
+                      color:      brief.tone === t ? '#fff' : 'var(--ink)',
                     }}
                   >{t}</button>
                 ))}
@@ -429,8 +429,8 @@ export function StartScreen({ onCompCreated }) {
           <div style={{
             marginTop: 16, padding: '10px 14px', borderRadius: 6,
             fontSize: 13, fontFamily: 'DM Sans, sans-serif',
-            color: '#a03030', background: 'rgba(160,48,48,0.08)',
-            border: '1px solid rgba(160,48,48,0.25)',
+            color: 'var(--danger)', background: 'color-mix(in srgb, var(--danger) 10%, transparent)',
+            border: '1px solid var(--danger)',
             textAlign: 'center',
           }}>{err}</div>
         )}
@@ -528,9 +528,9 @@ function SectionPicker({ value, onChange, disabled }) {
               padding: '8px 12px',
               textAlign: 'left',
               borderRadius: 6,
-              border: '1px solid ' + (on ? 'var(--green-dark)' : 'var(--border)'),
-              background: on ? 'rgba(43,64,48,0.08)' : 'transparent',
-              color: on ? 'var(--green-dark)' : 'var(--text-mid)',
+              border: '1px solid ' + (on ? 'var(--ink)' : 'var(--border)'),
+              background: on ? 'var(--amber-tint)' : 'transparent',
+              color: on ? 'var(--ink)' : 'var(--ink-mid)',
               fontSize: 12,
               fontWeight: 600,
               fontFamily: 'DM Sans, sans-serif',
@@ -540,8 +540,8 @@ function SectionPicker({ value, onChange, disabled }) {
           >
             <span style={{
               display: 'inline-block', width: 14, height: 14, borderRadius: 3,
-              border: '1.5px solid ' + (on ? 'var(--green-dark)' : 'var(--border)'),
-              background: on ? 'var(--green-dark)' : 'transparent',
+              border: '1.5px solid ' + (on ? 'var(--ink)' : 'var(--border)'),
+              background: on ? 'var(--ink)' : 'transparent',
               position: 'relative',
               flexShrink: 0,
             }}>
