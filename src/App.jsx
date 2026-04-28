@@ -16,6 +16,7 @@ import PlannerBuilding from './pages/PlannerBuilding'
 import CompStudio from './pages/CompStudio'
 import AtomicComp from './pages/AtomicComp'
 import AtomicFlashImages from './pages/AtomicFlashImages'
+import AtomicEmail from './pages/AtomicEmail'
 import AtomicCompShare from './pages/AtomicCompShare'
 import LegislativeIntelligence from './pages/LegislativeIntelligence'
 import PressRelease from './pages/PressRelease'
@@ -487,6 +488,7 @@ function isAppRoute(path) {
       path === '/listen' ||
       path === '/atomic/comp' || path.startsWith('/atomic/comp/') ||
       path === '/atomic/images' ||
+      path === '/atomic/email' ||
       path === '/podcast-studio' || path.startsWith('/podcast-studio/') ||
       path === '/prompt-builder' ||
       path === '/comp-studio' ||
@@ -3322,6 +3324,7 @@ export default function App() {
         {page === '/listen' && (loading ? null : user ? <QuickPodcast navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {(page === '/atomic/comp' || page.startsWith('/atomic/comp/')) && (loading ? null : user ? <AtomicComp navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/atomic/images' && (loading ? null : user ? <AtomicFlashImages navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
+        {page === '/atomic/email' && (loading ? null : user ? <AtomicEmail navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/atomic/transcription' && (loading ? null : user ? <AtomicTranscription navigate={navigate} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page.match(/^\/atomic\/transcription\/[^/]+/) && (loading ? null : user ? <AtomicTranscriptionView navigate={navigate} page={page} /> : <Login navigate={navigate} syncUser={syncUser} />)}
         {page === '/youtube-transcript' && <RedirectTo path="/atomic/transcription" navigate={navigate} />}

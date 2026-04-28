@@ -18,6 +18,7 @@ const CATEGORIES = [
   { id: 'creative', label: 'CREATIVE', items: [
     { path: '/atomic/images', label: 'Atomic Flash', icon: 'flash' },
     { path: '/atomic/comp',   label: 'Atomic Comp',  icon: 'grid'  },
+    { path: '/atomic/email',  label: 'Atomic Email', icon: 'mail'  },
   ]},
   { id: 'audio', label: 'AUDIO', items: [
     { path: '/listen',         label: 'Quark Cast',    icon: 'podcast' },
