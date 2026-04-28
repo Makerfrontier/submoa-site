@@ -15,13 +15,14 @@ const TYPE_LABELS = {
 export default function FieldCard({
   field,
   active,
+  allFields,            // body cards need this to resolve inline link texts
   onChange,
   onFocus,
   onBlur,
   onRegenerateAlt,
   cardRef,
 }) {
-  const props = { field, onChange, onFocus, onBlur, onRegenerateAlt };
+  const props = { field, allFields, onChange, onFocus, onBlur, onRegenerateAlt };
   return (
     <div
       ref={cardRef}
@@ -70,24 +71,71 @@ export function HeadlineField({ field, onChange, onFocus, onBlur }) {
   );
 }
 
-export function BodyField({ field, onChange, onFocus, onBlur }) {
+export function BodyField({ field, allFields, onChange, onFocus, onBlur }) {
   const ref = useRef(null);
+  // Resolve a link's current text from the live fields array. Falls back to
+  // empty string if the slot points to a deleted/missing link.
+  const linkText = (id) => {
+    const f = (allFields || []).find(x => x.id === id);
+    return (f && (f.type === 'link' || f.type === 'cta')) ? (f.text || '') : '';
+  };
+  // Build display string: text segments + linked-field text inline.
+  const display = (field.segments || []).map(s => {
+    if (s.kind === 'text') return stripTags(s.html);
+    return linkText(s.field_id);
+  }).join('');
+
   useEffect(() => {
     const el = ref.current; if (!el) return;
     el.style.height = 'auto'; el.style.height = `${Math.max(64, el.scrollHeight)}px`;
-  }, [field.html]);
+  }, [display]);
+
+  // On textarea edit: anchor each link's current text in the new value (in
+  // segment order) and assign each TEXT segment the slice that lies between
+  // its surrounding links. Segment count + indices stay fixed so the
+  // server-side btxt markers in the template still align.
+  const onTextareaChange = (newText) => {
+    const segs = field.segments || [];
+    const result = [];
+    let cursor = 0;
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i];
+      if (seg.kind === 'link') {
+        // Anchor link's text in newText to advance the cursor.
+        const lt = linkText(seg.field_id);
+        if (lt) {
+          const idx = newText.indexOf(lt, cursor);
+          if (idx >= 0) cursor = idx + lt.length;
+          // If anchor is broken, leave cursor where it was — surrounding text
+          // segments will absorb the changed prose.
+        }
+        result.push(seg);
+      } else {
+        // Find the next link's anchor position to find where this text
+        // segment ends.
+        let end = newText.length;
+        for (let j = i + 1; j < segs.length; j++) {
+          if (segs[j].kind !== 'link') continue;
+          const nt = linkText(segs[j].field_id);
+          if (!nt) continue;
+          const ni = newText.indexOf(nt, cursor);
+          if (ni >= 0) { end = ni; break; }
+        }
+        result.push({ ...seg, html: newText.slice(cursor, end) });
+        cursor = end;
+      }
+    }
+    onChange({ ...field, segments: result, text_preview: newText.slice(0, 200) });
+  };
+
   return (
     <textarea
       ref={ref}
-      value={stripTags(field.html)}
+      value={display}
       placeholder="Paragraph text"
       onFocus={() => onFocus?.(field.id, 'click')}
       onBlur={() => onBlur?.(field.id)}
-      onChange={(e) => {
-        // Naive: replace whole inner with new text, preserving any <br/> the user typed via newline → <br/>
-        const next = e.target.value.replace(/\n\s*\n/g, '<br/><br/>').replace(/\n/g, ' ');
-        onChange({ ...field, html: next, text_preview: e.target.value.slice(0, 200) });
-      }}
+      onChange={(e) => onTextareaChange(e.target.value)}
       style={{ ...inputStyle, resize: 'vertical', minHeight: 64, fontFamily: 'var(--font-sans)', lineHeight: 1.5 }}
     />
   );

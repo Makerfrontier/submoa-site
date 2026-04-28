@@ -45,12 +45,22 @@ export function renderTemplate(template: string, fields: Field[]): string {
       continue;
     }
 
-    // Content-marker fields
+    // Body fields use per-segment markers so inline link slots survive edits.
+    if (f.type === 'body') {
+      for (const seg of f.segments) {
+        if (seg.kind !== 'text') continue;
+        const open = `<!--ae:btxt:${id}:${seg.index}:open-->`;
+        const close = `<!--ae:btxt:${id}:${seg.index}:close-->`;
+        out = replaceBetween(out, open, close, seg.html ?? '');
+      }
+      continue;
+    }
+
+    // Content-marker fields (headline, link, cta)
     const open = `<!--ae:open:${id}-->`;
     const close = `<!--ae:close:${id}-->`;
     let content = '';
     if (f.type === 'headline')      content = f.raw_html ?? f.text ?? '';
-    else if (f.type === 'body')     content = f.html ?? '';
     else if (f.type === 'link' || f.type === 'cta') content = escapeForAnchorBody(f.text ?? '');
     out = replaceBetween(out, open, close, content);
 
@@ -72,8 +82,10 @@ export function renderTemplate(template: string, fields: Field[]): string {
 // Strip injection-only attributes and content markers — used for final export.
 export function stripInjections(html: string): string {
   let out = html;
-  // Remove ae markers
+  // Remove ae open/close markers (headline/link/cta)
   out = out.replace(/<!--ae:(open|close):field-\d+-->/g, '');
+  // Remove ae body-text markers
+  out = out.replace(/<!--ae:btxt:field-\d+:\d+:(open|close)-->/g, '');
   // Remove data-ae-field-id and data-ae-link-id attributes
   out = out.replace(/\s+data-ae-(field|link)-id="field-\d+"/g, '');
   return out;

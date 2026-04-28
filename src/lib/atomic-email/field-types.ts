@@ -15,9 +15,20 @@ export interface HeadlineField extends BaseField {
   raw_html: string;
 }
 
+// Body field is a list of segments — text spans interleaved with references
+// to LINK fields. The textarea displays segments concatenated (text + each
+// link's current resolved text); editing prose around a link preserves the
+// link slot. Each text segment carries a stable `index` matching the
+// `<!--ae:btxt:fieldId:idx:open-->...:close-->` marker pair injected by the
+// parser. Text segment count is fixed at parse time; user can mutate values
+// but not add/remove segments.
+export type BodySegment =
+  | { kind: 'text'; index: number; html: string }
+  | { kind: 'link'; field_id: string };
+
 export interface BodyField extends BaseField {
   type: 'body';
-  html: string;
+  segments: BodySegment[];
   text_preview: string;
 }
 

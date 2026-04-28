@@ -37,6 +37,12 @@ async function api(path, options = {}) {
   return data;
 }
 
+function readIdFromPath() {
+  if (typeof window === 'undefined') return null;
+  const m = window.location.pathname.match(/^\/atomic\/email\/([^/?#]+)/);
+  return m ? m[1] : null;
+}
+
 export default function AtomicEmail() {
   const [project, setProject] = useState(null);  // { id, name, fields, current_html }
   const [recents, setRecents] = useState([]);
@@ -60,6 +66,13 @@ export default function AtomicEmail() {
   }, []);
   useEffect(() => { refreshRecents(); }, [refreshRecents]);
 
+  // ---- URL persistence: open the project named in the path on mount ----
+  useEffect(() => {
+    const id = readIdFromPath();
+    if (id && !project) { void openProject(id); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ---- Import ----
   async function importHtml({ source_html, source_filename }) {
     setBusy(true); setError('');
@@ -74,6 +87,7 @@ export default function AtomicEmail() {
         fields: d.fields,
         current_html: d.current_html,
       });
+      window.history.replaceState({}, '', `/atomic/email/${d.id}`);
       refreshRecents();
     } catch (e) {
       setError(e.message);
@@ -86,6 +100,7 @@ export default function AtomicEmail() {
     try {
       const d = await api(`/api/atomic-email/projects/${encodeURIComponent(id)}`);
       setProject(d);
+      window.history.replaceState({}, '', `/atomic/email/${d.id}`);
     } catch (e) { setError(e.message); }
     finally { setBusy(false); }
   }
@@ -164,7 +179,7 @@ export default function AtomicEmail() {
 
   const headerActions = useMemo(() => project ? (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      <button type="button" onClick={() => { setProject(null); setActiveFieldId(null); }} style={ghostBtn}>
+      <button type="button" onClick={() => { setProject(null); setActiveFieldId(null); window.history.replaceState({}, '', '/atomic/email'); }} style={ghostBtn}>
         ← Back to imports
       </button>
       <button type="button" onClick={exportHtml} style={primaryBtn}>
@@ -196,7 +211,7 @@ export default function AtomicEmail() {
             editing={editingName} setEditing={setEditingName}
             onRename={setName}
             onExport={exportHtml}
-            onBack={() => { setProject(null); setActiveFieldId(null); }}
+            onBack={() => { setProject(null); setActiveFieldId(null); window.history.replaceState({}, '', '/atomic/email'); }}
             fullscreen={fullscreen} setFullscreen={setFullscreen}
           />
           <div style={{ display: 'flex', gap: 16, alignItems: 'stretch', minHeight: 600, flex: 1 }}>
@@ -207,6 +222,7 @@ export default function AtomicEmail() {
                     key={f.id}
                     field={f}
                     active={activeFieldId === f.id}
+                    allFields={project.fields}
                     onChange={updateField}
                     onFocus={(id) => setActiveFieldId(id)}
                     onRegenerateAlt={regenerateAlt}

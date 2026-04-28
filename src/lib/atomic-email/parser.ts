@@ -19,7 +19,7 @@
 //   {% if %} / {% block %}      (Liquid, Jinja-ish)
 
 import { parse, HTMLElement, Node, NodeType } from 'node-html-parser';
-import type { Field, ParsedProject } from './field-types';
+import type { BodySegment, Field, ParsedProject } from './field-types';
 
 const HEADLINE_TAGS = new Set(['h1', 'h2', 'h3']);
 
@@ -114,10 +114,15 @@ function preclaimImageWrappingAnchors(root: HTMLElement): Set<HTMLElement> {
 }
 
 // Marker tokens written into the templated HTML.
-//  - For text/body content: <!--ae:open:field-001-->...<!--ae:close:field-001-->
-//  - For attribute values:  data-ae-attr-{field-id}="{attr-name}" on the same element
+//  - For headline/link/cta content: <!--ae:open:field-001-->...<!--ae:close:field-001-->
+//  - For attribute values:  data-ae-field-id="{id}" on the same element
+//  - For body text segments: <!--ae:btxt:field-001:0:open-->text<!--ae:btxt:field-001:0:close-->
+//    Each text span between/around inline anchors gets its own marker pair so
+//    inline links can be substituted independently.
 const OPEN = (id: string) => `<!--ae:open:${id}-->`;
 const CLOSE = (id: string) => `<!--ae:close:${id}-->`;
+const BTXT_OPEN = (id: string, idx: number) => `<!--ae:btxt:${id}:${idx}:open-->`;
+const BTXT_CLOSE = (id: string, idx: number) => `<!--ae:btxt:${id}:${idx}:close-->`;
 
 export function parseEmail(html: string): ParsedProject {
   // Some emails arrive without <html>/<body> scaffolding (or as fragments).
@@ -171,12 +176,49 @@ export function parseEmail(html: string): ParsedProject {
       if (!visible) continue;
       counter++;
       const id = `field-${String(counter).padStart(3, '0')}`;
-      el.set_content(OPEN(id) + inner + CLOSE(id));
+
+      // Walk children to build segments. For each text node and inline non-
+      // anchor element, emit a text segment. For each non-claimed <a>, emit
+      // a link segment with a pre-allocated link field id matching what the
+      // outer walker will assign next.
+      const segments: BodySegment[] = [];
+      const newInnerParts: string[] = [];
+      let textIdx = 0;
+      let upcomingCounter = counter;
+      for (const c of (el.childNodes as any[])) {
+        const ctype: number = c.nodeType;
+        const childTag: string | undefined = c.tagName?.toLowerCase?.();
+        if (childTag === 'a' && !claimedAnchors.has(c)) {
+          // Anchor: walker will assign it a LINK field id when it visits.
+          // Pre-allocate matching id here.
+          upcomingCounter++;
+          const linkId = `field-${String(upcomingCounter).padStart(3, '0')}`;
+          segments.push({ kind: 'link', field_id: linkId });
+          newInnerParts.push(c.toString());
+        } else if (ctype === NodeType.TEXT_NODE) {
+          const t = (c.rawText as string) || '';
+          if (!t.length) continue;
+          const idx = textIdx++;
+          segments.push({ kind: 'text', index: idx, html: t });
+          newInnerParts.push(BTXT_OPEN(id, idx) + t + BTXT_CLOSE(id, idx));
+        } else if (ctype === NodeType.ELEMENT_NODE) {
+          // Inline element that isn't an anchor (or is a claimed anchor):
+          // <strong>, <em>, <br>, <span>, image-wrapping <a>. Preserve raw
+          // HTML in a text segment. Edits via the textarea will lose nested
+          // tags (limitation), but bare text round-trips fine.
+          const idx = textIdx++;
+          const html = c.toString();
+          segments.push({ kind: 'text', index: idx, html });
+          newInnerParts.push(BTXT_OPEN(id, idx) + html + BTXT_CLOSE(id, idx));
+        }
+      }
+
+      el.set_content(newInnerParts.join(''));
       setId(el, id);
       fields.push({
         id,
         type: 'body',
-        html: inner,
+        segments,
         text_preview: visible.slice(0, 200),
         dom_path: domPath(el, root as any),
       });

@@ -1,64 +1,51 @@
 <!--
-  Authentic-shaped Klaviyo export. Includes:
-   - {{ first_name|default:'there' }} Liquid-style template tokens (preserve, don't surface)
-   - {% if %} block tags (preserve as-is)
-   - data-block-id attributes typical of Klaviyo's drag-drop builder output
-   - One <p> with empty text (should NOT become a field)
-   - One <a> wrapping an <img> (single IMAGE field with wrapped_in_link=true)
-   - One CTA via <td> background + nested anchor
+  Hand-coded HTML email — no template tokens, no platform metadata.
+  Plain inline-styled table layout. Common pattern for indie newsletter senders.
+   - One H1, two H2s
+   - Three body <p> blocks, one with inline links
+   - Two images, one is an inline-styled CTA-button anchor
+   - One image with a base64 data URI src (should be flagged but still editable)
 -->
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>{{ event.title }}</title>
-  <style>
-    body { margin:0; background:#ffffff; font-family: -apple-system, sans-serif; }
-    .wrap { max-width: 600px; margin: 0 auto; }
-    .h1 { font-size: 30px; font-weight: 700; line-height: 1.15; }
-    .lead { font-size: 16px; line-height: 1.55; color: #555; }
-    .btn-td { background: #1a1f2e; border-radius: 4px; }
-    .btn-a  { display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-weight: 600; }
-  </style>
 </head>
-<body>
-<table role="presentation" class="wrap" width="600" cellpadding="0" cellspacing="0">
-  <tr>
-    <td data-block-id="block-1" align="center" style="padding: 24px 0;">
-      <a href="https://klaviyo.example.com/?utm=brand" data-track-link="brand">
-        <img src="https://placehold.co/600x300/1A1F2E/FFFFFF/png?text=Test+6+Image+Edit" alt="Brand logo" width="140" data-block-id="img-logo" height="">
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td data-block-id="block-2" style="padding: 16px 32px;">
-      <h1 class="h1">__EDITED HEADLINE — Atomic Email test 4__</h1>
-      <p class="lead">EDITED BODY — Test 5 — preserves the inline link below.</p>
-      <p></p>
-      <p class="lead">If anything looks off, just hit reply — a real human (one of three) reads every reply.</p>
-    </td>
-  </tr>
-  <tr>
-    <td data-block-id="block-cta" align="center" style="padding: 8px 32px 32px 32px;">
-      <table role="presentation" cellpadding="0" cellspacing="0">
-        <tr>
-          <td class="btn-td" align="center">
-            <a class="btn-a" href="{{ order.tracking_url }}">Track my order →</a>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-  <tr>
-    <td data-block-id="block-image" align="center" style="padding: 0 32px 32px 32px;">
-      <img src="https://cdn.example.com/orders/hero.png" alt width="536" height="200" data-block-id="img-hero" alt="">
-    </td>
-  </tr>
-  <tr>
-    <td style="padding: 24px 32px; font-size: 12px; color: #999;">
-      Not for you? <a href="{% unsubscribe_link %}">Unsubscribe</a>.
-    </td>
-  </tr>
+<body style="margin:0;padding:0;background:#f4f1ea;font-family:Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f1ea;">
+  <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;">
+      <tr><td style="padding:40px 40px 0 40px;">
+        <h1 style="margin:0 0 16px 0;font-size:32px;color:#1a1f2e;">Issue 42 — On staying small</h1>
+        <p style="margin:0 0 16px 0;font-size:14px;color:#8a8270;">Sent April 28 · 4-minute read</p>
+      </td></tr>
+      <tr><td style="padding:0 40px 24px 40px;">
+        <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MjAiIGhlaWdodD0iMjAwIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjRThEOEM2Ii8+PC9zdmc+" alt="Decorative banner" width="520" height="200">
+      </td></tr>
+      <tr><td style="padding:0 40px;">
+        <h2 style="font-size:22px;color:#1a1f2e;margin:24px 0 12px 0;">The thing about scale</h2>
+        <p style="font-size:16px;line-height:1.6;color:#333;margin:0 0 18px 0;">
+          Many startups fail because they grew faster than their understanding of who they were for.
+          I wrote about this <a href="https://example.com/posts/scale" style="color:#e8843d;">last month</a>
+          and got a lot of pushback — most of it constructive feedback.
+        </p>
+        <p style="font-size:16px;line-height:1.6;color:#333;margin:0 0 18px 0;">
+          The pattern: founder solves their own problem. Solves it well. Then VCs ask "but for whom else?" and the team tries to retrofit a market.
+        </p>
+        <h2 style="font-size:22px;color:#1a1f2e;margin:24px 0 12px 0;">What stayed small and worked</h2>
+        <p style="font-size:16px;line-height:1.6;color:#333;margin:0 0 24px 0;">
+          37signals. Pinboard. Are.na. Each of these stayed deliberately under-scaled and made more enduring products for it.
+          More on this in <em>part two</em> next week.
+        </p>
+      </td></tr>
+      <tr><td align="center" style="padding:8px 40px 40px 40px;">
+        <a href="https://example.com/subscribe" style="background-color:#1a1f2e;color:#ffffff;padding:14px 28px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block;">Read on the web →</a>
+      </td></tr>
+      <tr><td style="padding:24px 40px;font-size:12px;color:#999;border-top:1px solid #eee;">
+        Reply to talk back. <a href="https://example.com/unsubscribe" style="color:#999;">Unsubscribe</a>.
+      </td></tr>
+    </table>
+  </td></tr>
 </table>
 </body>
 </html>
