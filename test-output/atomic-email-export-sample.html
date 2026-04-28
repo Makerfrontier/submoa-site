@@ -1,0 +1,64 @@
+<!--
+  Authentic-shaped Klaviyo export. Includes:
+   - {{ first_name|default:'there' }} Liquid-style template tokens (preserve, don't surface)
+   - {% if %} block tags (preserve as-is)
+   - data-block-id attributes typical of Klaviyo's drag-drop builder output
+   - One <p> with empty text (should NOT become a field)
+   - One <a> wrapping an <img> (single IMAGE field with wrapped_in_link=true)
+   - One CTA via <td> background + nested anchor
+-->
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ event.title }}</title>
+  <style>
+    body { margin:0; background:#ffffff; font-family: -apple-system, sans-serif; }
+    .wrap { max-width: 600px; margin: 0 auto; }
+    .h1 { font-size: 30px; font-weight: 700; line-height: 1.15; }
+    .lead { font-size: 16px; line-height: 1.55; color: #555; }
+    .btn-td { background: #1a1f2e; border-radius: 4px; }
+    .btn-a  { display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+<table role="presentation" class="wrap" width="600" cellpadding="0" cellspacing="0">
+  <tr>
+    <td data-block-id="block-1" align="center" style="padding: 24px 0;">
+      <a href="https://klaviyo.example.com/?utm=brand" data-track-link="brand">
+        <img src="https://placehold.co/600x300/1A1F2E/FFFFFF/png?text=Test+6+Image+Edit" alt="Brand logo" width="140" data-block-id="img-logo" height="">
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td data-block-id="block-2" style="padding: 16px 32px;">
+      <h1 class="h1">__EDITED HEADLINE — Atomic Email test 4__</h1>
+      <p class="lead">EDITED BODY — Test 5 — preserves the inline link below.</p>
+      <p></p>
+      <p class="lead">If anything looks off, just hit reply — a real human (one of three) reads every reply.</p>
+    </td>
+  </tr>
+  <tr>
+    <td data-block-id="block-cta" align="center" style="padding: 8px 32px 32px 32px;">
+      <table role="presentation" cellpadding="0" cellspacing="0">
+        <tr>
+          <td class="btn-td" align="center">
+            <a class="btn-a" href="{{ order.tracking_url }}">Track my order →</a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  <tr>
+    <td data-block-id="block-image" align="center" style="padding: 0 32px 32px 32px;">
+      <img src="https://cdn.example.com/orders/hero.png" alt width="536" height="200" data-block-id="img-hero" alt="">
+    </td>
+  </tr>
+  <tr>
+    <td style="padding: 24px 32px; font-size: 12px; color: #999;">
+      Not for you? <a href="{% unsubscribe_link %}">Unsubscribe</a>.
+    </td>
+  </tr>
+</table>
+</body>
+</html>
